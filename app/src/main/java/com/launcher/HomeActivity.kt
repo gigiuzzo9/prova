@@ -777,7 +777,7 @@ class HomeActivity : AppCompatActivity() {
     val drawable = if (source == DragController.SOURCE_WIDGET) {
         val info = appWidgetManager.getAppWidgetInfo(widgetId)
         try {
-            info?.loadIcon(packageManager, 0)
+            info?.loadIcon(this, 0)
         } catch (_: Exception) {
             null
         }
