@@ -1,19 +1,20 @@
 package com.simplylauncher
 
 import android.appwidget.AppWidgetProviderInfo
-import android.content.ClipData
-import android.content.ClipDescription
-import android.view.DragEvent
 import android.view.MotionEvent
 import android.view.View
-import android.widget.Toast
+import kotlin.math.hypot
 
 class DragController(
     private val activity: HomeActivity,
     private val homeRecyclerView: View,
     private val drawerOverlay: View,
-    private val onDropOnHome: (pkg: String, x: Float, y: Float) -> Boolean,
-    private val onDropOnDrawer: (pkg: String) -> Unit
+    private val onDragStart: (source: String, pkg: String, widgetId: Int, x: Float, y: Float) -> Unit,
+    private val onDragMove: (x: Float, y: Float) -> Unit,
+    private val onDropOnHome: (source: String, pkg: String, widgetId: Int, x: Float, y: Float) -> Boolean,
+    private val onDropOnDrawer: (pkg: String) -> Unit,
+    private val onDropOnDock: (source: String, pkg: String, x: Float, y: Float) -> Unit,
+    private val onDragEnd: () -> Unit
 ) {
 
     companion object {
@@ -37,6 +38,9 @@ class DragController(
     private var pendingStartRawY = -1f
 
     private var isDragging = false
+    private var dragSource: String? = null
+    private var dragPkg: String? = null
+    private var dragWidgetId: Int = -1
 
     fun onLongPress(app: AppInfo, anchor: View, source: String, fromDrawer: Boolean) {
         if (isDragging) return
@@ -68,7 +72,43 @@ class DragController(
         clearPending()
     }
 
-    fun onInterceptTouch(event: MotionEvent): Boolean {
+    fun onTouch(event: MotionEvent): Boolean {
+        if (isDragging) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_MOVE -> {
+                    onDragMove(event.rawX, event.rawY)
+                    return true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val source = dragSource ?: ""
+                    val pkg = dragPkg ?: ""
+                    val widgetId = dragWidgetId
+                    val x = event.rawX
+                    val y = event.rawY
+
+                    if (source == SOURCE_WIDGET) {
+                        onDropOnHome(source, pkg, widgetId, x, y)
+                    } else {
+                        if (activity.isPointInDock(x, y)) {
+                            onDropOnDock(source, pkg, x, y)
+                        } else if (activity.isPointInDrawer(x, y)) {
+                            onDropOnDrawer(pkg)
+                        } else {
+                            onDropOnHome(source, pkg, widgetId, x, y)
+                        }
+                    }
+
+                    isDragging = false
+                    dragSource = null
+                    dragPkg = null
+                    dragWidgetId = -1
+                    onDragEnd()
+                    return true
+                }
+            }
+            return true
+        }
+
         val anchor = pendingAnchor ?: return false
         val source = pendingSource ?: return false
 
@@ -89,140 +129,36 @@ class DragController(
                 }
                 val dx = event.rawX - pendingStartRawX
                 val dy = event.rawY - pendingStartRawY
-                val dist = Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                val dist = hypot(dx.toDouble(), dy.toDouble()).toFloat()
                 if (dist > thresholdPx) {
                     activity.dismissDragPopup()
+
                     val widget = pendingWidget
                     val widgetInfo = pendingWidgetInfo
                     val app = pendingApp
+
+                    isDragging = true
+                    dragSource = source
+
                     if (widget != null && widgetInfo != null) {
+                        dragWidgetId = widget.appWidgetId
                         activity.dismissWidgetPopup()
-                        startWidgetDrag(widget, widgetInfo, anchor)
+                        onDragStart(source, "", widget.appWidgetId, event.rawX, event.rawY)
                     } else if (app != null) {
-                        startDrag(app, anchor, source)
+                        dragPkg = app.packageName
+                        if (source == SOURCE_DRAWER) {
+                            activity.onDragFromDrawerStarted()
+                        }
+                        onDragStart(source, app.packageName, -1, event.rawX, event.rawY)
                     }
+
+                    clearPending()
                     return true
                 }
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 clearPending()
-                return false
-            }
-        }
-        return false
-    }
-
-    @Suppress("DEPRECATION")
-    private fun startDrag(app: AppInfo, anchor: View, source: String) {
-        val clip = ClipData.newPlainText(source, app.packageName)
-        val shadow = View.DragShadowBuilder(anchor)
-        val started = anchor.startDrag(clip, shadow, null, 0)
-
-        if (!started) {
-            Toast.makeText(activity, "Drag non supportato", Toast.LENGTH_SHORT).show()
-            clearPending()
-            return
-        }
-
-        isDragging = true
-
-        if (source == SOURCE_DRAWER) {
-            activity.onDragFromDrawerStarted()
-        }
-
-        clearPending()
-    }
-
-    @Suppress("DEPRECATION")
-    private fun startWidgetDrag(slot: WidgetSlot, info: AppWidgetProviderInfo, anchor: View) {
-        val clip = ClipData.newPlainText(SOURCE_WIDGET, slot.appWidgetId.toString())
-        val shadow = View.DragShadowBuilder(anchor)
-        val started = anchor.startDrag(clip, shadow, null, 0)
-
-        if (!started) {
-            Toast.makeText(activity, "Drag non supportato", Toast.LENGTH_SHORT).show()
-            clearPending()
-            return
-        }
-
-        isDragging = true
-        clearPending()
-    }
-
-    fun onDragEnded() {
-        isDragging = false
-        if (pendingFromDrawer) {
-            activity.onDragFromDrawerEnded()
-        }
-        pendingFromDrawer = false
-    }
-
-    fun handleHomeDragEvent(event: DragEvent): Boolean {
-        when (event.action) {
-            DragEvent.ACTION_DRAG_STARTED ->
-                return event.clipDescription.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN)
-
-            DragEvent.ACTION_DROP -> {
-                val pkg = event.clipData.getItemAt(0).text.toString()
-                return onDropOnHome(pkg, event.x, event.y)
-            }
-
-            DragEvent.ACTION_DRAG_ENDED -> {
-                onDragEnded()
-                return true
-            }
-        }
-        return false
-    }
-
-    fun handleDrawerDragEvent(event: DragEvent): Boolean {
-        when (event.action) {
-            DragEvent.ACTION_DRAG_STARTED ->
-                return event.clipDescription.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN)
-
-            DragEvent.ACTION_DROP -> {
-                val pkg = event.clipData.getItemAt(0).text.toString()
-                val source = event.clipData.description.label?.toString() ?: ""
-                if (source == SOURCE_HOME || source == SOURCE_DOCK) {
-                    onDropOnDrawer(pkg)
-                }
-                return true
-            }
-
-            DragEvent.ACTION_DRAG_ENDED -> {
-                onDragEnded()
-                return true
-            }
-        }
-        return false
-    }
-
-    fun handleWidgetDragEvent(event: DragEvent, pageIndex: Int, cellW: Int, cellH: Int, paddingTop: Int): Boolean {
-        when (event.action) {
-            DragEvent.ACTION_DRAG_STARTED -> {
-                val source = event.clipDescription.label?.toString() ?: ""
-                if (source != SOURCE_WIDGET) {
-                    return false
-                }
-                return event.clipDescription.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN)
-            }
-
-            DragEvent.ACTION_DROP -> {
-                val source = event.clipDescription.label?.toString() ?: ""
-                if (source == SOURCE_WIDGET) {
-                    val widgetId = event.clipData.getItemAt(0).text.toString().toIntOrNull()
-                    if (widgetId != null) {
-                        val col = (event.x / cellW).toInt().coerceIn(0, activity.getCurrentCols() - 1)
-                        val row = ((event.y - paddingTop) / cellH).toInt().coerceIn(0, activity.getCurrentRows() - 1)
-                        activity.moveWidget(widgetId, row, col, pageIndex)
-                    }
-                    return true
-                }
-                return false
-            }
-
-            DragEvent.ACTION_DRAG_ENDED -> {
                 return false
             }
         }
