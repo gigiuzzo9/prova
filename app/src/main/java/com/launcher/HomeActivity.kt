@@ -778,6 +778,32 @@ class HomeActivity : AppCompatActivity() {
     private fun showDragOverlay(source: String, pkg: String, widgetId: Int, x: Float, y: Float) {
     val drawable = if (source == DragController.SOURCE_WIDGET) {
         val info = appWidgetManager.getAppWidgetInfo(widgetId)
+        
+        // Calcola la dimensione reale del widget in pixel
+        val pageIndex = homeViewPager.currentItem
+        val recycler = homePagerAdapter.getRecycler(pageIndex)
+        if (recycler != null && recycler.width > 0) {
+            val cellW = recycler.width / currentCols
+            val cellH = (recycler.height - recycler.paddingTop - recycler.paddingBottom) / currentRows
+            
+            // Trova lo slot del widget per sapere quante celle occupa
+            // (assumiamo che il widgetId sia sufficiente, ma possiamo ricavarlo da Prefs se necessario)
+            // Per semplicità, usiamo le dimensioni del widgetInfo se disponibili
+            val widgetWidthPx = if (info != null && info.minWidth > 0) {
+                // Stima: minWidth è in dp, convertiamo in pixel
+                (info.minWidth * resources.displayMetrics.density).toInt()
+            } else {
+                cellW * 2 // fallback: 2 celle
+            }
+            val widgetHeightPx = if (info != null && info.minHeight > 0) {
+                (info.minHeight * resources.displayMetrics.density).toInt()
+            } else {
+                cellH * 1 // fallback: 1 cella
+            }
+            
+            dragOverlayView.layoutParams = FrameLayout.LayoutParams(widgetWidthPx, widgetHeightPx)
+        }
+        
         try {
             info?.loadPreviewImage(this, 0)
         } catch (_: Exception) {
@@ -788,6 +814,11 @@ class HomeActivity : AppCompatActivity() {
             null
         }
     } else {
+        // Per le app, mantieni la dimensione fissa di 56dp
+        dragOverlayView.layoutParams = FrameLayout.LayoutParams(
+            (56 * resources.displayMetrics.density).toInt(),
+            (56 * resources.displayMetrics.density).toInt()
+        )
         HomeGridAdapter.AppCache.get(this, pkg)?.icon
     }
     dragOverlayView.setImageDrawable(drawable)
