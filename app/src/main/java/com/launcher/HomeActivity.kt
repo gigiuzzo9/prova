@@ -13,7 +13,6 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.provider.Settings
 import android.util.SizeF
-import android.view.DragEvent
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -44,6 +43,7 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var dockSlots: List<FrameLayout>
     private lateinit var resizeOverlay: FrameLayout
     private lateinit var resizeFrame: WidgetResizeFrame
+    private lateinit var dragOverlayView: ImageView
 
     private lateinit var homePagerAdapter: HomePagerAdapter
 
@@ -110,6 +110,16 @@ class HomeActivity : AppCompatActivity() {
         dockLayout = findViewById(R.id.dockLayout)
         resizeOverlay = findViewById(R.id.resizeOverlay)
         resizeFrame = findViewById(R.id.resizeFrame)
+
+        dragOverlayView = ImageView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                (56 * resources.displayMetrics.density).toInt(),
+                (56 * resources.displayMetrics.density).toInt()
+            )
+            visibility = View.GONE
+            elevation = 30f * resources.displayMetrics.density
+        }
+        (findViewById<FrameLayout>(android.R.id.content)).addView(dragOverlayView)
 
         dockSlots = listOf(
             findViewById(R.id.dockSlot1),
@@ -307,11 +317,7 @@ class HomeActivity : AppCompatActivity() {
 
                     val info = appWidgetManager.getAppWidgetInfo(boundId)
                     if (info == null) {
-                        Toast.makeText(
-                            this,
-                            "Widget non disponibile dopo il bind",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        Toast.makeText(this, "Widget non disponibile dopo il bind", Toast.LENGTH_SHORT).show()
                         appWidgetHost.deleteAppWidgetId(boundId)
                         pendingWidgetId = -1
                         return
@@ -512,10 +518,6 @@ class HomeActivity : AppCompatActivity() {
                     val cellH = (recycler.height - recycler.paddingTop - recycler.paddingBottom) / currentRows
                     val paddingTop = recycler.paddingTop
 
-                    widgetContainer.setOnDragListener { _, event ->
-                        dragController.handleWidgetDragEvent(event, pageIndex, cellW, cellH, paddingTop)
-                    }
-
                     val pageWidgets = allWidgets.filter { it.page == pageIndex }
                     for (slot in pageWidgets) {
                         try {
@@ -538,18 +540,9 @@ class HomeActivity : AppCompatActivity() {
                                     val wDp = (widgetWidth / density).toInt()
                                     val hDp = (widgetHeight / density).toInt()
                                     if (android.os.Build.VERSION.SDK_INT >= 31) {
-                                        hostView.updateAppWidgetSize(
-                                            Bundle(),
-                                            listOf(SizeF(wDp.toFloat(), hDp.toFloat()))
-                                        )
+                                        hostView.updateAppWidgetSize(Bundle(), listOf(SizeF(wDp.toFloat(), hDp.toFloat())))
                                     } else {
-                                        hostView.updateAppWidgetSize(
-                                            Bundle(),
-                                            wDp,
-                                            hDp,
-                                            wDp,
-                                            hDp
-                                        )
+                                        hostView.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
                                     }
                                 } catch (_: Exception) {}
                             }
@@ -663,18 +656,9 @@ class HomeActivity : AppCompatActivity() {
                 val wDp = (lp.width / density).toInt()
                 val hDp = (lp.height / density).toInt()
                 if (android.os.Build.VERSION.SDK_INT >= 31) {
-                    hostView.updateAppWidgetSize(
-                        Bundle(),
-                        listOf(SizeF(wDp.toFloat(), hDp.toFloat()))
-                    )
+                    hostView.updateAppWidgetSize(Bundle(), listOf(SizeF(wDp.toFloat(), hDp.toFloat())))
                 } else {
-                    hostView.updateAppWidgetSize(
-                        Bundle(),
-                        wDp,
-                        hDp,
-                        wDp,
-                        hDp
-                    )
+                    hostView.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
                 }
             } catch (_: Exception) {}
         }
@@ -755,41 +739,113 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (::dragController.isInitialized && !isResizing && dragController.onInterceptTouch(ev)) return true
-        if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
-            if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
-                if (!contextMenuView.isPointInside(ev.rawX, ev.rawY)) {
-                    contextMenuView.dismiss()
-                    currentApp = null
-                    currentAnchor = null
+    private fun setupDragController() {
+        dragController = DragController(
+            activity = this,
+            homeRecyclerView = homeViewPager,
+            drawerOverlay = drawerOverlay,
+            onDragStart = { source, pkg, widgetId, x, y ->
+                showDragOverlay(source, pkg, widgetId, x, y)
+            },
+            onDragMove = { x, y ->
+                updateDragOverlay(x, y)
+            },
+            onDropOnHome = { source, pkg, widgetId, x, y ->
+                hideDragOverlay()
+                if (source == DragController.SOURCE_WIDGET) {
+                    handleWidgetDrop(widgetId, x, y)
+                    true
+                } else {
+                    handleDropOnHome(source, pkg, x, y)
                 }
+            },
+            onDropOnDrawer = { pkg ->
+                hideDragOverlay()
+                handleDropOnDrawer(pkg)
+            },
+            onDropOnDock = { source, pkg, x, y ->
+                hideDragOverlay()
+                handleDropOnDock(source, pkg, x, y)
+            },
+            onDragEnd = {
+                hideDragOverlay()
             }
-        }
-        return super.dispatchTouchEvent(ev)
+        )
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        if (isResizing) {
-            endResizeMode()
-            return
+    private fun showDragOverlay(source: String, pkg: String, widgetId: Int, x: Float, y: Float) {
+        val drawable = if (source == DragController.SOURCE_WIDGET) {
+            val info = appWidgetManager.getAppWidgetInfo(widgetId)
+            info?.loadPreviewImage(this, 0) ?: info?.loadIcon(packageManager, 0)
+        } else {
+            HomeGridAdapter.AppCache.get(this, pkg)?.icon
         }
-        if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
-            contextMenuView.dismiss()
-            currentApp = null
-            currentAnchor = null
-            return
+        dragOverlayView.setImageDrawable(drawable)
+        dragOverlayView.visibility = View.VISIBLE
+        updateDragOverlay(x, y)
+    }
+
+    private fun updateDragOverlay(x: Float, y: Float) {
+        if (dragOverlayView.visibility != View.VISIBLE) return
+        dragOverlayView.x = x - dragOverlayView.width / 2f
+        dragOverlayView.y = y - dragOverlayView.height / 2f
+    }
+
+    private fun hideDragOverlay() {
+        dragOverlayView.visibility = View.GONE
+    }
+
+    fun isPointInDock(x: Float, y: Float): Boolean {
+        val loc = IntArray(2)
+        dockLayout.getLocationOnScreen(loc)
+        return x >= loc[0] && x <= loc[0] + dockLayout.width &&
+                y >= loc[1] && y <= loc[1] + dockLayout.height
+    }
+
+    fun isPointInDrawer(x: Float, y: Float): Boolean {
+        if (!drawerOpen) return false
+        val loc = IntArray(2)
+        drawerOverlay.getLocationOnScreen(loc)
+        return x >= loc[0] && x <= loc[0] + drawerOverlay.width &&
+                y >= loc[1] && y <= loc[1] + drawerOverlay.height
+    }
+
+    private fun handleDropOnDock(source: String, pkg: String, x: Float, y: Float) {
+        var closestIndex = 0
+        var closestDist = Float.MAX_VALUE
+        dockSlots.forEachIndexed { index, slot ->
+            val loc = IntArray(2)
+            slot.getLocationOnScreen(loc)
+            val cx = loc[0] + slot.width / 2f
+            val cy = loc[1] + slot.height / 2f
+            val dist = Math.hypot(
+                (x - cx).toDouble(),
+                (y - cy).toDouble()
+            ).toFloat()
+            if (dist < closestDist) { closestDist = dist; closestIndex = index }
         }
-        if (widgetPopupWindow?.isShowing == true) {
-            widgetPopupWindow?.dismiss()
-            return
+
+        lifecycleScope.launch {
+            if (source == DragController.SOURCE_DOCK) {
+                dockController.swapDockSlots(pkg, closestIndex)
+            } else {
+                dockController.addToDockAtPublic(pkg, closestIndex)
+            }
         }
-        if (::homePopupMenu.isInitialized && homePopupMenu.isShowing()) {
-            homePopupMenu.dismiss()
-            return
-        }
-        if (drawerOpen) closeDrawer()
+    }
+
+    private fun handleWidgetDrop(widgetId: Int, x: Float, y: Float) {
+        val pageIndex = homeViewPager.currentItem
+        val recycler = homePagerAdapter.getRecycler(pageIndex) ?: return
+        val cellW = recycler.width / currentCols
+        val cellH = (recycler.height - recycler.paddingTop - recycler.paddingBottom) / currentRows
+        val loc = IntArray(2)
+        recycler.getLocationOnScreen(loc)
+        val localX = x - loc[0]
+        val localY = y - loc[1] - recycler.paddingTop
+        val col = (localX / cellW).toInt().coerceIn(0, currentCols - 1)
+        val row = (localY / cellH).toInt().coerceIn(0, currentRows - 1)
+        moveWidget(widgetId, row, col, pageIndex)
     }
 
     private fun setupHomePager() {
@@ -807,62 +863,6 @@ class HomeActivity : AppCompatActivity() {
                 }
             }
         })
-    }
-
-    private fun setupDragController() {
-        dragController = DragController(
-            activity = this,
-            homeRecyclerView = homeViewPager,
-            drawerOverlay = drawerOverlay,
-            onDropOnHome = { pkg, x, y -> handleDropOnHome(pkg, x, y) },
-            onDropOnDrawer = { pkg -> handleDropOnDrawer(pkg) }
-        )
-
-        homeViewPager.setOnDragListener { _, event -> dragController.handleHomeDragEvent(event) }
-        drawerRecyclerView.setOnDragListener { _, event -> dragController.handleDrawerDragEvent(event) }
-        drawerOverlay.setOnDragListener { _, event -> dragController.handleDrawerDragEvent(event) }
-
-        dockLayout.setOnDragListener { _, event ->
-            when (event.action) {
-                DragEvent.ACTION_DRAG_STARTED ->
-                    return@setOnDragListener event.clipDescription
-                        .hasMimeType(android.content.ClipDescription.MIMETYPE_TEXT_PLAIN)
-
-                DragEvent.ACTION_DROP -> {
-                    val pkg = event.clipData.getItemAt(0).text.toString()
-                    val source = event.clipData.description.label?.toString() ?: ""
-                    var closestIndex = 0
-                    var closestDist = Float.MAX_VALUE
-                    val dockLoc = IntArray(2)
-                    dockLayout.getLocationOnScreen(dockLoc)
-                    val dropScreenX = dockLoc[0] + event.x
-                    val dropScreenY = dockLoc[1] + event.y
-
-                    dockSlots.forEachIndexed { index, slot ->
-                        val loc = IntArray(2)
-                        slot.getLocationOnScreen(loc)
-                        val cx = loc[0] + slot.width / 2f
-                        val cy = loc[1] + slot.height / 2f
-                        val dist = Math.hypot(
-                            (dropScreenX - cx).toDouble(),
-                            (dropScreenY - cy).toDouble()
-                        ).toFloat()
-                        if (dist < closestDist) { closestDist = dist; closestIndex = index }
-                    }
-
-                    lifecycleScope.launch {
-                        if (source == DragController.SOURCE_DOCK) {
-                            dockController.swapDockSlots(pkg, closestIndex)
-                        } else {
-                            dockController.addToDockAtPublic(pkg, closestIndex)
-                        }
-                    }
-                    return@setOnDragListener true
-                }
-                DragEvent.ACTION_DRAG_ENDED -> return@setOnDragListener true
-                else -> return@setOnDragListener false
-            }
-        }
     }
 
     private fun setupDockController() {
@@ -1081,7 +1081,6 @@ class HomeActivity : AppCompatActivity() {
     }
 
     fun getCurrentCols(): Int = currentCols
-
     fun getCurrentRows(): Int = currentRows
 
     fun moveWidget(widgetId: Int, row: Int, col: Int, pageIndex: Int) {
@@ -1141,7 +1140,7 @@ class HomeActivity : AppCompatActivity() {
         if (cellHeight > 0) homePagerAdapter.setCellHeight(cellHeight)
     }
 
-    private fun handleDropOnHome(pkg: String, x: Float, y: Float): Boolean {
+    private fun handleDropOnHome(source: String, pkg: String, x: Float, y: Float): Boolean {
         if (isDropInProgress) return false
         isDropInProgress = true
         val pageIndex = homeViewPager.currentItem
@@ -1150,6 +1149,11 @@ class HomeActivity : AppCompatActivity() {
         val lm = recycler.layoutManager as? GridLayoutManager
         if (lm == null) { isDropInProgress = false; return false }
         val cols = lm.spanCount
+
+        val recyclerLoc = IntArray(2)
+        recycler.getLocationOnScreen(recyclerLoc)
+        val rvX = x - recyclerLoc[0]
+        val rvY = y - recyclerLoc[1]
 
         lifecycleScope.launch {
             try {
@@ -1162,11 +1166,6 @@ class HomeActivity : AppCompatActivity() {
                         }
                     }
                 }
-
-                val pagerLoc = IntArray(2); homeViewPager.getLocationOnScreen(pagerLoc)
-                val recyclerLoc = IntArray(2); recycler.getLocationOnScreen(recyclerLoc)
-                val rvX = x + pagerLoc[0] - recyclerLoc[0]
-                val rvY = y + pagerLoc[1] - recyclerLoc[1]
 
                 val child = recycler.findChildViewUnder(rvX, rvY)
                 var targetPos = if (child != null) {
@@ -1384,6 +1383,43 @@ class HomeActivity : AppCompatActivity() {
                 Color.argb((alpha * 255).toInt(), Color.red(color), Color.green(color), Color.blue(color))
             )
         }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
+        if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
+            if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+                if (!contextMenuView.isPointInside(ev.rawX, ev.rawY)) {
+                    contextMenuView.dismiss()
+                    currentApp = null
+                    currentAnchor = null
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (isResizing) {
+            endResizeMode()
+            return
+        }
+        if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
+            contextMenuView.dismiss()
+            currentApp = null
+            currentAnchor = null
+            return
+        }
+        if (widgetPopupWindow?.isShowing == true) {
+            widgetPopupWindow?.dismiss()
+            return
+        }
+        if (::homePopupMenu.isInitialized && homePopupMenu.isShowing()) {
+            homePopupMenu.dismiss()
+            return
+        }
+        if (drawerOpen) closeDrawer()
     }
 
     override fun onResume() {
