@@ -1435,18 +1435,45 @@ class HomeActivity : AppCompatActivity() {
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
-        if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
-            if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
-                if (!contextMenuView.isPointInside(ev.rawX, ev.rawY)) {
-                    contextMenuView.dismiss()
-                    currentApp = null
-                    currentAnchor = null
-                }
+    if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
+    if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            if (!contextMenuView.isPointInside(ev.rawX, ev.rawY)) {
+                contextMenuView.dismiss()
+                currentApp = null
+                currentAnchor = null
             }
         }
-        return super.dispatchTouchEvent(ev)
     }
+    if (ev.actionMasked == MotionEvent.ACTION_DOWN && !isResizing && ::homePagerAdapter.isInitialized) {
+        val currentPage = homeViewPager.currentItem
+        val widgetContainer = homePagerAdapter.getWidgetContainer(currentPage)
+        if (widgetContainer != null && widgetContainer.visibility == View.VISIBLE) {
+            val loc = IntArray(2)
+            widgetContainer.getLocationOnScreen(loc)
+            val localX = ev.rawX - loc[0]
+            val localY = ev.rawY - loc[1]
+
+            var isOnWidget = false
+            for (i in 0 until widgetContainer.childCount) {
+                val child = widgetContainer.getChildAt(i)
+                if (child.visibility == View.VISIBLE &&
+                    localX >= child.x && localX <= child.x + child.width &&
+                    localY >= child.y && localY <= child.y + child.height
+                ) {
+                    isOnWidget = true
+                    break
+                }
+            }
+
+            if (isOnWidget) {
+                widgetContainer.dispatchTouchEvent(ev)
+                return true
+            }
+        }
+    }
+    return super.dispatchTouchEvent(ev)
+}
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
