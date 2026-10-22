@@ -44,7 +44,9 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var resizeOverlay: FrameLayout
     private lateinit var resizeFrame: WidgetResizeFrame
     private lateinit var dragOverlayView: ImageView
-
+    private var dragOverlayPending = false
+    private var dragOverlayLastX = 0f
+    private var dragOverlayLastY = 0f
     private lateinit var homePagerAdapter: HomePagerAdapter
 
     private lateinit var drawerOverlay: FrameLayout
@@ -777,6 +779,10 @@ class HomeActivity : AppCompatActivity() {
     val drawable = if (source == DragController.SOURCE_WIDGET) {
         val info = appWidgetManager.getAppWidgetInfo(widgetId)
         try {
+            info?.loadPreviewImage(this, 0)
+        } catch (_: Exception) {
+            null
+        } ?: try {
             info?.loadIcon(this, 0)
         } catch (_: Exception) {
             null
@@ -790,11 +796,17 @@ class HomeActivity : AppCompatActivity() {
 }
 
     private fun updateDragOverlay(x: Float, y: Float) {
-        if (dragOverlayView.visibility != View.VISIBLE) return
-        dragOverlayView.x = x - dragOverlayView.width / 2f
-        dragOverlayView.y = y - dragOverlayView.height / 2f
+    if (dragOverlayView.visibility != View.VISIBLE) return
+    dragOverlayLastX = x
+    dragOverlayLastY = y
+    if (dragOverlayPending) return
+    dragOverlayPending = true
+    dragOverlayView.postOnAnimation {
+        dragOverlayPending = false
+        dragOverlayView.x = dragOverlayLastX - dragOverlayView.width / 2f
+        dragOverlayView.y = dragOverlayLastY - dragOverlayView.height / 2f
     }
-
+}
     private fun hideDragOverlay() {
         dragOverlayView.visibility = View.GONE
     }
