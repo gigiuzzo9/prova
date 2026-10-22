@@ -504,68 +504,69 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun renderWidgets() {
-        lifecycleScope.launch {
-            try {
-                val allWidgets = Prefs.widgetSlotsFlow(this@HomeActivity).first()
+    lifecycleScope.launch {
+        try {
+            val allWidgets = Prefs.widgetSlotsFlow(this@HomeActivity).first()
 
-                for (pageIndex in 0 until currentPageCount) {
-                    val widgetContainer = homePagerAdapter.getWidgetContainer(pageIndex) ?: continue
-                    val recycler = homePagerAdapter.getRecycler(pageIndex) ?: continue
+            for (pageIndex in 0 until currentPageCount) {
+                val widgetContainer = homePagerAdapter.getWidgetContainer(pageIndex) ?: continue
+                val recycler = homePagerAdapter.getRecycler(pageIndex) ?: continue
 
-                    if (recycler.width == 0 || recycler.height == 0) continue
+                if (recycler.width == 0 || recycler.height == 0) continue
 
-                    widgetContainer.removeAllViews()
+                widgetContainer.removeAllViews()
 
-                    val cellW = recycler.width / currentCols
-                    val cellH = (recycler.height - recycler.paddingTop - recycler.paddingBottom) / currentRows
-                    val paddingTop = recycler.paddingTop
+                val cellW = recycler.width / currentCols
+                val cellH = (recycler.height - recycler.paddingTop - recycler.paddingBottom) / currentRows
+                val paddingTop = recycler.paddingTop
 
-                    val pageWidgets = allWidgets.filter { it.page == pageIndex }
-                    for (slot in pageWidgets) {
-                        try {
-                            val info = appWidgetManager.getAppWidgetInfo(slot.appWidgetId) ?: continue
-                            val hostView = appWidgetHost.createView(baseContext, slot.appWidgetId, info) as LauncherAppWidgetHostView
-                            hostView.setAppWidget(slot.appWidgetId, info)
+                val pageWidgets = allWidgets.filter { it.page == pageIndex }
+                for (slot in pageWidgets) {
+                    try {
+                        val info = appWidgetManager.getAppWidgetInfo(slot.appWidgetId) ?: continue
+                        val hostView = appWidgetHost.createView(baseContext, slot.appWidgetId, info) as LauncherAppWidgetHostView
+                        hostView.setAppWidget(slot.appWidgetId, info)
+                        hostView.tag = slot.appWidgetId
 
-                            val widgetWidth = cellW * slot.widthCells
-                            val widgetHeight = cellH * slot.heightCells
+                        val widgetWidth = cellW * slot.widthCells
+                        val widgetHeight = cellH * slot.heightCells
 
-                            val lp = FrameLayout.LayoutParams(widgetWidth, widgetHeight).apply {
-                                leftMargin = slot.col * cellW
-                                topMargin = paddingTop + slot.row * cellH
-                            }
-                            widgetContainer.addView(hostView, lp)
-
-                            hostView.post {
-                                try {
-                                    val density = resources.displayMetrics.density
-                                    val wDp = (widgetWidth / density).toInt()
-                                    val hDp = (widgetHeight / density).toInt()
-                                    if (android.os.Build.VERSION.SDK_INT >= 31) {
-                                        hostView.updateAppWidgetSize(Bundle(), listOf(SizeF(wDp.toFloat(), hDp.toFloat())))
-                                    } else {
-                                        hostView.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
-                                    }
-                                } catch (_: Exception) {}
-                            }
-
-                            hostView.onLongPress = {
-                                dragController.onWidgetLongPress(slot, info, hostView)
-                                showWidgetMenu(slot, info, cellW, cellH, recycler, hostView, pageIndex)
-                            }
-                            hostView.onIgnoreIntercepted = {
-                                widgetPopupWindow?.dismiss()
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.e("WIDGET_DEBUG", "Errore render widget ${slot.appWidgetId}", e)
+                        val lp = FrameLayout.LayoutParams(widgetWidth, widgetHeight).apply {
+                            leftMargin = slot.col * cellW
+                            topMargin = paddingTop + slot.row * cellH
                         }
+                        widgetContainer.addView(hostView, lp)
+
+                        hostView.post {
+                            try {
+                                val density = resources.displayMetrics.density
+                                val wDp = (widgetWidth / density).toInt()
+                                val hDp = (widgetHeight / density).toInt()
+                                if (android.os.Build.VERSION.SDK_INT >= 31) {
+                                    hostView.updateAppWidgetSize(Bundle(), listOf(SizeF(wDp.toFloat(), hDp.toFloat())))
+                                } else {
+                                    hostView.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
+                                }
+                            } catch (_: Exception) {}
+                        }
+
+                        hostView.onLongPress = {
+                            dragController.onWidgetLongPress(slot, info, hostView)
+                            showWidgetMenu(slot, info, cellW, cellH, recycler, hostView, pageIndex)
+                        }
+                        hostView.onIgnoreIntercepted = {
+                            widgetPopupWindow?.dismiss()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("WIDGET_DEBUG", "Errore render widget ${slot.appWidgetId}", e)
                     }
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("WIDGET_DEBUG", "Crash in renderWidgets", e)
             }
+        } catch (e: Exception) {
+            android.util.Log.e("WIDGET_DEBUG", "Crash in renderWidgets", e)
         }
     }
+}
 
     private fun startResize(
         slot: WidgetSlot,
@@ -776,47 +777,55 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun showDragOverlay(
-        source: String,
-        pkg: String,
-        widgetId: Int,
-        widthCells: Int,
-        heightCells: Int,
-        x: Float,
-        y: Float
-    ) {
-        if (source == DragController.SOURCE_WIDGET) {
-            val pageIndex = homeViewPager.currentItem
-            val recycler = homePagerAdapter.getRecycler(pageIndex)
-            if (recycler != null && recycler.width > 0 && widthCells > 0 && heightCells > 0) {
-                val cellW = recycler.width / currentCols
-                val cellH = (recycler.height - recycler.paddingTop - recycler.paddingBottom) / currentRows
-                val widgetWidthPx = cellW * widthCells
-                val widgetHeightPx = cellH * heightCells
-                dragOverlayView.layoutParams = FrameLayout.LayoutParams(widgetWidthPx, widgetHeightPx)
+    source: String,
+    pkg: String,
+    widgetId: Int,
+    widthCells: Int,
+    heightCells: Int,
+    x: Float,
+    y: Float
+) {
+    if (source == DragController.SOURCE_WIDGET) {
+        val pageIndex = homeViewPager.currentItem
+        val recycler = homePagerAdapter.getRecycler(pageIndex)
+        if (recycler != null && recycler.width > 0 && widthCells > 0 && heightCells > 0) {
+            val cellW = recycler.width / currentCols
+            val cellH = (recycler.height - recycler.paddingTop - recycler.paddingBottom) / currentRows
+            val widgetWidthPx = cellW * widthCells
+            val widgetHeightPx = cellH * heightCells
+            dragOverlayView.layoutParams = FrameLayout.LayoutParams(widgetWidthPx, widgetHeightPx)
+
+            val widgetContainer = homePagerAdapter.getWidgetContainer(pageIndex)
+            val hostView = widgetContainer?.let { container ->
+                (0 until container.childCount)
+                    .map { container.getChildAt(it) }
+                    .firstOrNull { it.tag == widgetId } as? LauncherAppWidgetHostView
             }
 
-            val info = appWidgetManager.getAppWidgetInfo(widgetId)
-            val drawable = try {
-                info?.loadPreviewImage(this, 0)
-            } catch (_: Exception) {
-                null
-            } ?: try {
-                info?.loadIcon(this, 0)
-            } catch (_: Exception) {
-                null
+            if (hostView != null && hostView.width > 0 && hostView.height > 0) {
+                val bitmap = android.graphics.Bitmap.createBitmap(
+                    hostView.width,
+                    hostView.height,
+                    android.graphics.Bitmap.Config.ARGB_8888
+                )
+                val canvas = android.graphics.Canvas(bitmap)
+                hostView.draw(canvas)
+                dragOverlayView.setImageBitmap(bitmap)
+            } else {
+                dragOverlayView.setImageDrawable(null)
             }
-            dragOverlayView.setImageDrawable(drawable)
-        } else {
-            dragOverlayView.layoutParams = FrameLayout.LayoutParams(
-                (56 * resources.displayMetrics.density).toInt(),
-                (56 * resources.displayMetrics.density).toInt()
-            )
-            dragOverlayView.setImageDrawable(HomeGridAdapter.AppCache.get(this, pkg)?.icon)
         }
-
-        dragOverlayView.visibility = View.VISIBLE
-        updateDragOverlay(x, y)
+    } else {
+        dragOverlayView.layoutParams = FrameLayout.LayoutParams(
+            (56 * resources.displayMetrics.density).toInt(),
+            (56 * resources.displayMetrics.density).toInt()
+        )
+        dragOverlayView.setImageDrawable(HomeGridAdapter.AppCache.get(this, pkg)?.icon)
     }
+
+    dragOverlayView.visibility = View.VISIBLE
+    updateDragOverlay(x, y)
+}
 
     private fun updateDragOverlay(x: Float, y: Float) {
         if (dragOverlayView.visibility != View.VISIBLE) return
