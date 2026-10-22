@@ -9,7 +9,7 @@ class DragController(
     private val activity: HomeActivity,
     private val homeRecyclerView: View,
     private val drawerOverlay: View,
-    private val onDragStart: (source: String, pkg: String, widgetId: Int, x: Float, y: Float) -> Unit,
+    private val onDragStart: (source: String, pkg: String, widgetId: Int, widthCells: Int, heightCells: Int, x: Float, y: Float) -> Unit,
     private val onDragMove: (x: Float, y: Float) -> Unit,
     private val onDropOnHome: (source: String, pkg: String, widgetId: Int, x: Float, y: Float) -> Boolean,
     private val onDropOnDrawer: (pkg: String) -> Unit,
@@ -143,13 +143,29 @@ class DragController(
                     if (widget != null && widgetInfo != null) {
                         dragWidgetId = widget.appWidgetId
                         activity.dismissWidgetPopup()
-                        onDragStart(source, "", widget.appWidgetId, event.rawX, event.rawY)
+                        onDragStart(
+                            source,
+                            "",
+                            widget.appWidgetId,
+                            widget.widthCells,
+                            widget.heightCells,
+                            event.rawX,
+                            event.rawY
+                        )
                     } else if (app != null) {
                         dragPkg = app.packageName
                         if (source == SOURCE_DRAWER) {
                             activity.onDragFromDrawerStarted()
                         }
-                        onDragStart(source, app.packageName, -1, event.rawX, event.rawY)
+                        onDragStart(
+                            source,
+                            app.packageName,
+                            -1,
+                            0,
+                            0,
+                            event.rawX,
+                            event.rawY
+                        )
                     }
 
                     clearPending()
