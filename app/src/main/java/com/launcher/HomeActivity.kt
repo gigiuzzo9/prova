@@ -742,117 +742,95 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupDragController() {
-    dragController = DragController(
-        activity = this,
-        homeRecyclerView = homeViewPager,
-        drawerOverlay = drawerOverlay,
-        onDragStart = { source, pkg, widgetId, widthCells, heightCells, x, y ->
-            showDragOverlay(source, pkg, widgetId, widthCells, heightCells, x, y)
-        },
-        onDragMove = { x, y ->
-            updateDragOverlay(x, y)
-        },
-        onDropOnHome = { source, pkg, widgetId, x, y ->
-            hideDragOverlay()
-            if (source == DragController.SOURCE_WIDGET) {
-                handleWidgetDrop(widgetId, x, y)
-                true
-            } else {
-                handleDropOnHome(source, pkg, x, y)
+        dragController = DragController(
+            activity = this,
+            homeRecyclerView = homeViewPager,
+            drawerOverlay = drawerOverlay,
+            onDragStart = { source, pkg, widgetId, widthCells, heightCells, x, y ->
+                showDragOverlay(source, pkg, widgetId, widthCells, heightCells, x, y)
+            },
+            onDragMove = { x, y ->
+                updateDragOverlay(x, y)
+            },
+            onDropOnHome = { source, pkg, widgetId, x, y ->
+                hideDragOverlay()
+                if (source == DragController.SOURCE_WIDGET) {
+                    handleWidgetDrop(widgetId, x, y)
+                    true
+                } else {
+                    handleDropOnHome(source, pkg, x, y)
+                }
+            },
+            onDropOnDrawer = { pkg ->
+                hideDragOverlay()
+                handleDropOnDrawer(pkg)
+            },
+            onDropOnDock = { source, pkg, x, y ->
+                hideDragOverlay()
+                handleDropOnDock(source, pkg, x, y)
+            },
+            onDragEnd = {
+                hideDragOverlay()
             }
-        },
-        onDropOnDrawer = { pkg ->
-            hideDragOverlay()
-            handleDropOnDrawer(pkg)
-        },
-        onDropOnDock = { source, pkg, x, y ->
-            hideDragOverlay()
-            handleDropOnDock(source, pkg, x, y)
-        },
-        onDragEnd = {
-            hideDragOverlay()
-        }
-    )
-}
+        )
+    }
 
     private fun showDragOverlay(
-    source: String,
-    pkg: String,
-    widgetId: Int,
-    widthCells: Int,
-    heightCells: Int,
-    x: Float,
-    y: Float
-) {
-    if (source == DragController.SOURCE_WIDGET) {
-        val pageIndex = homeViewPager.currentItem
-        val recycler = homePagerAdapter.getRecycler(pageIndex)
-        if (recycler != null && recycler.width > 0 && widthCells > 0 && heightCells > 0) {
-            val cellW = recycler.width / currentCols
-            val cellH = (recycler.height - recycler.paddingTop - recycler.paddingBottom) / currentRows
-            val widgetWidthPx = cellW * widthCells
-            val widgetHeightPx = cellH * heightCells
-            dragOverlayView.layoutParams = FrameLayout.LayoutParams(widgetWidthPx, widgetHeightPx)
+        source: String,
+        pkg: String,
+        widgetId: Int,
+        widthCells: Int,
+        heightCells: Int,
+        x: Float,
+        y: Float
+    ) {
+        if (source == DragController.SOURCE_WIDGET) {
+            val pageIndex = homeViewPager.currentItem
+            val recycler = homePagerAdapter.getRecycler(pageIndex)
+            if (recycler != null && recycler.width > 0 && widthCells > 0 && heightCells > 0) {
+                val cellW = recycler.width / currentCols
+                val cellH = (recycler.height - recycler.paddingTop - recycler.paddingBottom) / currentRows
+                val widgetWidthPx = cellW * widthCells
+                val widgetHeightPx = cellH * heightCells
+                dragOverlayView.layoutParams = FrameLayout.LayoutParams(widgetWidthPx, widgetHeightPx)
+            }
+
+            val info = appWidgetManager.getAppWidgetInfo(widgetId)
+            val drawable = try {
+                info?.loadPreviewImage(this, 0)
+            } catch (_: Exception) {
+                null
+            } ?: try {
+                info?.loadIcon(this, 0)
+            } catch (_: Exception) {
+                null
+            }
+            dragOverlayView.setImageDrawable(drawable)
+        } else {
+            dragOverlayView.layoutParams = FrameLayout.LayoutParams(
+                (56 * resources.displayMetrics.density).toInt(),
+                (56 * resources.displayMetrics.density).toInt()
+            )
+            dragOverlayView.setImageDrawable(HomeGridAdapter.AppCache.get(this, pkg)?.icon)
         }
 
-        val info = appWidgetManager.getAppWidgetInfo(widgetId)
-        val drawable = try {
-            info?.loadPreviewImage(this, 0)
-        } catch (_: Exception) {
-            null
-        } ?: try {
-            info?.loadIcon(this, 0)
-        } catch (_: Exception) {
-            null
-        }
-        dragOverlayView.setImageDrawable(drawable)
-    } else {
-        dragOverlayView.layoutParams = FrameLayout.LayoutParams(
-            (56 * resources.displayMetrics.density).toInt(),
-            (56 * resources.displayMetrics.density).toInt()
-        )
-        dragOverlayView.setImageDrawable(HomeGridAdapter.AppCache.get(this, pkg)?.icon)
+        dragOverlayView.visibility = View.VISIBLE
+        updateDragOverlay(x, y)
     }
-
-    dragOverlayView.visibility = View.VISIBLE
-    updateDragOverlay(x, y)
-}
-
-        val info = appWidgetManager.getAppWidgetInfo(widgetId)
-        val drawable = try {
-            info?.loadPreviewImage(this, 0)
-        } catch (_: Exception) {
-            null
-        } ?: try {
-            info?.loadIcon(this, 0)
-        } catch (_: Exception) {
-            null
-        }
-        dragOverlayView.setImageDrawable(drawable)
-    } else {
-        dragOverlayView.layoutParams = FrameLayout.LayoutParams(
-            (56 * resources.displayMetrics.density).toInt(),
-            (56 * resources.displayMetrics.density).toInt()
-        )
-        dragOverlayView.setImageDrawable(HomeGridAdapter.AppCache.get(this, pkg)?.icon)
-    }
-
-    dragOverlayView.visibility = View.VISIBLE
-    updateDragOverlay(x, y)
-}
 
     private fun updateDragOverlay(x: Float, y: Float) {
-    if (dragOverlayView.visibility != View.VISIBLE) return
-    dragOverlayLastX = x
-    dragOverlayLastY = y
-    if (dragOverlayPending) return
-    dragOverlayPending = true
-    dragOverlayView.postOnAnimation {
-        dragOverlayPending = false
-        dragOverlayView.x = dragOverlayLastX - dragOverlayView.width / 2f
-        dragOverlayView.y = dragOverlayLastY - dragOverlayView.height / 2f
+        if (dragOverlayView.visibility != View.VISIBLE) return
+        dragOverlayLastX = x
+        dragOverlayLastY = y
+        if (dragOverlayPending) return
+        dragOverlayPending = true
+        dragOverlayView.postOnAnimation {
+            dragOverlayPending = false
+            dragOverlayView.x = dragOverlayLastX - dragOverlayView.width / 2f
+            dragOverlayView.y = dragOverlayLastY - dragOverlayView.height / 2f
+        }
     }
-}
+
     private fun hideDragOverlay() {
         dragOverlayView.visibility = View.GONE
     }
