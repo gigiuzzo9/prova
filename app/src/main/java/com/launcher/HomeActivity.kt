@@ -1454,20 +1454,23 @@ class HomeActivity : AppCompatActivity() {
             val localX = ev.rawX - loc[0]
             val localY = ev.rawY - loc[1]
 
-            var isOnWidget = false
+            var targetView: View? = null
             for (i in 0 until widgetContainer.childCount) {
                 val child = widgetContainer.getChildAt(i)
                 if (child.visibility == View.VISIBLE &&
                     localX >= child.x && localX <= child.x + child.width &&
                     localY >= child.y && localY <= child.y + child.height
                 ) {
-                    isOnWidget = true
+                    targetView = child
                     break
                 }
             }
 
-            if (isOnWidget) {
-                widgetContainer.dispatchTouchEvent(ev)
+            if (targetView != null) {
+                val hostView = targetView as? LauncherAppWidgetHostView
+                if (hostView != null) {
+                    hostView.dispatchTouchEvent(ev)
+                }
                 return true
             }
         }
