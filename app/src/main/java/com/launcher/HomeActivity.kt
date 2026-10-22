@@ -742,38 +742,38 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupDragController() {
-        dragController = DragController(
-            activity = this,
-            homeRecyclerView = homeViewPager,
-            drawerOverlay = drawerOverlay,
-            onDragStart = { source, pkg, widgetId, x, y ->
-                showDragOverlay(source, pkg, widgetId, x, y)
-            },
-            onDragMove = { x, y ->
-                updateDragOverlay(x, y)
-            },
-            onDropOnHome = { source, pkg, widgetId, x, y ->
-                hideDragOverlay()
-                if (source == DragController.SOURCE_WIDGET) {
-                    handleWidgetDrop(widgetId, x, y)
-                    true
-                } else {
-                    handleDropOnHome(source, pkg, x, y)
-                }
-            },
-            onDropOnDrawer = { pkg ->
-                hideDragOverlay()
-                handleDropOnDrawer(pkg)
-            },
-            onDropOnDock = { source, pkg, x, y ->
-                hideDragOverlay()
-                handleDropOnDock(source, pkg, x, y)
-            },
-            onDragEnd = {
-                hideDragOverlay()
+    dragController = DragController(
+        activity = this,
+        homeRecyclerView = homeViewPager,
+        drawerOverlay = drawerOverlay,
+        onDragStart = { source, pkg, widgetId, widthCells, heightCells, x, y ->
+            showDragOverlay(source, pkg, widgetId, widthCells, heightCells, x, y)
+        },
+        onDragMove = { x, y ->
+            updateDragOverlay(x, y)
+        },
+        onDropOnHome = { source, pkg, widgetId, x, y ->
+            hideDragOverlay()
+            if (source == DragController.SOURCE_WIDGET) {
+                handleWidgetDrop(widgetId, x, y)
+                true
+            } else {
+                handleDropOnHome(source, pkg, x, y)
             }
-        )
-    }
+        },
+        onDropOnDrawer = { pkg ->
+            hideDragOverlay()
+            handleDropOnDrawer(pkg)
+        },
+        onDropOnDock = { source, pkg, x, y ->
+            hideDragOverlay()
+            handleDropOnDock(source, pkg, x, y)
+        },
+        onDragEnd = {
+            hideDragOverlay()
+        }
+    )
+}
 
     private fun showDragOverlay(
     source: String,
