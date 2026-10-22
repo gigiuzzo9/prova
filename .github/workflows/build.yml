@@ -30,11 +30,11 @@ jobs:
           gradle-version: 8.7
 
       - name: Build Debug APK
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+        run: gradle :app:assembleDebug --no-daemon --stacktrace --rerun-tasks
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: simy launcher
+          name: simple launcher
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

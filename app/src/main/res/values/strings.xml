@@ -1,11 +1,32 @@
 <resources>
-    <string name="app_name">Simply Launcher</string>
-    <string name="imposta_launcher">Imposta come launcher predefinito</string>
-    <string name="imposta_launcher_desc">Tocca per scegliere questo launcher</string>
-    <string name="menu_apri">Apri</string>
-    <string name="menu_info">Info app</string>
-    <string name="menu_disinstalla">Disinstalla</string>
-    <string name="menu_aggiungi_home">Aggiungi alla home</string>
-    <string name="menu_rimuovi_home">Rimuovi dalla home</string>
-    <string name="impostazioni">Impostazioni</string>
+    <string name="app_name">Simple Launcher</string>
+
+    <string name="settings_title">Impostazioni</string>
+    <string name="settings_transparency">Trasparenza: %d%%</string>
+    <string name="settings_transparency_default">Trasparenza: 90%</string>
+    <string name="settings_columns">Colonne</string>
+    <string name="settings_rows">Righe</string>
+    <string name="settings_background_color">Colore sfondo</string>
+
+    <string name="menu_uninstall">Disinstalla</string>
+    <string name="menu_rename">Rinomina</string>
+    <string name="menu_remove">Rimuovi</string>
+    <string name="menu_move">Sposta</string>
+
+    <string name="menu_add_widget">Aggiungi widget</string>
+    <string name="menu_add_page">Aggiungi pagina</string>
+    <string name="menu_change_wallpaper">Modifica sfondo</string>
+    <string name="menu_remove_page">Rimuovi pagina</string>
+
+    <string name="menu_remove_widget">Rimuovi widget</string>
+    <string name="widget_added">Widget aggiunto</string>
+    <string name="widget_bind_denied">Permesso widget negato</string>
+    <string name="widget_config_cancelled">Configurazione annullata</string>
+
+    <string name="rename_title">Rinomina app</string>
+    <string name="rename_hint">Nuovo nome</string>
+    <string name="rename_confirm">Conferma</string>
+    <string name="rename_cancel">Annulla</string>
+
+    <string name="home_empty_message">Apri il cassetto e aggiungi le tue app</string>
 </resources>
