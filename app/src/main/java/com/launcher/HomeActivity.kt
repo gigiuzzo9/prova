@@ -774,16 +774,16 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun showDragOverlay(source: String, pkg: String, widgetId: Int, x: Float, y: Float) {
-        val drawable = if (source == DragController.SOURCE_WIDGET) {
-            val info = appWidgetManager.getAppWidgetInfo(widgetId)
-            info?.loadPreviewImage(this, 0) ?: info?.loadIcon(packageManager, 0)
-        } else {
-            HomeGridAdapter.AppCache.get(this, pkg)?.icon
-        }
-        dragOverlayView.setImageDrawable(drawable)
-        dragOverlayView.visibility = View.VISIBLE
-        updateDragOverlay(x, y)
+    val drawable = if (source == DragController.SOURCE_WIDGET) {
+        val info = appWidgetManager.getAppWidgetInfo(widgetId)
+        try { info?.loadIcon(packageManager, 0) } catch (_: Exception) { null }
+    } else {
+        HomeGridAdapter.AppCache.get(this, pkg)?.icon
     }
+    dragOverlayView.setImageDrawable(drawable)
+    dragOverlayView.visibility = View.VISIBLE
+    updateDragOverlay(x, y)
+}
 
     private fun updateDragOverlay(x: Float, y: Float) {
         if (dragOverlayView.visibility != View.VISIBLE) return
