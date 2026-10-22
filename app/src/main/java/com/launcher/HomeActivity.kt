@@ -775,23 +775,48 @@ class HomeActivity : AppCompatActivity() {
         )
     }
 
-    private fun showDragOverlay(source: String, pkg: String, widgetId: Int, x: Float, y: Float) {
+    private fun showDragOverlay(
+    source: String,
+    pkg: String,
+    widgetId: Int,
+    widthCells: Int,
+    heightCells: Int,
+    x: Float,
+    y: Float
+) {
     if (source == DragController.SOURCE_WIDGET) {
         val pageIndex = homeViewPager.currentItem
         val recycler = homePagerAdapter.getRecycler(pageIndex)
-        if (recycler != null && recycler.width > 0) {
+        if (recycler != null && recycler.width > 0 && widthCells > 0 && heightCells > 0) {
             val cellW = recycler.width / currentCols
             val cellH = (recycler.height - recycler.paddingTop - recycler.paddingBottom) / currentRows
-
-            // Trova lo slot del widget per sapere quante celle occupa
-            val widgets = Prefs.widgetSlotsFlow(this@HomeActivity).first()
-            val slot = widgets.firstOrNull { it.appWidgetId == widgetId }
-            if (slot != null) {
-                val widgetWidthPx = cellW * slot.widthCells
-                val widgetHeightPx = cellH * slot.heightCells
-                dragOverlayView.layoutParams = FrameLayout.LayoutParams(widgetWidthPx, widgetHeightPx)
-            }
+            val widgetWidthPx = cellW * widthCells
+            val widgetHeightPx = cellH * heightCells
+            dragOverlayView.layoutParams = FrameLayout.LayoutParams(widgetWidthPx, widgetHeightPx)
         }
+
+        val info = appWidgetManager.getAppWidgetInfo(widgetId)
+        val drawable = try {
+            info?.loadPreviewImage(this, 0)
+        } catch (_: Exception) {
+            null
+        } ?: try {
+            info?.loadIcon(this, 0)
+        } catch (_: Exception) {
+            null
+        }
+        dragOverlayView.setImageDrawable(drawable)
+    } else {
+        dragOverlayView.layoutParams = FrameLayout.LayoutParams(
+            (56 * resources.displayMetrics.density).toInt(),
+            (56 * resources.displayMetrics.density).toInt()
+        )
+        dragOverlayView.setImageDrawable(HomeGridAdapter.AppCache.get(this, pkg)?.icon)
+    }
+
+    dragOverlayView.visibility = View.VISIBLE
+    updateDragOverlay(x, y)
+}
 
         val info = appWidgetManager.getAppWidgetInfo(widgetId)
         val drawable = try {
