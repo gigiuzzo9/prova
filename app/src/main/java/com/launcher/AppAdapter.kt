@@ -27,21 +27,10 @@ class AppAdapter(
     inner class AppViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val icon: ImageView = itemView.findViewById(R.id.appIcon)
         private val label: TextView = itemView.findViewById(R.id.appLabel)
-        private var pendingIconTag: String? = null
 
         fun bind(app: AppInfo) {
+            icon.setImageDrawable(app.icon)
             label.text = app.label
-
-            // Evita di ricaricare l'icona se è già quella giusta (riciclo)
-            if (pendingIconTag != app.packageName) {
-                pendingIconTag = app.packageName
-                icon.setImageDrawable(null)
-                icon.post {
-                    if (pendingIconTag == app.packageName) {
-                        icon.setImageDrawable(app.icon)
-                    }
-                }
-            }
 
             itemView.setOnClickListener { onClick(app) }
             itemView.setOnLongClickListener { view ->
