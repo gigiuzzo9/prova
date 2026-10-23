@@ -926,26 +926,32 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupDrawer() {
-        drawerRecyclerView.layoutManager = GridLayoutManager(this, 4)
-        drawerRecyclerView.addItemDecoration(object : RecyclerView.ItemDecoration() {
-            override fun getItemOffsets(
-                outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
-            ) {
-                outRect.bottom = (12 * resources.displayMetrics.density).toInt()
-            }
-        })
-        drawerAdapter = AppAdapter(
-            onClick = { app ->
-                AppRepository.launchApp(this, app.packageName)
-                closeDrawer()
-            },
-            onLongPress = { app, view ->
-                dragController.onLongPress(app, view, DragController.SOURCE_DRAWER, true)
-            }
-        )
-        drawerRecyclerView.adapter = drawerAdapter
-        drawerOverlay.setOnClickListener { closeDrawer() }
+    drawerRecyclerView.layoutManager = GridLayoutManager(this, 4).apply {
+        initialPrefetchItemCount = 8
     }
+    drawerRecyclerView.setHasFixedSize(true)
+    drawerRecyclerView.itemAnimator = null
+    drawerRecyclerView.isNestedScrollingEnabled = false
+    drawerRecyclerView.setItemViewCacheSize(20)
+    drawerRecyclerView.addItemDecoration(object : RecyclerView.ItemDecoration() {
+        override fun getItemOffsets(
+            outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
+        ) {
+            outRect.bottom = (12 * resources.displayMetrics.density).toInt()
+        }
+    })
+    drawerAdapter = AppAdapter(
+        onClick = { app ->
+            AppRepository.launchApp(this, app.packageName)
+            closeDrawer()
+        },
+        onLongPress = { app, view ->
+            dragController.onLongPress(app, view, DragController.SOURCE_DRAWER, true)
+        }
+    )
+    drawerRecyclerView.adapter = drawerAdapter
+    drawerOverlay.setOnClickListener { closeDrawer() }
+}
 
     private fun setupContextMenu() {
         contextMenuView = AppContextMenuView(this)
