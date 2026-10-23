@@ -931,7 +931,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun setupDrawer() {
     drawerRecyclerView.layoutManager = GridLayoutManager(this, 4).apply {
-        initialPrefetchItemCount = 12
+        initialPrefetchItemCount = 8
     }
     drawerRecyclerView.setHasFixedSize(true)
     drawerRecyclerView.itemAnimator = null
@@ -1434,26 +1434,15 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun applyDrawerBackground() {
-    lifecycleScope.launch {
-        val color = Prefs.colorFlow(this@HomeActivity).first()
-        val alpha = Prefs.alphaFlow(this@HomeActivity).first()
-        currentDrawerColor = color
-        drawerContainer.setCardBackgroundColor(
-            Color.argb((alpha * 255).toInt(), Color.red(color), Color.green(color), Color.blue(color))
-        )
+        lifecycleScope.launch {
+            val color = Prefs.colorFlow(this@HomeActivity).first()
+            val alpha = Prefs.alphaFlow(this@HomeActivity).first()
+            currentDrawerColor = color
+            drawerContainer.setCardBackgroundColor(
+                Color.argb((alpha * 255).toInt(), Color.red(color), Color.green(color), Color.blue(color))
+            )
+        }
     }
-}
-
-private fun applyDrawerBackgroundSync() {
-    drawerContainer.setCardBackgroundColor(
-        Color.argb(
-            (0.9f * 255).toInt(),
-            Color.red(currentDrawerColor),
-            Color.green(currentDrawerColor),
-            Color.blue(currentDrawerColor)
-        )
-    )
-}
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
     if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
