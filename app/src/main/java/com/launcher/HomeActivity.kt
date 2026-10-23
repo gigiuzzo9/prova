@@ -1451,7 +1451,7 @@ class HomeActivity : AppCompatActivity() {
             }
         }
     }
-    if (ev.actionMasked == MotionEvent.ACTION_DOWN && !isResizing && ::homePagerAdapter.isInitialized) {
+    if (!drawerOpen && ev.actionMasked == MotionEvent.ACTION_DOWN && !isResizing && ::homePagerAdapter.isInitialized) {
         val currentPage = homeViewPager.currentItem
         val widgetContainer = homePagerAdapter.getWidgetContainer(currentPage)
         if (widgetContainer != null && widgetContainer.visibility == View.VISIBLE) {
