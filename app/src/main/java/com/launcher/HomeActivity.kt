@@ -898,22 +898,26 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupHomePager() {
-        homeViewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
-            override fun onPageSelected(position: Int) {
-                pageIndicator.setCurrentPage(position)
-            }
-
-            override fun onPageScrollStateChanged(state: Int) {
-                if (state == ViewPager2.SCROLL_STATE_IDLE) {
-                    homeViewPager.postDelayed({
-                        recalculateCellHeight()
-                        renderWidgets()
-                    }, 100)
-                }
-            }
-        })
+    homeViewPager.offscreenPageLimit = 1
+    (homeViewPager.getChildAt(0) as? RecyclerView)?.apply {
+        layoutManager?.isItemPrefetchEnabled = false
+        setItemViewCacheSize(1)
     }
+    homeViewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+        override fun onPageSelected(position: Int) {
+            pageIndicator.setCurrentPage(position)
+        }
 
+        override fun onPageScrollStateChanged(state: Int) {
+            if (state == ViewPager2.SCROLL_STATE_IDLE) {
+                homeViewPager.postDelayed({
+                    recalculateCellHeight()
+                    renderWidgets()
+                }, 100)
+            }
+        }
+    })
+}
     private fun setupDockController() {
         dockController = DockController(
             activity = this,
