@@ -931,7 +931,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun setupDrawer() {
     drawerRecyclerView.layoutManager = GridLayoutManager(this, 4).apply {
-        initialPrefetchItemCount = 8
+        initialPrefetchItemCount = 12
     }
     drawerRecyclerView.setHasFixedSize(true)
     drawerRecyclerView.itemAnimator = null
