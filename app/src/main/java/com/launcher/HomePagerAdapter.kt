@@ -105,8 +105,7 @@ class HomePagerAdapter(
 
     override fun onViewRecycled(holder: PageViewHolder) {
         super.onViewRecycled(holder)
-        recyclers.remove(holder.recycler)
-        widgetContainers.remove(holder.widgetContainer)
+        // non fare nulla: le liste vengono aggiornate in onBindViewHolder
     }
 
     inner class PageViewHolder(
