@@ -1390,7 +1390,7 @@ class HomeActivity : AppCompatActivity() {
     private fun openDrawer() {
         if (drawerOpen) return
         drawerOpen = true
-        homeViewPager.visibility = View.INVISIBLE
+        homeViewPager.visibility = View.GONE
         pageIndicator.visibility = View.INVISIBLE
         dockLayout.visibility = View.INVISIBLE
         emptyMessage.visibility = View.INVISIBLE
