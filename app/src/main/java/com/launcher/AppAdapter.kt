@@ -14,6 +14,19 @@ class AppAdapter(
     private val onLongPress: (AppInfo, View) -> Unit
 ) : ListAdapter<AppInfo, AppAdapter.AppViewHolder>(DiffCallback()) {
 
+    private var draggingPackage: String? = null
+
+    fun setDraggingPackage(pkg: String?) {
+        if (draggingPackage == pkg) return
+        val old = draggingPackage
+        draggingPackage = pkg
+        currentList.forEachIndexed { index, app ->
+            if (app.packageName == old || app.packageName == pkg) {
+                notifyItemChanged(index)
+            }
+        }
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AppViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_app, parent, false)
@@ -31,6 +44,8 @@ class AppAdapter(
         fun bind(app: AppInfo) {
             icon.setImageDrawable(app.icon)
             label.text = app.label
+
+            itemView.alpha = if (app.packageName == draggingPackage) 0f else 1f
 
             itemView.setOnClickListener { onClick(app) }
             itemView.setOnLongClickListener { view ->
