@@ -6,6 +6,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -120,6 +121,8 @@ class DockController(
         val dockItems = Prefs.dockItemsFlow(activity).first().toMutableList()
         while (dockItems.size < 4) dockItems.add("")
 
+        Toast.makeText(activity, "PRIMA: $dockItems", Toast.LENGTH_LONG).show()
+
         val existingIndex = dockItems.indexOf(pkg)
         if (existingIndex == slotIndex) return
 
@@ -137,6 +140,8 @@ class DockController(
                 }
             }
         }
+
+        Toast.makeText(activity, "DOPO: $dockItems", Toast.LENGTH_LONG).show()
 
         val homeSlots = Prefs.homeSlotsFlow(activity).first()
         val filtered = homeSlots.filter { it.packageName != pkg }
