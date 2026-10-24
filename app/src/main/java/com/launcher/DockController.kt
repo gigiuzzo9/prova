@@ -1,5 +1,6 @@
 package com.simplylauncher
 
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -20,7 +21,6 @@ class DockController(
     fun refresh() {
         activity.lifecycleScope.launch {
             val dockItems = Prefs.dockItemsFlow(activity).first()
-            // Usa la cache di AppRepository: nessuna query PMS se entro TTL
             val allApps = AppRepository.loadInstalledAppsWithCustomLabels(activity)
             val byPkg = allApps.associateBy { it.packageName }
 
@@ -55,15 +55,14 @@ class DockController(
         }
     }
 
-    /**
-     * Nasconde (alpha 0) l'icona nella dock il cui pkg corrisponde a quello
-     * attualmente in drag; ripristina alpha 1 quando pkg è null.
-     */
     fun setDraggingPackage(pkg: String?) {
-        slots.forEach { slot ->
-            val iv = slot.getChildAt(0) as? ImageView ?: return@forEach
+        Log.d("GHOST_DOCK", "setDraggingPackage($pkg) slots=${slots.size}")
+        slots.forEachIndexed { i, slot ->
+            val iv = slot.getChildAt(0) as? ImageView ?: return@forEachIndexed
             val slotPkg = slot.tag as? String
-            iv.alpha = if (slotPkg != null && slotPkg == pkg) 0f else 1f
+            val hide = slotPkg != null && slotPkg == pkg
+            iv.alpha = if (hide) 0f else 1f
+            Log.d("GHOST_DOCK", "  slot=$i pkg=$slotPkg hide=$hide")
         }
     }
 
@@ -92,7 +91,6 @@ class DockController(
 
         dockItems.replaceAll { if (it == pkg) "" else it }
 
-        // Rimuove dalla home SENZA ricaricare PMS — aggiorna solo la griglia
         val homeSlots = Prefs.homeSlotsFlow(activity).first()
         val filtered = homeSlots.filter { it.packageName != pkg }
         if (filtered.size != homeSlots.size) {
