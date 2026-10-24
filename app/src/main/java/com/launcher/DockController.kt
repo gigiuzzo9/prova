@@ -63,17 +63,14 @@ class DockController(
             DragEvent.ACTION_DRAG_STARTED -> {
                 return event.clipDescription.hasMimeType(android.content.ClipDescription.MIMETYPE_TEXT_PLAIN)
             }
-
             DragEvent.ACTION_DRAG_ENTERED -> {
                 slots[slotIndex].setBackgroundColor(highlightColor)
                 return true
             }
-
             DragEvent.ACTION_DRAG_EXITED -> {
                 slots[slotIndex].setBackgroundColor(Color.TRANSPARENT)
                 return true
             }
-
             DragEvent.ACTION_DROP -> {
                 slots[slotIndex].setBackgroundColor(Color.TRANSPARENT)
                 val pkg = event.clipData.getItemAt(0).text.toString()
@@ -88,7 +85,6 @@ class DockController(
                 }
                 return true
             }
-
             DragEvent.ACTION_DRAG_ENDED -> {
                 slots[slotIndex].setBackgroundColor(Color.TRANSPARENT)
                 return true
@@ -117,43 +113,34 @@ class DockController(
     }
 
     private suspend fun addToDockAt(pkg: String, slotIndex: Int) {
-        // 1. Aggiorna la HOME PRIMA (rimuovi l'app se c'era)
-        val homeSlots = Prefs.homeSlotsFlow(activity).first()
-        val filtered = homeSlots.filter { it.packageName != pkg }
-        if (filtered.size != homeSlots.size) {
-            Prefs.setHomeSlots(activity, filtered)
-        }
-
-        // 2. Aggiorna la DOCK
         val dockItems = Prefs.dockItemsFlow(activity).first().toMutableList()
         while (dockItems.size < 4) dockItems.add("")
 
-        val existingIndex = dockItems.indexOf(pkg)
-        if (existingIndex == slotIndex) return
+        dockItems.replaceAll { if (it == pkg) "" else it }
 
-        if (existingIndex != -1) {
-            // L'app è già nella dock, scambia
-            val temp = dockItems[slotIndex]
-            dockItems[slotIndex] = pkg
-            dockItems[existingIndex] = temp
-        } else {
-            // L'app non è nella dock, inseriscila e sposta l'eventuale occupante
-            val previousOccupant = dockItems[slotIndex]
-            dockItems[slotIndex] = pkg
-            if (previousOccupant.isNotBlank()) {
-                val freeIndex = dockItems.indexOfFirst { it.isBlank() }
-                if (freeIndex != -1) {
-                    dockItems[freeIndex] = previousOccupant
-                }
+        val homeSlots = Prefs.homeSlotsFlow(activity).first()
+        val filtered = homeSlots.filter { it.packageName != pkg }
+        val homeChanged = filtered.size != homeSlots.size
+        if (homeChanged) {
+            Prefs.setHomeSlots(activity, filtered)
+        }
+
+        val previousOccupant = dockItems[slotIndex]
+        dockItems[slotIndex] = pkg
+
+        if (previousOccupant.isNotBlank()) {
+            val freeIndex = dockItems.indexOfFirst { it.isBlank() }
+            if (freeIndex != -1) {
+                dockItems[freeIndex] = previousOccupant
             }
         }
 
         Prefs.setDockItems(activity, dockItems)
-        
-        // 3. Aggiorna l'interfaccia
+
+        if (homeChanged) {
+            activity.reloadHomeGrid()
+        }
+
         refresh()
-        
-        // 4. Dì alla Home di ricaricare la griglia (così l'app sparisce dalla home)
-        activity.reloadHomeGrid()
     }
 }
