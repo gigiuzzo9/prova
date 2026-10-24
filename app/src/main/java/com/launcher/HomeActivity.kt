@@ -84,6 +84,7 @@ class HomeActivity : AppCompatActivity() {
     private var currentPageCount = 1
     private var isDropInProgress = false
     private var isResizing = false
+    private var dragSourceView: View? = null
     private var currentDrawerColor: Int = Color.BLACK
 
     private val REQUEST_PICK_WIDGET = 100
@@ -816,6 +817,7 @@ class HomeActivity : AppCompatActivity() {
             }
         }
     } else {
+        dragSourceView?.visibility = View.INVISIBLE
         dragOverlayView.layoutParams = FrameLayout.LayoutParams(
             (56 * resources.displayMetrics.density).toInt(),
             (56 * resources.displayMetrics.density).toInt()
@@ -851,8 +853,10 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun hideDragOverlay() {
-        dragOverlayView.visibility = View.GONE
-    }
+    dragOverlayView.visibility = View.GONE
+    dragSourceView?.visibility = View.VISIBLE
+    dragSourceView = null
+}
 
     fun isPointInDock(x: Float, y: Float): Boolean {
         val loc = IntArray(2)
@@ -1065,26 +1069,29 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun rebuildPagerAdapter() {
-        homePagerAdapter = HomePagerAdapter(
-            viewPager = homeViewPager,
-            cols = currentCols,
-            rows = currentRows,
-            onSlotClick = { slot -> AppRepository.launchApp(this, slot.packageName) },
-            onSlotLongPress = { slot, view ->
-                val app = HomeGridAdapter.AppCache.get(this, slot.packageName)
-                if (app != null) dragController.onLongPress(app, view, DragController.SOURCE_HOME, false)
-            },
-            onEmptyCellLongPress = { view -> showHomePopup(view) },
-            onPageCreated = { _, recycler -> setupRecyclerTouchHelper(recycler) }
-        )
-        homeViewPager.adapter = homePagerAdapter
-        pageIndicator.setPageCount(currentPageCount)
-        pageIndicator.setCurrentPage(homeViewPager.currentItem.coerceIn(0, currentPageCount - 1))
-        homeViewPager.post {
-            recalculateCellHeight()
-            renderWidgets()
-        }
+    homePagerAdapter = HomePagerAdapter(
+        viewPager = homeViewPager,
+        cols = currentCols,
+        rows = currentRows,
+        onSlotClick = { slot -> AppRepository.launchApp(this, slot.packageName) },
+        onSlotLongPress = { slot, view ->
+            val app = HomeGridAdapter.AppCache.get(this, slot.packageName)
+            if (app != null) {
+                dragSourceView = view
+                dragController.onLongPress(app, view, DragController.SOURCE_HOME, false)
+            }
+        },
+        onEmptyCellLongPress = { view -> showHomePopup(view) },
+        onPageCreated = { _, recycler -> setupRecyclerTouchHelper(recycler) }
+    )
+    homeViewPager.adapter = homePagerAdapter
+    pageIndicator.setPageCount(currentPageCount)
+    pageIndicator.setCurrentPage(homeViewPager.currentItem.coerceIn(0, currentPageCount - 1))
+    homeViewPager.post {
+        recalculateCellHeight()
+        renderWidgets()
     }
+}
 
     private fun setupRecyclerTouchHelper(recycler: RecyclerView) {
         if (recycler.tag != null) return
