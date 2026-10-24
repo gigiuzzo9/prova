@@ -1,12 +1,12 @@
 package com.simplylauncher
 
+import android.app.AlertDialog
 import android.graphics.Color
 import android.view.DragEvent
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -121,7 +121,7 @@ class DockController(
         val dockItems = Prefs.dockItemsFlow(activity).first().toMutableList()
         while (dockItems.size < 4) dockItems.add("")
 
-        Toast.makeText(activity, "PRIMA: $dockItems", Toast.LENGTH_LONG).show()
+        val before = dockItems.toList()
 
         val existingIndex = dockItems.indexOf(pkg)
         if (existingIndex == slotIndex) return
@@ -141,7 +141,15 @@ class DockController(
             }
         }
 
-        Toast.makeText(activity, "DOPO: $dockItems", Toast.LENGTH_LONG).show()
+        val after = dockItems.toList()
+
+        activity.runOnUiThread {
+            AlertDialog.Builder(activity)
+                .setTitle("DOCK DEBUG")
+                .setMessage("pkg = $pkg\nslotIndex = $slotIndex\n\nPRIMA:\n$before\n\nDOPO:\n$after")
+                .setPositiveButton("OK", null)
+                .show()
+        }
 
         val homeSlots = Prefs.homeSlotsFlow(activity).first()
         val filtered = homeSlots.filter { it.packageName != pkg }
