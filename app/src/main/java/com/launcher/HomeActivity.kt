@@ -848,60 +848,70 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupDragController() {
-        dragController = DragController(
-            activity = this,
-            homeRecyclerView = homeViewPager,
-            drawerOverlay = drawerOverlay,
-            onDropOnHome = { pkg, x, y -> handleDropOnHome(pkg, x, y) },
-            onDropOnDrawer = { pkg -> handleDropOnDrawer(pkg) }
-        )
+    dragController = DragController(
+        activity = this,
+        homeRecyclerView = homeViewPager,
+        drawerOverlay = drawerOverlay,
+        onDropOnHome = { pkg, x, y -> handleDropOnHome(pkg, x, y) },
+        onDropOnDrawer = { pkg -> handleDropOnDrawer(pkg) }
+    )
 
-        homeViewPager.setOnDragListener { _, event -> dragController.handleHomeDragEvent(event) }
-        drawerRecyclerView.setOnDragListener { _, event -> dragController.handleDrawerDragEvent(event) }
-        drawerOverlay.setOnDragListener { _, event -> dragController.handleDrawerDragEvent(event) }
+    homeViewPager.setOnDragListener { _, event -> dragController.handleHomeDragEvent(event) }
+    drawerRecyclerView.setOnDragListener { _, event -> dragController.handleDrawerDragEvent(event) }
+    drawerOverlay.setOnDragListener { _, event -> dragController.handleDrawerDragEvent(event) }
 
-        dockLayout.setOnDragListener { _, event ->
-            when (event.action) {
-                DragEvent.ACTION_DRAG_STARTED ->
-                    return@setOnDragListener event.clipDescription
-                        .hasMimeType(android.content.ClipDescription.MIMETYPE_TEXT_PLAIN)
+    setupDockDragListeners()
+}
 
-                DragEvent.ACTION_DROP -> {
-                    val pkg = event.clipData.getItemAt(0).text.toString()
-                    val source = event.clipData.description.label?.toString() ?: ""
-                    var closestIndex = 0
-                    var closestDist = Float.MAX_VALUE
-                    val dockLoc = IntArray(2)
-                    dockLayout.getLocationOnScreen(dockLoc)
-                    val dropScreenX = dockLoc[0] + event.x
-                    val dropScreenY = dockLoc[1] + event.y
+private fun setupDockDragListeners() {
+    val listener = View.OnDragListener { v, event ->
+        when (event.action) {
+            DragEvent.ACTION_DRAG_STARTED ->
+                return@OnDragListener event.clipDescription
+                    .hasMimeType(android.content.ClipDescription.MIMETYPE_TEXT_PLAIN)
 
-                    dockSlots.forEachIndexed { index, slot ->
-                        val loc = IntArray(2)
-                        slot.getLocationOnScreen(loc)
-                        val cx = loc[0] + slot.width / 2f
-                        val cy = loc[1] + slot.height / 2f
-                        val dist = Math.hypot(
-                            (dropScreenX - cx).toDouble(),
-                            (dropScreenY - cy).toDouble()
-                        ).toFloat()
-                        if (dist < closestDist) { closestDist = dist; closestIndex = index }
-                    }
+            DragEvent.ACTION_DROP -> {
+                val pkg = event.clipData.getItemAt(0).text.toString()
+                val source = event.clipData.description.label?.toString() ?: ""
 
-                    lifecycleScope.launch {
-                        if (source == DragController.SOURCE_DOCK) {
-                            dockController.swapDockSlots(pkg, closestIndex)
-                        } else {
-                            dockController.addToDockAtPublic(pkg, closestIndex)
-                        }
-                    }
-                    return@setOnDragListener true
+                val loc = IntArray(2)
+                v.getLocationOnScreen(loc)
+                val dropScreenX = loc[0] + event.x
+                val dropScreenY = loc[1] + event.y
+
+                var closestIndex = 0
+                var closestDist = Float.MAX_VALUE
+                dockSlots.forEachIndexed { index, slot ->
+                    val slotLoc = IntArray(2)
+                    slot.getLocationOnScreen(slotLoc)
+                    val cx = slotLoc[0] + slot.width / 2f
+                    val cy = slotLoc[1] + slot.height / 2f
+                    val dist = Math.hypot(
+                        (dropScreenX - cx).toDouble(),
+                        (dropScreenY - cy).toDouble()
+                    ).toFloat()
+                    if (dist < closestDist) { closestDist = dist; closestIndex = index }
                 }
-                DragEvent.ACTION_DRAG_ENDED -> return@setOnDragListener true
-                else -> return@setOnDragListener false
+
+                lifecycleScope.launch {
+                    if (source == DragController.SOURCE_DOCK) {
+                        dockController.swapDockSlots(pkg, closestIndex)
+                    } else {
+                        dockController.addToDockAtPublic(pkg, closestIndex)
+                    }
+                }
+                true
             }
+
+            DragEvent.ACTION_DRAG_ENDED -> true
+            else -> false
         }
     }
+
+    dockLayout.setOnDragListener(listener)
+    dockSlots.forEach { it.setOnDragListener(listener) }
+    dockDrawerButton.setOnDragListener(listener)
+}
 
     private fun setupDockController() {
         dockController = DockController(
