@@ -1,4 +1,4 @@
-package com.launcher
+package com.simplylauncher
 
 import android.content.Context
 import android.content.Intent
