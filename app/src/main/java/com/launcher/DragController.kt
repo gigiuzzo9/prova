@@ -1,10 +1,8 @@
 package com.simplylauncher
 
 import android.appwidget.AppWidgetProviderInfo
-import android.content.ClipData
 import android.view.MotionEvent
 import android.view.View
-import android.widget.Toast
 
 class DragController(
     private val activity: HomeActivity,
@@ -15,7 +13,9 @@ class DragController(
     private val onDropOnHome: (source: String, pkg: String, widgetId: Int, x: Float, y: Float) -> Boolean,
     private val onDropOnDrawer: (pkg: String) -> Unit,
     private val onDropOnDock: (source: String, pkg: String, x: Float, y: Float) -> Unit,
-    private val onDragEnd: () -> Unit
+    private val onDragEnd: () -> Unit,
+    private val onVisualDragStart: (source: String, pkg: String) -> Unit = { _, _ -> },
+    private val onVisualDragEnd: (pkg: String) -> Unit = {}
 ) {
 
     companion object {
@@ -42,8 +42,6 @@ class DragController(
     private var dragSource: String? = null
     private var dragPkg: String? = null
     private var dragWidgetId: Int = -1
-
-    fun isActive(): Boolean = isDragging || pendingAnchor != null
 
     fun onLongPress(app: AppInfo, anchor: View, source: String, fromDrawer: Boolean) {
         if (isDragging) return
@@ -100,6 +98,8 @@ class DragController(
                             onDropOnHome(source, pkg, widgetId, x, y)
                         }
                     }
+
+                    onVisualDragEnd(pkg)
 
                     isDragging = false
                     dragSource = null
@@ -160,6 +160,7 @@ class DragController(
                         if (source == SOURCE_DRAWER) {
                             activity.onDragFromDrawerStarted()
                         }
+                        onVisualDragStart(source, app.packageName)
                         onDragStart(
                             source,
                             app.packageName,
