@@ -1,4 +1,4 @@
-package com.simplylauncher
+package com.launcher
 
 import android.content.Context
 import android.content.Intent
@@ -7,12 +7,30 @@ import kotlinx.coroutines.flow.first
 
 object AppRepository {
 
+    @Volatile
+    private var cachedApps: List<AppInfo>? = null
+
+    @Volatile
+    private var cacheTimestamp: Long = 0L
+
+    private const val CACHE_TTL_MS = 30_000L
+
+    fun invalidateCache() {
+        cachedApps = null
+        cacheTimestamp = 0L
+    }
+
     fun loadInstalledApps(context: Context): List<AppInfo> {
+        val cached = cachedApps
+        if (cached != null && System.currentTimeMillis() - cacheTimestamp < CACHE_TTL_MS) {
+            return cached
+        }
+
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val resolved = pm.queryIntentActivities(intent, 0)
 
-        return resolved
+        val result = resolved
             .map { it.activityInfo.applicationInfo }
             .distinctBy { it.packageName }
             .map { appInfo ->
@@ -23,26 +41,21 @@ object AppRepository {
                 )
             }
             .sortedBy { it.label.lowercase() }
+
+        cachedApps = result
+        cacheTimestamp = System.currentTimeMillis()
+        return result
     }
 
     suspend fun loadInstalledAppsWithCustomLabels(context: Context): List<AppInfo> {
-        val pm = context.packageManager
+        val base = loadInstalledApps(context)
         val customLabels = Prefs.customLabelsFlow(context).first()
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val resolved = pm.queryIntentActivities(intent, 0)
+        if (customLabels.isEmpty()) return base
 
-        return resolved
-            .map { it.activityInfo.applicationInfo }
-            .distinctBy { it.packageName }
-            .map { appInfo ->
-                AppInfo(
-                    label = customLabels[appInfo.packageName]
-                        ?: pm.getApplicationLabel(appInfo).toString(),
-                    packageName = appInfo.packageName,
-                    icon = pm.getApplicationIcon(appInfo)
-                )
-            }
-            .sortedBy { it.label.lowercase() }
+        return base.map { app ->
+            val custom = customLabels[app.packageName]
+            if (custom == null) app else app.copy(label = custom)
+        }.sortedBy { it.label.lowercase() }
     }
 
     fun launchApp(context: Context, packageName: String) {
