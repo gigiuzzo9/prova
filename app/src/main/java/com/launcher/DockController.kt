@@ -1,6 +1,5 @@
 package com.simplylauncher
 
-import android.app.AlertDialog
 import android.graphics.Color
 import android.view.DragEvent
 import android.view.Gravity
@@ -8,6 +7,7 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -109,6 +109,9 @@ class DockController(
             dockItems[fromIndex] = b
             dockItems[slotIndex] = a
             Prefs.setDockItems(activity, dockItems)
+            
+            // Attesa per permettere a DataStore di salvare
+            delay(100)
             refresh()
         }
     }
@@ -121,16 +124,16 @@ class DockController(
         val dockItems = Prefs.dockItemsFlow(activity).first().toMutableList()
         while (dockItems.size < 4) dockItems.add("")
 
-        val before = dockItems.toList()
-
         val existingIndex = dockItems.indexOf(pkg)
         if (existingIndex == slotIndex) return
 
         if (existingIndex != -1) {
+            // L'app è già nella dock, scambia le posizioni
             val temp = dockItems[slotIndex]
             dockItems[slotIndex] = pkg
             dockItems[existingIndex] = temp
         } else {
+            // L'app non è nella dock, inseriscila
             val previousOccupant = dockItems[slotIndex]
             dockItems[slotIndex] = pkg
             if (previousOccupant.isNotBlank()) {
@@ -141,23 +144,19 @@ class DockController(
             }
         }
 
-        val after = dockItems.toList()
+        Prefs.setDockItems(activity, dockItems)
 
-        activity.runOnUiThread {
-            AlertDialog.Builder(activity)
-                .setTitle("DOCK DEBUG")
-                .setMessage("pkg = $pkg\nslotIndex = $slotIndex\n\nPRIMA:\n$before\n\nDOPO:\n$after")
-                .setPositiveButton("OK", null)
-                .show()
-        }
-
+        // Rimuovi l'app dalla home (se c'era)
         val homeSlots = Prefs.homeSlotsFlow(activity).first()
         val filtered = homeSlots.filter { it.packageName != pkg }
         if (filtered.size != homeSlots.size) {
             Prefs.setHomeSlots(activity, filtered)
+            // Non chiamiamo reloadHomeGrid qui per evitare conflitti, 
+            // la home si aggiornerà da sola quando serve.
         }
 
-        Prefs.setDockItems(activity, dockItems)
+        // Attesa per permettere a DataStore di salvare prima di ridisegnare la dock
+        delay(100)
         refresh()
     }
 }
