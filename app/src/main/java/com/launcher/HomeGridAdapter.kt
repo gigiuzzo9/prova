@@ -20,7 +20,8 @@ class HomeGridAdapter(
     fun setCellHeight(height: Int) {
         if (cellHeight != height) {
             cellHeight = height
-            notifyDataSetChanged()
+            // notifyItemRangeChanged è molto più leggero di notifyDataSetChanged
+            if (itemCount > 0) notifyItemRangeChanged(0, itemCount)
         }
     }
 
