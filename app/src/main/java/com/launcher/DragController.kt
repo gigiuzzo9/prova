@@ -15,7 +15,7 @@ class DragController(
     private val onDropOnDock: (source: String, pkg: String, x: Float, y: Float) -> Unit,
     private val onDragEnd: () -> Unit,
     private val onVisualDragStart: (source: String, pkg: String) -> Unit = { _, _ -> },
-    private val onVisualDragEnd: (pkg: String) -> Unit = {}
+    private val onVisualDragEnd: (source: String, pkg: String) -> Unit = { _, _ -> }
 ) {
 
     companion object {
@@ -99,7 +99,7 @@ class DragController(
                         }
                     }
 
-                    onVisualDragEnd(pkg)
+                    onVisualDragEnd(source, pkg)
 
                     isDragging = false
                     dragSource = null
