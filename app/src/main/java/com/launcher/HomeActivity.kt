@@ -854,7 +854,6 @@ class HomeActivity : AppCompatActivity() {
 
     private fun hideDragOverlay() {
     dragOverlayView.visibility = View.GONE
-    dragSourceView?.visibility = View.VISIBLE
     dragSourceView = null
 }
 
@@ -934,15 +933,16 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupDockController() {
-        dockController = DockController(
-            activity = this,
-            slots = dockSlots,
-            onAppLongPressed = { app, view ->
-                dragController.onLongPress(app, view, DragController.SOURCE_DOCK, false)
-            }
-        )
-        dockController.setup()
-    }
+    dockController = DockController(
+        activity = this,
+        slots = dockSlots,
+        onAppLongPressed = { app, view ->
+            dragSourceView = view
+            dragController.onLongPress(app, view, DragController.SOURCE_DOCK, false)
+        }
+    )
+    dockController.setup()
+}
 
     private fun setupDrawer() {
         drawerRecyclerView.layoutManager = GridLayoutManager(this, 4).apply {
