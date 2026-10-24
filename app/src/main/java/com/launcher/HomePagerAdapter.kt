@@ -1,5 +1,6 @@
 package com.simplylauncher
 
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -43,13 +44,12 @@ class HomePagerAdapter(
 
     fun getWidgetContainer(page: Int): FrameLayout? = widgetContainers.getOrNull(page)
 
-    /**
-     * Propaga il "ghost" del drag a tutti i HomeGridAdapter delle pagine.
-     * Chiamato da HomeActivity.setDraggingApp() all'inizio/fine del drag.
-     */
     fun setDraggingPackage(pkg: String?) {
-        recyclers.forEach { rv ->
-            (rv.adapter as? HomeGridAdapter)?.setDraggingPackage(pkg)
+        Log.d("GHOST_PAGER", "setDraggingPackage($pkg) recyclers=${recyclers.size}")
+        recyclers.forEachIndexed { i, rv ->
+            val adapter = rv.adapter as? HomeGridAdapter
+            Log.d("GHOST_PAGER", "  page=$i adapter=${adapter != null}")
+            adapter?.setDraggingPackage(pkg)
         }
     }
 
@@ -71,6 +71,7 @@ class HomePagerAdapter(
             layoutManager = GridLayoutManager(parent.context, cols)
             clipToPadding = false
             setPadding(0, (16 * resources.displayMetrics.density).toInt(), 0, 0)
+            itemAnimator = null
         }
 
         val widgetContainer = FrameLayout(parent.context).apply {
