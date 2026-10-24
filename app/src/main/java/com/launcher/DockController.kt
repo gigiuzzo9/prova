@@ -124,8 +124,7 @@ class DockController(
 
         val homeSlots = Prefs.homeSlotsFlow(activity).first()
         val filtered = homeSlots.filter { it.packageName != pkg }
-        val homeChanged = filtered.size != homeSlots.size
-        if (homeChanged) {
+        if (filtered.size != homeSlots.size) {
             Prefs.setHomeSlots(activity, filtered)
         }
 
@@ -140,11 +139,6 @@ class DockController(
         }
 
         Prefs.setDockItems(activity, dockItems)
-
-        if (homeChanged) {
-            activity.reloadHomeGrid()
-        }
-
         refresh()
     }
 }
