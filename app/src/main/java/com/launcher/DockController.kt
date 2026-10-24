@@ -38,6 +38,7 @@ class DockController(
                         }
                     }
                     slot.addView(imageView)
+                    slot.tag = app.packageName
                     slot.setOnClickListener {
                         AppRepository.launchApp(activity, app.packageName)
                     }
@@ -46,10 +47,23 @@ class DockController(
                         true
                     }
                 } else {
+                    slot.tag = null
                     slot.setOnClickListener(null)
                     slot.setOnLongClickListener(null)
                 }
             }
+        }
+    }
+
+    /**
+     * Nasconde (alpha 0) l'icona nella dock il cui pkg corrisponde a quello
+     * attualmente in drag; ripristina alpha 1 quando pkg è null.
+     */
+    fun setDraggingPackage(pkg: String?) {
+        slots.forEach { slot ->
+            val iv = slot.getChildAt(0) as? ImageView ?: return@forEach
+            val slotPkg = slot.tag as? String
+            iv.alpha = if (slotPkg != null && slotPkg == pkg) 0f else 1f
         }
     }
 
