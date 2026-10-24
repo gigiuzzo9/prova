@@ -1,4 +1,4 @@
-package com.launcher
+package com.simplylauncher
 
 import android.view.LayoutInflater
 import android.view.View
