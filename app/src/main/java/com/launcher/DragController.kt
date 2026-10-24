@@ -43,6 +43,8 @@ class DragController(
     private var dragPkg: String? = null
     private var dragWidgetId: Int = -1
 
+    fun isActive(): Boolean = isDragging || pendingAnchor != null
+
     fun onLongPress(app: AppInfo, anchor: View, source: String, fromDrawer: Boolean) {
         if (isDragging) return
         pendingApp = app
