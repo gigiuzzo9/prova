@@ -120,22 +120,28 @@ class DockController(
         val dockItems = Prefs.dockItemsFlow(activity).first().toMutableList()
         while (dockItems.size < 4) dockItems.add("")
 
-        dockItems.replaceAll { if (it == pkg) "" else it }
+        val existingIndex = dockItems.indexOf(pkg)
+        if (existingIndex == slotIndex) return
+
+        if (existingIndex != -1) {
+            val temp = dockItems[slotIndex]
+            dockItems[slotIndex] = pkg
+            dockItems[existingIndex] = temp
+        } else {
+            val previousOccupant = dockItems[slotIndex]
+            dockItems[slotIndex] = pkg
+            if (previousOccupant.isNotBlank()) {
+                val freeIndex = dockItems.indexOfFirst { it.isBlank() }
+                if (freeIndex != -1) {
+                    dockItems[freeIndex] = previousOccupant
+                }
+            }
+        }
 
         val homeSlots = Prefs.homeSlotsFlow(activity).first()
         val filtered = homeSlots.filter { it.packageName != pkg }
         if (filtered.size != homeSlots.size) {
             Prefs.setHomeSlots(activity, filtered)
-        }
-
-        val previousOccupant = dockItems[slotIndex]
-        dockItems[slotIndex] = pkg
-
-        if (previousOccupant.isNotBlank()) {
-            val freeIndex = dockItems.indexOfFirst { it.isBlank() }
-            if (freeIndex != -1) {
-                dockItems[freeIndex] = previousOccupant
-            }
         }
 
         Prefs.setDockItems(activity, dockItems)
