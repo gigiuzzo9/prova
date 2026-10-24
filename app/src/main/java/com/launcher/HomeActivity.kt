@@ -777,55 +777,65 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun showDragOverlay(
-        source: String,
-        pkg: String,
-        widgetId: Int,
-        widthCells: Int,
-        heightCells: Int,
-        x: Float,
-        y: Float
-    ) {
-        if (source == DragController.SOURCE_WIDGET) {
-            val pageIndex = homeViewPager.currentItem
-            val recycler = homePagerAdapter.getRecycler(pageIndex)
-            if (recycler != null && recycler.width > 0 && widthCells > 0 && heightCells > 0) {
-                val cellW = recycler.width / currentCols
-                val cellH = (recycler.height - recycler.paddingTop - recycler.paddingBottom) / currentRows
-                val widgetWidthPx = cellW * widthCells
-                val widgetHeightPx = cellH * heightCells
-                dragOverlayView.layoutParams = FrameLayout.LayoutParams(widgetWidthPx, widgetHeightPx)
+    source: String,
+    pkg: String,
+    widgetId: Int,
+    widthCells: Int,
+    heightCells: Int,
+    x: Float,
+    y: Float
+) {
+    if (source == DragController.SOURCE_WIDGET) {
+        val pageIndex = homeViewPager.currentItem
+        val recycler = homePagerAdapter.getRecycler(pageIndex)
+        if (recycler != null && recycler.width > 0 && widthCells > 0 && heightCells > 0) {
+            val cellW = recycler.width / currentCols
+            val cellH = (recycler.height - recycler.paddingTop - recycler.paddingBottom) / currentRows
+            val widgetWidthPx = cellW * widthCells
+            val widgetHeightPx = cellH * heightCells
+            dragOverlayView.layoutParams = FrameLayout.LayoutParams(widgetWidthPx, widgetHeightPx)
 
-                val widgetContainer = homePagerAdapter.getWidgetContainer(pageIndex)
-                val hostView = widgetContainer?.let { container ->
-                    (0 until container.childCount)
-                        .map { container.getChildAt(it) }
-                        .firstOrNull { it.tag == widgetId } as? LauncherAppWidgetHostView
-                }
-
-                if (hostView != null && hostView.width > 0 && hostView.height > 0) {
-                    val bitmap = android.graphics.Bitmap.createBitmap(
-                        hostView.width,
-                        hostView.height,
-                        android.graphics.Bitmap.Config.ARGB_8888
-                    )
-                    val canvas = android.graphics.Canvas(bitmap)
-                    hostView.draw(canvas)
-                    dragOverlayView.setImageBitmap(bitmap)
-                } else {
-                    dragOverlayView.setImageDrawable(null)
-                }
+            val widgetContainer = homePagerAdapter.getWidgetContainer(pageIndex)
+            val hostView = widgetContainer?.let { container ->
+                (0 until container.childCount)
+                    .map { container.getChildAt(it) }
+                    .firstOrNull { it.tag == widgetId } as? LauncherAppWidgetHostView
             }
-        } else {
-            dragOverlayView.layoutParams = FrameLayout.LayoutParams(
-                (56 * resources.displayMetrics.density).toInt(),
-                (56 * resources.displayMetrics.density).toInt()
-            )
-            dragOverlayView.setImageDrawable(HomeGridAdapter.AppCache.get(this, pkg)?.icon)
-        }
 
-        dragOverlayView.visibility = View.VISIBLE
-        updateDragOverlay(x, y)
+            if (hostView != null && hostView.width > 0 && hostView.height > 0) {
+                val bitmap = android.graphics.Bitmap.createBitmap(
+                    hostView.width,
+                    hostView.height,
+                    android.graphics.Bitmap.Config.ARGB_8888
+                )
+                val canvas = android.graphics.Canvas(bitmap)
+                hostView.draw(canvas)
+                dragOverlayView.setImageBitmap(bitmap)
+            } else {
+                dragOverlayView.setImageDrawable(null)
+            }
+        }
+    } else {
+        dragOverlayView.layoutParams = FrameLayout.LayoutParams(
+            (56 * resources.displayMetrics.density).toInt(),
+            (56 * resources.displayMetrics.density).toInt()
+        )
+        val icon = HomeGridAdapter.AppCache.get(this, pkg)?.icon
+        if (icon != null) {
+            val size = (56 * resources.displayMetrics.density).toInt()
+            val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            icon.setBounds(0, 0, size, size)
+            icon.draw(canvas)
+            dragOverlayView.setImageBitmap(bitmap)
+        } else {
+            dragOverlayView.setImageDrawable(null)
+        }
     }
+
+    dragOverlayView.visibility = View.VISIBLE
+    updateDragOverlay(x, y)
+}
 
     private fun updateDragOverlay(x: Float, y: Float) {
         if (dragOverlayView.visibility != View.VISIBLE) return
