@@ -7,7 +7,6 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -109,9 +108,6 @@ class DockController(
             dockItems[fromIndex] = b
             dockItems[slotIndex] = a
             Prefs.setDockItems(activity, dockItems)
-            
-            // Attesa per permettere a DataStore di salvare
-            delay(100)
             refresh()
         }
     }
@@ -121,6 +117,14 @@ class DockController(
     }
 
     private suspend fun addToDockAt(pkg: String, slotIndex: Int) {
+        // 1. Aggiorna la HOME PRIMA (rimuovi l'app se c'era)
+        val homeSlots = Prefs.homeSlotsFlow(activity).first()
+        val filtered = homeSlots.filter { it.packageName != pkg }
+        if (filtered.size != homeSlots.size) {
+            Prefs.setHomeSlots(activity, filtered)
+        }
+
+        // 2. Aggiorna la DOCK
         val dockItems = Prefs.dockItemsFlow(activity).first().toMutableList()
         while (dockItems.size < 4) dockItems.add("")
 
@@ -128,12 +132,12 @@ class DockController(
         if (existingIndex == slotIndex) return
 
         if (existingIndex != -1) {
-            // L'app è già nella dock, scambia le posizioni
+            // L'app è già nella dock, scambia
             val temp = dockItems[slotIndex]
             dockItems[slotIndex] = pkg
             dockItems[existingIndex] = temp
         } else {
-            // L'app non è nella dock, inseriscila
+            // L'app non è nella dock, inseriscila e sposta l'eventuale occupante
             val previousOccupant = dockItems[slotIndex]
             dockItems[slotIndex] = pkg
             if (previousOccupant.isNotBlank()) {
@@ -145,18 +149,11 @@ class DockController(
         }
 
         Prefs.setDockItems(activity, dockItems)
-
-        // Rimuovi l'app dalla home (se c'era)
-        val homeSlots = Prefs.homeSlotsFlow(activity).first()
-        val filtered = homeSlots.filter { it.packageName != pkg }
-        if (filtered.size != homeSlots.size) {
-            Prefs.setHomeSlots(activity, filtered)
-            // Non chiamiamo reloadHomeGrid qui per evitare conflitti, 
-            // la home si aggiornerà da sola quando serve.
-        }
-
-        // Attesa per permettere a DataStore di salvare prima di ridisegnare la dock
-        delay(100)
+        
+        // 3. Aggiorna l'interfaccia
         refresh()
+        
+        // 4. Dì alla Home di ricaricare la griglia (così l'app sparisce dalla home)
+        activity.reloadHomeGrid()
     }
 }
