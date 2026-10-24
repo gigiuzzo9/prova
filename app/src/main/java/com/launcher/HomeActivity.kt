@@ -782,9 +782,9 @@ class HomeActivity : AppCompatActivity() {
             setDraggingApp(pkg, source)
         },
         onVisualDragEnd = { source, pkg ->
-            homeViewPager.post {
-                setDraggingApp(null, source)
-            }
+            // Il ripristino dell'alpha viene fatto dentro
+            // handleDropOnHome / handleDropOnDock / handleDropOnDrawer
+            // dopo che submitList ha aggiornato la lista.
         }
     )
 }
