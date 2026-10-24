@@ -782,7 +782,9 @@ class HomeActivity : AppCompatActivity() {
             setDraggingApp(pkg, source)
         },
         onVisualDragEnd = { source, pkg ->
-            // non fare nulla: la cella viene ridisegnata da submitList
+            homeViewPager.post {
+                setDraggingApp(null, source)
+            }
         }
     )
 }
