@@ -1446,8 +1446,10 @@ class HomeActivity : AppCompatActivity() {
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-    if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
+    // 1) DragController: consultato solo se ha un pending o un drag attivo
+    if (::dragController.isInitialized && !isResizing && dragController.isActive() && dragController.onTouch(ev)) return true
 
+    // 2) Context menu: dismiss se si tocca fuori
     if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
             if (!contextMenuView.isPointInside(ev.rawX, ev.rawY)) {
@@ -1458,7 +1460,7 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    // Dispatch manuale ai widget: blocca la propagazione alla griglia sottostante
+    // 3) Dispatch manuale ai widget: blocca la propagazione alla griglia sottostante
     if (!drawerOpen && ev.actionMasked == MotionEvent.ACTION_DOWN && !isResizing && ::homePagerAdapter.isInitialized) {
         val currentPage = homeViewPager.currentItem
         val widgetContainer = homePagerAdapter.getWidgetContainer(currentPage)
