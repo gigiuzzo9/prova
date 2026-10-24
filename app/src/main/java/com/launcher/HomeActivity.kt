@@ -748,50 +748,49 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupDragController() {
-        dragController = DragController(
-            activity = this,
-            homeRecyclerView = homeViewPager,
-            drawerOverlay = drawerOverlay,
-            onDragStart = { source, pkg, widgetId, widthCells, heightCells, x, y ->
-                showDragOverlay(source, pkg, widgetId, widthCells, heightCells, x, y)
-            },
-            onDragMove = { x, y ->
-                updateDragOverlay(x, y)
-            },
-            onDropOnHome = { source, pkg, widgetId, x, y ->
-                hideDragOverlay()
-                if (source == DragController.SOURCE_WIDGET) {
-                    handleWidgetDrop(widgetId, x, y)
-                    true
-                } else {
-                    handleDropOnHome(source, pkg, x, y)
-                }
-            },
-            onDropOnDrawer = { pkg ->
-                hideDragOverlay()
-                handleDropOnDrawer(pkg)
-            },
-            onDropOnDock = { source, pkg, x, y ->
-                hideDragOverlay()
-                handleDropOnDock(source, pkg, x, y)
-            },
-            onDragEnd = {
-                hideDragOverlay()
-            },
-            onVisualDragStart = { source, pkg ->
-                setDraggingApp(pkg, source)
-            },
-            onVisualDragEnd = { source, pkg ->
+    dragController = DragController(
+        activity = this,
+        homeRecyclerView = homeViewPager,
+        drawerOverlay = drawerOverlay,
+        onDragStart = { source, pkg, widgetId, widthCells, heightCells, x, y ->
+            showDragOverlay(source, pkg, widgetId, widthCells, heightCells, x, y)
+        },
+        onDragMove = { x, y ->
+            updateDragOverlay(x, y)
+        },
+        onDropOnHome = { source, pkg, widgetId, x, y ->
+            hideDragOverlay()
+            if (source == DragController.SOURCE_WIDGET) {
+                handleWidgetDrop(widgetId, x, y)
+                true
+            } else {
+                handleDropOnHome(source, pkg, x, y)
+            }
+        },
+        onDropOnDrawer = { pkg ->
+            hideDragOverlay()
+            handleDropOnDrawer(pkg)
+        },
+        onDropOnDock = { source, pkg, x, y ->
+            hideDragOverlay()
+            handleDropOnDock(source, pkg, x, y)
+        },
+        onDragEnd = {
+            hideDragOverlay()
+        },
+        onVisualDragStart = { source, pkg ->
+            setDraggingApp(pkg, source)
+        },
+        onVisualDragEnd = { source, pkg ->
+            // Non ripristinare subito: la griglia verrà ridisegnata da
+            // submitList/removeAppFromGridOnly. Ripristiniamo in un post
+            // per coprire il caso "drop annullato" senza creare flash.
+            homeViewPager.post {
                 setDraggingApp(null, source)
             }
-        )
-    }
-
-    /**
-     * Nasconde (alpha 0) o ripristina (alpha 1) la cella/icona dell'app in drag,
-     * così durante il drag si vede solo l'overlay che segue il dito.
-     * Questo elimina il "fantasma" della copia su ColorOS/OPPO.
-     */
+        }
+    )
+}
     private fun setDraggingApp(pkg: String?, source: String) {
         when (source) {
             DragController.SOURCE_HOME -> {
