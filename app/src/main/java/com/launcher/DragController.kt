@@ -164,26 +164,11 @@ class DragController(
     }
 
     fun handleHomeDragEvent(event: DragEvent): Boolean {
-        val pagerLoc = IntArray(2)
-        homeRecyclerView.getLocationOnScreen(pagerLoc)
-        val screenX = event.x + pagerLoc[0]
-        val screenY = event.y + pagerLoc[1]
-
         when (event.action) {
             DragEvent.ACTION_DRAG_STARTED ->
                 return event.clipDescription.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN)
 
-            DragEvent.ACTION_DRAG_LOCATION -> {
-                if (activity.isPointInDock(screenX, screenY)) {
-                    return false
-                }
-                return true
-            }
-
             DragEvent.ACTION_DROP -> {
-                if (activity.isPointInDock(screenX, screenY)) {
-                    return false
-                }
                 val pkg = event.clipData.getItemAt(0).text.toString()
                 return onDropOnHome(pkg, event.x, event.y)
             }
