@@ -1,5 +1,7 @@
 package com.simplylauncher
 
+import android.graphics.Color
+import android.view.DragEvent
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -13,8 +15,12 @@ class DockController(
     private val slots: List<FrameLayout>,
     private val onAppLongPressed: (AppInfo, View) -> Unit
 ) {
+    private val highlightColor = Color.parseColor("#33FFFFFF")
 
     fun setup() {
+        slots.forEachIndexed { index, slot ->
+            slot.setOnDragListener { _, event -> handleSlotDrop(event, index) }
+        }
     }
 
     fun refresh() {
@@ -52,6 +58,45 @@ class DockController(
         }
     }
 
+    private fun handleSlotDrop(event: DragEvent, slotIndex: Int): Boolean {
+        when (event.action) {
+            DragEvent.ACTION_DRAG_STARTED -> {
+                return event.clipDescription.hasMimeType(android.content.ClipDescription.MIMETYPE_TEXT_PLAIN)
+            }
+
+            DragEvent.ACTION_DRAG_ENTERED -> {
+                slots[slotIndex].setBackgroundColor(highlightColor)
+                return true
+            }
+
+            DragEvent.ACTION_DRAG_EXITED -> {
+                slots[slotIndex].setBackgroundColor(Color.TRANSPARENT)
+                return true
+            }
+
+            DragEvent.ACTION_DROP -> {
+                slots[slotIndex].setBackgroundColor(Color.TRANSPARENT)
+                val pkg = event.clipData.getItemAt(0).text.toString()
+                val source = event.clipData.description.label?.toString() ?: ""
+
+                activity.lifecycleScope.launch {
+                    if (source == DragController.SOURCE_DOCK) {
+                        swapDockSlots(pkg, slotIndex)
+                    } else {
+                        addToDockAt(pkg, slotIndex)
+                    }
+                }
+                return true
+            }
+
+            DragEvent.ACTION_DRAG_ENDED -> {
+                slots[slotIndex].setBackgroundColor(Color.TRANSPARENT)
+                return true
+            }
+        }
+        return false
+    }
+
     suspend fun swapDockSlots(pkg: String, slotIndex: Int) {
         val dockItems = Prefs.dockItemsFlow(activity).first().toMutableList()
         while (dockItems.size < 4) dockItems.add("")
@@ -79,9 +124,9 @@ class DockController(
 
         val homeSlots = Prefs.homeSlotsFlow(activity).first()
         val filtered = homeSlots.filter { it.packageName != pkg }
-        if (filtered.size != homeSlots.size) {
+        val homeChanged = filtered.size != homeSlots.size
+        if (homeChanged) {
             Prefs.setHomeSlots(activity, filtered)
-            activity.reloadHomeGrid()
         }
 
         val previousOccupant = dockItems[slotIndex]
@@ -95,6 +140,11 @@ class DockController(
         }
 
         Prefs.setDockItems(activity, dockItems)
+
+        if (homeChanged) {
+            activity.reloadHomeGrid()
+        }
+
         refresh()
     }
 }
