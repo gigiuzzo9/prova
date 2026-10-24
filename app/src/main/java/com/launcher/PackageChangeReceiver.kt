@@ -15,6 +15,9 @@ class PackageChangeReceiver : BroadcastReceiver() {
             Intent.ACTION_PACKAGE_REMOVED,
             Intent.ACTION_PACKAGE_CHANGED,
             Intent.ACTION_PACKAGE_REPLACED -> {
+                // Invalida la cache PRIMA di qualsiasi query
+                AppRepository.invalidateCache()
+
                 GlobalScope.launch {
                     // pulizia: rimuovi slot di app disinstallate
                     val slots = Prefs.homeSlotsFlow(context).first()
