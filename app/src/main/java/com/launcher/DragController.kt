@@ -38,17 +38,8 @@ class DragController(
 
     private var isDragging = false
 
-    /**
-     * True se c'è un long-press pendente o un drag in corso.
-     * Serve a HomeActivity.dispatchTouchEvent per evitare di consultare
-     * il DragController quando è idle (es. durante lo scroll del drawer).
-     */
     fun isActive(): Boolean = isDragging || pendingAnchor != null
 
-    /**
-     * Resetta lo stato del drag. Da chiamare quando il drag è terminato
-     * (drop completato o cancellato) per evitare che isActive() resti true.
-     */
     fun resetDrag() {
         isDragging = false
         clearPending()
@@ -173,11 +164,26 @@ class DragController(
     }
 
     fun handleHomeDragEvent(event: DragEvent): Boolean {
+        val pagerLoc = IntArray(2)
+        homeRecyclerView.getLocationOnScreen(pagerLoc)
+        val screenX = event.x + pagerLoc[0]
+        val screenY = event.y + pagerLoc[1]
+
         when (event.action) {
             DragEvent.ACTION_DRAG_STARTED ->
                 return event.clipDescription.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN)
 
+            DragEvent.ACTION_DRAG_LOCATION -> {
+                if (activity.isPointInDock(screenX, screenY)) {
+                    return false
+                }
+                return true
+            }
+
             DragEvent.ACTION_DROP -> {
+                if (activity.isPointInDock(screenX, screenY)) {
+                    return false
+                }
                 val pkg = event.clipData.getItemAt(0).text.toString()
                 return onDropOnHome(pkg, event.x, event.y)
             }
