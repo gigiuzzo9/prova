@@ -777,8 +777,33 @@ class HomeActivity : AppCompatActivity() {
             },
             onDragEnd = {
                 hideDragOverlay()
+            },
+            onVisualDragStart = { source, pkg ->
+                setDraggingApp(pkg, source)
+            },
+            onVisualDragEnd = { source, pkg ->
+                setDraggingApp(null, source)
             }
         )
+    }
+
+    /**
+     * Nasconde (alpha 0) o ripristina (alpha 1) la cella/icona dell'app in drag,
+     * così durante il drag si vede solo l'overlay che segue il dito.
+     * Questo elimina il "fantasma" della copia su ColorOS/OPPO.
+     */
+    private fun setDraggingApp(pkg: String?, source: String) {
+        when (source) {
+            DragController.SOURCE_HOME -> {
+                homePagerAdapter.setDraggingPackage(pkg)
+            }
+            DragController.SOURCE_DRAWER -> {
+                drawerAdapter.setDraggingPackage(pkg)
+            }
+            DragController.SOURCE_DOCK -> {
+                dockController.setDraggingPackage(pkg)
+            }
+        }
     }
 
     private fun showDragOverlay(
