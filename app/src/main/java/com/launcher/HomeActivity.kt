@@ -847,6 +847,14 @@ class HomeActivity : AppCompatActivity() {
         })
     }
 
+    fun isPointInDock(x: Float, y: Float): Boolean {
+    val loc = IntArray(2)
+    dockLayout.getLocationOnScreen(loc)
+    return x >= loc[0] && x <= loc[0] + dockLayout.width &&
+            y >= loc[1] && y <= loc[1] + dockLayout.height
+    }
+
+    
     private fun setupDragController() {
     dragController = DragController(
         activity = this,
