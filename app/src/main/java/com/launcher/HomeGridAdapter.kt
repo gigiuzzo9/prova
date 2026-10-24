@@ -17,8 +17,8 @@ class HomeGridAdapter(
 
     private var cellHeight: Int = 0
 
-    // Package dell'app che è attualmente in drag: la cella corrispondente
-    // viene nascosta (alpha 0) così l'overlay è l'unica cosa visibile.
+    // Package dell'app attualmente in drag: la cella viene resa invisibile
+    // (alpha 0) così l'overlay è l'unica cosa visibile.
     private var draggingPackage: String? = null
 
     fun setCellHeight(height: Int) {
@@ -34,7 +34,6 @@ class HomeGridAdapter(
         if (draggingPackage == pkg) return
         val old = draggingPackage
         draggingPackage = pkg
-        // Aggiorna solo le due celle coinvolte
         currentList.forEachIndexed { index, slot ->
             if (slot.packageName == old || slot.packageName == pkg) {
                 notifyItemChanged(index)
