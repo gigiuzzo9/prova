@@ -1,5 +1,6 @@
 package com.simplylauncher
 
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,9 +17,6 @@ class HomeGridAdapter(
 ) : ListAdapter<HomeSlot, HomeGridAdapter.SlotViewHolder>(DiffCallback()) {
 
     private var cellHeight: Int = 0
-
-    // Package dell'app attualmente in drag: la cella viene resa invisibile
-    // (alpha 0) così l'overlay è l'unica cosa visibile.
     private var draggingPackage: String? = null
 
     fun setCellHeight(height: Int) {
@@ -31,14 +29,15 @@ class HomeGridAdapter(
     fun getCellHeightSafe(): Int = cellHeight
 
     fun setDraggingPackage(pkg: String?) {
-        if (draggingPackage == pkg) return
-        val old = draggingPackage
-        draggingPackage = pkg
-        currentList.forEachIndexed { index, slot ->
-            if (slot.packageName == old || slot.packageName == pkg) {
-                notifyItemChanged(index)
-            }
+        Log.d("GHOST_HOME", "setDraggingPackage($pkg) old=$draggingPackage size=${currentList.size}")
+        if (draggingPackage == pkg) {
+            Log.d("GHOST_HOME", "  skip (same)")
+            return
         }
+        draggingPackage = pkg
+        // notifyDataSetChanged bypassa AsyncListDiffer e garantisce il rebind
+        notifyDataSetChanged()
+        Log.d("GHOST_HOME", "  notified")
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SlotViewHolder {
@@ -98,8 +97,9 @@ class HomeGridAdapter(
                 label.text = app.label
                 itemView.visibility = View.VISIBLE
 
-                // Ghost durante drag: nasconde la cella se è quella in drag
-                itemView.alpha = if (slot.packageName == draggingPackage) 0f else 1f
+                val hide = slot.packageName == draggingPackage
+                itemView.alpha = if (hide) 0f else 1f
+                if (hide) Log.d("GHOST_HOME", "bind HIDE ${slot.packageName}")
 
                 itemView.setOnClickListener { onClick(slot) }
                 itemView.setOnLongClickListener { view ->
