@@ -782,11 +782,7 @@ class HomeActivity : AppCompatActivity() {
             setDraggingApp(pkg, source)
         },
         onVisualDragEnd = { source, pkg ->
-            // Non ripristinare subito: la griglia verrà ridisegnata da
-            // submitList/removeAppFromGridOnly. Ripristiniamo in un post
-            // per coprire il caso "drop annullato" senza creare flash.
-            homeViewPager.post {
-                setDraggingApp(null, source)
+            
             }
         }
     )
