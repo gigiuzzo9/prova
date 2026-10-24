@@ -1,53 +1,84 @@
 package com.simplylauncher
 
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.ImageView
-import android.widget.TextView
-import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.ListAdapter
-import androidx.recyclerview.widget.RecyclerView
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import kotlinx.coroutines.flow.first
 
-class AppAdapter(
-    private val onClick: (AppInfo) -> Unit,
-    private val onLongPress: (AppInfo, View) -> Unit
-) : ListAdapter<AppInfo, AppAdapter.AppViewHolder>(DiffCallback()) {
+object AppRepository {
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AppViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_app, parent, false)
-        return AppViewHolder(view)
+    @Volatile
+    private var cachedApps: List<AppInfo>? = null
+
+    @Volatile
+    private var cacheTimestamp: Long = 0L
+
+    private const val CACHE_TTL_MS = 30_000L
+
+    fun invalidateCache() {
+        cachedApps = null
+        cacheTimestamp = 0L
     }
 
-    override fun onBindViewHolder(holder: AppViewHolder, position: Int) {
-        holder.bind(getItem(position))
-    }
+    fun loadInstalledApps(context: Context): List<AppInfo> {
+        val cached = cachedApps
+        if (cached != null && System.currentTimeMillis() - cacheTimestamp < CACHE_TTL_MS) {
+            return cached
+        }
 
-    inner class AppViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val icon: ImageView = itemView.findViewById(R.id.appIcon)
-        private val label: TextView = itemView.findViewById(R.id.appLabel)
+        val pm = context.packageManager
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val resolved = pm.queryIntentActivities(intent, 0)
 
-        fun bind(app: AppInfo) {
-            icon.setImageDrawable(app.icon)
-            label.text = app.label
-
-            itemView.setOnClickListener { onClick(app) }
-            itemView.setOnLongClickListener { view ->
-                onLongPress(app, view)
-                true
+        val result = resolved
+            .map { it.activityInfo.applicationInfo }
+            .distinctBy { it.packageName }
+            .map { appInfo ->
+                AppInfo(
+                    label = pm.getApplicationLabel(appInfo).toString(),
+                    packageName = appInfo.packageName,
+                    icon = pm.getApplicationIcon(appInfo)
+                )
             }
+            .sortedBy { it.label.lowercase() }
+
+        cachedApps = result
+        cacheTimestamp = System.currentTimeMillis()
+        return result
+    }
+
+    suspend fun loadInstalledAppsWithCustomLabels(context: Context): List<AppInfo> {
+        val base = loadInstalledApps(context)
+        val customLabels = Prefs.customLabelsFlow(context).first()
+        if (customLabels.isEmpty()) return base
+
+        return base.map { app ->
+            val custom = customLabels[app.packageName]
+            if (custom == null) app else app.copy(label = custom)
+        }.sortedBy { it.label.lowercase() }
+    }
+
+    fun launchApp(context: Context, packageName: String) {
+        if (packageName == context.packageName) {
+            val intent = Intent(context, SettingsActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            return
+        }
+
+        val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+        intent?.let {
+            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            context.startActivity(it)
         }
     }
 
-    class DiffCallback : DiffUtil.ItemCallback<AppInfo>() {
-        override fun areItemsTheSame(oldItem: AppInfo, newItem: AppInfo): Boolean {
-            return oldItem.packageName == newItem.packageName
-        }
-
-        override fun areContentsTheSame(oldItem: AppInfo, newItem: AppInfo): Boolean {
-            return oldItem.label == newItem.label &&
-                   oldItem.packageName == newItem.packageName
+    fun isInstalled(context: Context, packageName: String): Boolean {
+        return try {
+            context.packageManager.getApplicationInfo(packageName, 0)
+            true
+        } catch (e: PackageManager.NameNotFoundException) {
+            false
         }
     }
 }
