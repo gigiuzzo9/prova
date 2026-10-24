@@ -17,15 +17,30 @@ class HomeGridAdapter(
 
     private var cellHeight: Int = 0
 
+    // Package dell'app che è attualmente in drag: la cella corrispondente
+    // viene nascosta (alpha 0) così l'overlay è l'unica cosa visibile.
+    private var draggingPackage: String? = null
+
     fun setCellHeight(height: Int) {
         if (cellHeight != height) {
             cellHeight = height
-            // notifyItemRangeChanged è molto più leggero di notifyDataSetChanged
             if (itemCount > 0) notifyItemRangeChanged(0, itemCount)
         }
     }
 
     fun getCellHeightSafe(): Int = cellHeight
+
+    fun setDraggingPackage(pkg: String?) {
+        if (draggingPackage == pkg) return
+        val old = draggingPackage
+        draggingPackage = pkg
+        // Aggiorna solo le due celle coinvolte
+        currentList.forEachIndexed { index, slot ->
+            if (slot.packageName == old || slot.packageName == pkg) {
+                notifyItemChanged(index)
+            }
+        }
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SlotViewHolder {
         val view = LayoutInflater.from(parent.context)
@@ -64,14 +79,12 @@ class HomeGridAdapter(
                 }
             }
 
-            // icona SEMPRE 57dp (non ridurla mai)
             val iconSizePx = (57 * density).toInt()
             icon.layoutParams = icon.layoutParams.apply {
                 width = iconSizePx
                 height = iconSizePx
             }
 
-            // label: visibile solo se c'è spazio sufficiente (cella >= 70dp)
             val cellHeightDp = if (cellHeight > 0) (cellHeight / density).toInt() else 80
             if (cellHeightDp < 70) {
                 label.visibility = View.GONE
@@ -85,6 +98,10 @@ class HomeGridAdapter(
                 icon.setImageDrawable(app.icon)
                 label.text = app.label
                 itemView.visibility = View.VISIBLE
+
+                // Ghost durante drag: nasconde la cella se è quella in drag
+                itemView.alpha = if (slot.packageName == draggingPackage) 0f else 1f
+
                 itemView.setOnClickListener { onClick(slot) }
                 itemView.setOnLongClickListener { view ->
                     onLongPress(slot, view)
@@ -93,6 +110,7 @@ class HomeGridAdapter(
             } else {
                 icon.setImageDrawable(null)
                 label.text = ""
+                itemView.alpha = 1f
                 itemView.visibility = View.VISIBLE
                 itemView.setOnClickListener(null)
                 itemView.setOnLongClickListener { view ->
