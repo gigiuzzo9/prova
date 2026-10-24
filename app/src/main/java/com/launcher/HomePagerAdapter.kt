@@ -43,6 +43,16 @@ class HomePagerAdapter(
 
     fun getWidgetContainer(page: Int): FrameLayout? = widgetContainers.getOrNull(page)
 
+    /**
+     * Propaga il "ghost" del drag a tutti i HomeGridAdapter delle pagine.
+     * Chiamato da HomeActivity.setDraggingApp() all'inizio/fine del drag.
+     */
+    fun setDraggingPackage(pkg: String?) {
+        recyclers.forEach { rv ->
+            (rv.adapter as? HomeGridAdapter)?.setDraggingPackage(pkg)
+        }
+    }
+
     override fun getItemCount(): Int = pages.size
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PageViewHolder {
@@ -105,7 +115,6 @@ class HomePagerAdapter(
 
     override fun onViewRecycled(holder: PageViewHolder) {
         super.onViewRecycled(holder)
-        // non fare nulla: le liste vengono aggiornate in onBindViewHolder
     }
 
     inner class PageViewHolder(
