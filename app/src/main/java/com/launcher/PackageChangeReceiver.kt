@@ -3,9 +3,6 @@ package com.simplylauncher
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 
 class PackageChangeReceiver : BroadcastReceiver() {
 
@@ -17,24 +14,24 @@ class PackageChangeReceiver : BroadcastReceiver() {
             Intent.ACTION_PACKAGE_REPLACED -> {
                 // Invalida la cache PRIMA di qualsiasi query
                 AppRepository.invalidateCache()
+                AppCache.clear()
 
-                GlobalScope.launch {
-                    // pulizia: rimuovi slot di app disinstallate
-                    val slots = Prefs.homeSlotsFlow(context).first()
-                    val validSlots = slots.filter { AppRepository.isInstalled(context, it.packageName) }
-                    if (validSlots.size != slots.size) {
-                        Prefs.setHomeSlots(context, validSlots)
-                    }
-
-                    // pulizia dock
-                    val dockItems = Prefs.dockItemsFlow(context).first()
-                    val validDock = dockItems.filter { AppRepository.isInstalled(context, it) }
-                    if (validDock.size != dockItems.size) {
-                        Prefs.setDockItems(context, validDock)
-                    }
-
-                    context.sendBroadcast(Intent("com.simplylauncher.RELOAD"))
+                // Pulizia sincrona (SharedPreferences, non DataStore)
+                val slots = PrefsSync.homeSlots(context)
+                val validSlots = slots.filter { AppRepository.isInstalled(context, it.packageName) }
+                if (validSlots.size != slots.size) {
+                    PrefsSync.setHomeSlots(context, validSlots)
                 }
+
+                val dockItems = PrefsSync.dockItems(context)
+                val validDock = dockItems.filter {
+                    it.isBlank() || AppRepository.isInstalled(context, it)
+                }
+                if (validDock.size != dockItems.size) {
+                    PrefsSync.setDockItems(context, validDock)
+                }
+
+                context.sendBroadcast(Intent("com.simplylauncher.RELOAD"))
             }
         }
     }
