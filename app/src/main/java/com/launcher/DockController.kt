@@ -24,6 +24,7 @@ class DockController(
                 AppCache.get(pkg)?.let { byPkg[pkg] = it }
             }
 
+            // Se la cache è vuota o manca qualcuno, ricarica
             if (byPkg.size < dockItems.count { it.isNotBlank() }) {
                 val allApps = AppRepository.loadInstalledAppsWithCustomLabels(activity)
                 AppCache.putAll(allApps)
