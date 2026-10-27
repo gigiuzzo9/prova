@@ -6,8 +6,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <androidx.viewpager2.widget.ViewPager2
-        android:id="@+id/homeViewPager"
+    <com.simplylauncher.HomeScreenGrid
+        android:id="@+id/homeScreenGrid"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:paddingTop="16dp"
@@ -17,6 +17,16 @@
         app:layout_constraintBottom_toTopOf="@id/pageIndicator"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
+
+    <FrameLayout
+        android:id="@+id/widgetContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        app:layout_constraintTop_toTopOf="@id/homeScreenGrid"
+        app:layout_constraintBottom_toBottomOf="@id/homeScreenGrid"
+        app:layout_constraintStart_toStartOf="@id/homeScreenGrid"
+        app:layout_constraintEnd_toEndOf="@id/homeScreenGrid" />
 
     <com.simplylauncher.PageIndicatorView
         android:id="@+id/pageIndicator"
