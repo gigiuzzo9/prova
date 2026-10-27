@@ -15,7 +15,6 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
-import androidx.core.graphics.drawable.toBitmap
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -44,9 +43,6 @@ class HomeScreenGrid @JvmOverloads constructor(
     private val cells = mutableMapOf<Pair<Int, Int>, Rect>()
     private val gridCenters = mutableListOf<Pair<Int, Int>>()
 
-    // Cache dei bitmap già scalati: pkg -> Bitmap
-    private val iconBitmapCache = mutableMapOf<String, Bitmap>()
-
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         textSize = 11f * resources.displayMetrics.scaledDensity
@@ -64,11 +60,9 @@ class HomeScreenGrid @JvmOverloads constructor(
     var emptyCellLongClickListener: ((View) -> Unit)? = null
     var pageChangeListener: ((Int) -> Unit)? = null
 
-    // Drag state
     private var draggingItem: HomeSlot? = null
     private var draggingCoords = Pair(-1f, -1f)
 
-    // Long press detection
     private var touchDownX = 0f
     private var touchDownY = 0f
     private var touchDownTime = 0L
@@ -84,7 +78,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         }
     }
 
-    // Page swipe
     private var swipeStartX = 0f
     private var swipeOffset = 0f
     private var isSwiping = false
@@ -106,7 +99,6 @@ class HomeScreenGrid @JvmOverloads constructor(
             rowCount = rows
             cells.clear()
             gridCenters.clear()
-            iconBitmapCache.clear()
             requestLayout()
             invalidate()
         }
@@ -123,9 +115,6 @@ class HomeScreenGrid @JvmOverloads constructor(
 
     fun setItems(newItems: List<HomeSlot>) {
         items = newItems
-        // Rimuovi dalla cache i pkg non più presenti
-        val pkgs = newItems.map { it.packageName }.toSet()
-        iconBitmapCache.keys.retainAll { pkgs.contains(it) || it.isEmpty() }
         invalidate()
     }
 
@@ -199,7 +188,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         labelSideMargin = (cellWidth * 0.04f).toInt()
         cells.clear()
         gridCenters.clear()
-        iconBitmapCache.clear()
         for (r in 0 until rowCount) {
             for (c in 0 until columnCount) {
                 val rect = Rect(
@@ -223,12 +211,8 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private fun getIconBitmap(pkg: String): Bitmap? {
-        iconBitmapCache[pkg]?.let { return it }
-        val app = AppCache.get(pkg) ?: return null
         if (iconSize <= 0) return null
-        val bmp = app.icon.toBitmap(iconSize, iconSize, Bitmap.Config.ARGB_8888)
-        iconBitmapCache[pkg] = bmp
-        return bmp
+        return AppCache.getIconBitmap(pkg, iconSize)
     }
 
     // --- Drawing ---
@@ -242,7 +226,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         canvas.translate(pageOffset.toFloat(), 0f)
         drawPage(canvas, currentPage)
 
-        // If swiping, draw adjacent page
         if (swipeOffset > 0 && currentPage > 0) {
             canvas.save()
             canvas.translate(width.toFloat(), 0f)
@@ -256,7 +239,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         }
         canvas.restore()
 
-        // Draw dragging icon last, above everything
         drawingItem(canvas)
     }
 
@@ -278,7 +260,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         val iconTop = cell.top + iconMargin
         canvas.drawBitmap(bitmap, iconLeft.toFloat(), iconTop.toFloat(), null)
 
-        // Label
         if (app.label.isNotEmpty()) {
             val textWidth = cell.width() - 2 * labelSideMargin
             val layout = StaticLayout.Builder
@@ -300,7 +281,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         val dragged = draggingItem ?: return
         if (draggingCoords.first < 0f) return
 
-        // Highlight circle sotto la cella corrente
         val cell = getCellCoords(draggingCoords.first, draggingCoords.second)
         if (cell != null) {
             val rect = cells[Pair(cell.first, cell.second)]
