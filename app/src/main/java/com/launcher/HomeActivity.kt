@@ -22,9 +22,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.cardview.widget.CardView
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -48,7 +46,6 @@ class HomeActivity : AppCompatActivity() {
     private var dragOverlayLastY = 0f
 
     private lateinit var drawerOverlay: FrameLayout
-    private lateinit var drawerContainer: CardView
     private lateinit var drawerRecyclerView: RecyclerView
     private lateinit var drawerAdapter: AppAdapter
     private var drawerOpen = false
@@ -137,7 +134,6 @@ class HomeActivity : AppCompatActivity() {
         )
 
         drawerOverlay = findViewById(R.id.drawerOverlay)
-        drawerContainer = findViewById(R.id.drawerContainer)
         drawerRecyclerView = findViewById(R.id.drawerRecyclerView)
 
         appWidgetManager = AppWidgetManager.getInstance(this)
@@ -853,29 +849,22 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupDrawer() {
-    val layoutManager = object : GridLayoutManager(this, 4) {
-        override fun supportsPredictiveItemAnimations(): Boolean {
-            return false
-        }
+        drawerRecyclerView.layoutManager = MyGridLayoutManager(this, 4)
+        drawerRecyclerView.setHasFixedSize(true)
+        drawerRecyclerView.itemAnimator = null
+        drawerRecyclerView.isNestedScrollingEnabled = false
+        drawerAdapter = AppAdapter(
+            onClick = { app ->
+                AppRepository.launchApp(this, app.packageName)
+                closeDrawer()
+            },
+            onLongPress = { app, view ->
+                dragController.onLongPress(app, view, DragController.SOURCE_DRAWER, true)
+            }
+        )
+        drawerRecyclerView.adapter = drawerAdapter
+        drawerOverlay.setOnClickListener { closeDrawer() }
     }
-    drawerRecyclerView.layoutManager = layoutManager
-    drawerRecyclerView.setHasFixedSize(true)
-    drawerRecyclerView.itemAnimator = null
-    drawerRecyclerView.isNestedScrollingEnabled = false
-    drawerRecyclerView.setItemViewCacheSize(20)
-    drawerRecyclerView.recycledViewPool.setMaxRecycledViews(0, 30)
-    drawerAdapter = AppAdapter(
-        onClick = { app ->
-            AppRepository.launchApp(this, app.packageName)
-            closeDrawer()
-        },
-        onLongPress = { app, view ->
-            dragController.onLongPress(app, view, DragController.SOURCE_DRAWER, true)
-        }
-    )
-    drawerRecyclerView.adapter = drawerAdapter
-    drawerOverlay.setOnClickListener { closeDrawer() }
-}
 
     private fun setupContextMenu() {
         contextMenuView = AppContextMenuView(this)
@@ -1218,7 +1207,7 @@ class HomeActivity : AppCompatActivity() {
         lifecycleScope.launch {
             currentDrawerColor = Prefs.colorFlow(this@HomeActivity).first()
             currentDrawerAlpha = Prefs.alphaFlow(this@HomeActivity).first()
-            drawerContainer.setCardBackgroundColor(
+            drawerRecyclerView.setBackgroundColor(
                 Color.argb(
                     (currentDrawerAlpha * 255).toInt(),
                     Color.red(currentDrawerColor),
