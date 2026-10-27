@@ -1,12 +1,10 @@
 package com.simplylauncher
 
-import android.graphics.Bitmap
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.core.graphics.drawable.toBitmap
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -47,10 +45,12 @@ class AppAdapter(
         private val iconSizePx = (57 * itemView.context.resources.displayMetrics.density).toInt()
 
         fun bind(app: AppInfo) {
-            // Scala il Drawable UNA volta alla dimensione finale dell'ImageView.
-            // Evita che la GPU ridimensioni il bitmap ad ogni frame di scroll.
-            val bitmap: Bitmap = app.icon.toBitmap(iconSizePx, iconSizePx, Bitmap.Config.ARGB_8888)
-            icon.setImageBitmap(bitmap)
+            val bitmap = AppCache.getIconBitmap(app.packageName, iconSizePx)
+            if (bitmap != null) {
+                icon.setImageBitmap(bitmap)
+            } else {
+                icon.setImageDrawable(null)
+            }
             label.text = app.label
 
             itemView.alpha = if (app.packageName == draggingPackage) 0f else 1f
