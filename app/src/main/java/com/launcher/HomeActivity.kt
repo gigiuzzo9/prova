@@ -81,6 +81,7 @@ class HomeActivity : AppCompatActivity() {
     private var isDropInProgress = false
     private var isResizing = false
     private var currentDrawerColor: Int = Color.BLACK
+    private var currentDrawerAlpha: Float = 0.9f
 
     private var drawerBgApplied = false
 
@@ -90,9 +91,13 @@ class HomeActivity : AppCompatActivity() {
 
     private val reloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            loadHomeApps()
-            dockController.refresh()
-            loadDrawerApps()
+            AppRepository.invalidateCache()
+            lifecycleScope.launch {
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                loadHomeApps()
+                dockController.refresh()
+                loadDrawerApps()
+            }
         }
     }
 
@@ -153,23 +158,27 @@ class HomeActivity : AppCompatActivity() {
         setupHomePopup()
         setupDrawerButton()
 
-        // Preferenze sincrone: niente DataStore qui
         currentCols = PrefsSync.cols(this)
         currentRows = PrefsSync.rows(this)
         currentPageCount = PrefsSync.pageCount(this)
-        currentDrawerColor = Prefs.colorFlow(this).let { currentDrawerColor } // see onResume
 
         homeScreenGrid.setGridSize(currentCols, currentRows)
         homeScreenGrid.setPageCount(currentPageCount)
 
-        loadHomeApps()
-        dockController.refresh()
-        loadDrawerApps()
+        // Popola AppCache UNA volta, poi mai più PMS finché non cambiano i pacchetti
+        lifecycleScope.launch {
+            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+            loadHomeApps()
+            dockController.refresh()
+            loadDrawerApps()
+        }
 
         if (FirstRunSetup.isFirstRun(this)) {
             lifecycleScope.launch {
                 FirstRunSetup.populateHome(this@HomeActivity)
                 FirstRunSetup.markDone(this@HomeActivity)
+                AppRepository.invalidateCache()
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
                 loadHomeApps()
                 dockController.refresh()
                 loadDrawerApps()
@@ -710,14 +719,7 @@ class HomeActivity : AppCompatActivity() {
     private fun setDraggingApp(pkg: String?, source: String) {
         when (source) {
             DragController.SOURCE_HOME -> {
-                if (pkg != null) {
-                    val slot = homeScreenGrid.getItemAt(
-                        homeScreenGrid.width / 2f,
-                        homeScreenGrid.height / 2f
-                    )
-                    // no-op: the ghost is handled by HomeScreenGrid.drawInto
-                    // dragging state is set by DragController via onDragStart
-                }
+                // Il ghost è gestito da HomeScreenGrid.drawInto
             }
             DragController.SOURCE_DRAWER -> {
                 drawerAdapter.setDraggingPackage(pkg)
@@ -892,6 +894,8 @@ class HomeActivity : AppCompatActivity() {
         contextMenuView.onRename = {
             currentApp?.let { app ->
                 RenameDialog.show(this, app) {
+                    AppRepository.invalidateCache()
+                    AppRepository.loadInstalledAppsWithCustomLabels(this)
                     loadHomeApps()
                     dockController.refresh()
                     loadDrawerApps()
@@ -1074,11 +1078,11 @@ class HomeActivity : AppCompatActivity() {
         }
 
         if (widgetCells.contains(row to col)) {
-            // find first free cell
             var found = false
+            val currentSlots = PrefsSync.homeSlots(this)
             for (r in 0 until currentRows) {
                 for (c in 0 until currentCols) {
-                    val occupiedBySlot = PrefsSync.homeSlots(this).any {
+                    val occupiedBySlot = currentSlots.any {
                         it.page == pageIndex && it.row == r && it.col == c && it.packageName != pkg
                     }
                     val occupiedByWidget = widgetCells.contains(r to c)
@@ -1151,8 +1155,10 @@ class HomeActivity : AppCompatActivity() {
             homeScreenGrid.setPageCount(currentPageCount)
         }
 
-        val allApps = AppRepository.loadInstalledAppsWithCustomLabels(this)
-        AppCache.putAll(allApps)
+        // Popola AppCache solo se vuota
+        if (AppCache.size() == 0) {
+            AppRepository.loadInstalledAppsWithCustomLabels(this)
+        }
 
         homeScreenGrid.setGridSize(currentCols, currentRows)
         homeScreenGrid.setPageCount(currentPageCount)
@@ -1177,8 +1183,8 @@ class HomeActivity : AppCompatActivity() {
 
     private fun loadDrawerApps() {
         lifecycleScope.launch {
+            // Legge da AppCache. PMS solo se la cache è vuota.
             val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-            AppCache.putAll(apps)
             drawerAdapter.submitList(apps)
         }
     }
@@ -1207,17 +1213,24 @@ class HomeActivity : AppCompatActivity() {
         widgetContainer.visibility = View.VISIBLE
         pageIndicator.visibility = View.VISIBLE
         dockLayout.visibility = View.VISIBLE
-        loadHomeApps()
+        // NON chiamare loadHomeApps(): la home è già popolata.
     }
 
     private fun applyDrawerBackground() {
         if (drawerBgApplied) return
         lifecycleScope.launch {
-            val color = Prefs.colorFlow(this@HomeActivity).let { currentDrawerColor }
-            val alpha = Prefs.alphaFlow(this@HomeActivity).let { 0.9f }
-            currentDrawerColor = color
+            currentDrawerColor = Prefs.colorFlow(this@HomeActivity).let { color ->
+                // fallback: usa il valore corrente
+                color
+            }
+            currentDrawerAlpha = Prefs.alphaFlow(this@HomeActivity).let { alpha -> alpha }
             drawerContainer.setCardBackgroundColor(
-                Color.argb((alpha * 255).toInt(), Color.red(color), Color.green(color), Color.blue(color))
+                Color.argb(
+                    (currentDrawerAlpha * 255).toInt(),
+                    Color.red(currentDrawerColor),
+                    Color.green(currentDrawerColor),
+                    Color.blue(currentDrawerColor)
+                )
             )
             drawerBgApplied = true
         }
@@ -1236,7 +1249,6 @@ class HomeActivity : AppCompatActivity() {
             }
         }
 
-        // Dispatch ai widget: blocca la propagazione alla griglia
         if (!drawerOpen && ev.actionMasked == MotionEvent.ACTION_DOWN && !isResizing) {
             val loc = IntArray(2)
             widgetContainer.getLocationOnScreen(loc)
@@ -1287,9 +1299,18 @@ class HomeActivity : AppCompatActivity() {
         homeScreenGrid.setGridSize(currentCols, currentRows)
         homeScreenGrid.setPageCount(currentPageCount)
 
-        loadHomeApps()
-        dockController.refresh()
-        loadDrawerApps()
+        if (AppCache.size() == 0) {
+            lifecycleScope.launch {
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                loadHomeApps()
+                dockController.refresh()
+                loadDrawerApps()
+            }
+        } else {
+            // Cache già pronta: aggiorna solo la UI, ZERO PMS
+            homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+            dockController.refresh()
+        }
     }
 
     override fun onDestroy() {
