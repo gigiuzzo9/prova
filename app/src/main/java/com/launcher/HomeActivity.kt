@@ -23,7 +23,6 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.flow.first
@@ -764,11 +763,9 @@ class HomeActivity : AppCompatActivity() {
         } else {
             val sizePx = (56 * resources.displayMetrics.density).toInt()
             dragOverlayView.layoutParams = FrameLayout.LayoutParams(sizePx, sizePx)
-            val appIcon = AppCache.get(pkg)
-            if (appIcon != null) {
-                dragOverlayView.setImageBitmap(
-                    appIcon.icon.toBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-                )
+            val bitmap = AppCache.getIconBitmap(pkg, sizePx)
+            if (bitmap != null) {
+                dragOverlayView.setImageBitmap(bitmap)
             } else {
                 dragOverlayView.setImageDrawable(null)
             }
