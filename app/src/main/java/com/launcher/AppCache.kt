@@ -4,29 +4,31 @@ import android.graphics.Bitmap
 import androidx.core.graphics.drawable.toBitmap
 
 object AppCache {
-    private val map = mutableMapOf<String, AppInfo>()
+    @Volatile
+    private var map: Map<String, AppInfo> = emptyMap()
+
     private val iconBitmapCache = mutableMapOf<String, Bitmap>()
 
     fun putAll(apps: List<AppInfo>) {
-        map.clear()
-        iconBitmapCache.clear()
-        apps.forEach { map[it.packageName] = it }
+        map = apps.associateBy { it.packageName }
+        // Non svuotare iconBitmapCache: i bitmap restano validi
     }
 
     fun put(app: AppInfo) {
-        map[app.packageName] = app
-        iconBitmapCache.remove(app.packageName)
+        map = map + (app.packageName to app)
+        // Rimuovi i bitmap di quel pkg, che potrebbero essere cambiati
+        iconBitmapCache.keys.removeAll { it.startsWith("${app.packageName}@") }
     }
 
     fun get(pkg: String): AppInfo? = map[pkg]
 
     fun remove(pkg: String) {
-        map.remove(pkg)
-        iconBitmapCache.remove(pkg)
+        map = map - pkg
+        iconBitmapCache.keys.removeAll { it.startsWith("$pkg@") }
     }
 
     fun clear() {
-        map.clear()
+        map = emptyMap()
         iconBitmapCache.clear()
     }
 
@@ -34,24 +36,16 @@ object AppCache {
 
     fun snapshot(): List<AppInfo> = map.values.sortedBy { it.label.lowercase() }
 
-    /**
-     * Restituisce il bitmap dell'icona già scalato alla dimensione richiesta.
-     * Il bitmap viene creato UNA SOLA VOLTA e poi riusato.
-     * Se il Drawable originale non può essere convertito, ritorna null.
-     */
     fun getIconBitmap(pkg: String, sizePx: Int): Bitmap? {
+        if (sizePx <= 0) return null
         val key = "$pkg@$sizePx"
         iconBitmapCache[key]?.let { return it }
-
         val app = map[pkg] ?: return null
         return try {
-            val w = app.icon.intrinsicWidth.takeIf { it > 0 } ?: sizePx
-            val h = app.icon.intrinsicHeight.takeIf { it > 0 } ?: sizePx
-            val bmp = app.icon.toBitmap(w, h, Bitmap.Config.ARGB_8888)
-            val scaled = Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true)
-            if (scaled != bmp) bmp.recycle()
-            iconBitmapCache[key] = scaled
-            scaled
+            val cloned = app.icon.constantState?.newDrawable()?.mutate() ?: app.icon
+            val bmp = cloned.toBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+            iconBitmapCache[key] = bmp
+            bmp
         } catch (e: Exception) {
             null
         }
