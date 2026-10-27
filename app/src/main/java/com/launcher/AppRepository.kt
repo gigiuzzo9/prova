@@ -3,7 +3,7 @@ package com.simplylauncher
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import kotlinx.coroutines.flow.first
+import java.util.concurrent.atomic.AtomicBoolean
 
 object AppRepository {
 
@@ -13,11 +13,14 @@ object AppRepository {
     @Volatile
     private var cacheTimestamp: Long = 0L
 
-    private const val CACHE_TTL_MS = 30_000L
+    private const val CACHE_TTL_MS = 60_000L
+
+    private val loading = AtomicBoolean(false)
 
     fun invalidateCache() {
         cachedApps = null
         cacheTimestamp = 0L
+        AppCache.clear()
     }
 
     fun loadInstalledApps(context: Context): List<AppInfo> {
@@ -26,36 +29,51 @@ object AppRepository {
             return cached
         }
 
-        val pm = context.packageManager
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val resolved = pm.queryIntentActivities(intent, 0)
+        if (!loading.compareAndSet(false, true)) {
+            // Un altro thread sta caricando; restituisci quello che c'è
+            return cachedApps ?: emptyList()
+        }
 
-        val result = resolved
-            .map { it.activityInfo.applicationInfo }
-            .distinctBy { it.packageName }
-            .map { appInfo ->
-                AppInfo(
-                    label = pm.getApplicationLabel(appInfo).toString(),
-                    packageName = appInfo.packageName,
-                    icon = pm.getApplicationIcon(appInfo)
-                )
-            }
-            .sortedBy { it.label.lowercase() }
+        try {
+            val pm = context.packageManager
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val resolved = pm.queryIntentActivities(intent, 0)
 
-        cachedApps = result
-        cacheTimestamp = System.currentTimeMillis()
-        return result
+            val result = resolved
+                .map { it.activityInfo.applicationInfo }
+                .distinctBy { it.packageName }
+                .map { appInfo ->
+                    AppInfo(
+                        label = pm.getApplicationLabel(appInfo).toString(),
+                        packageName = appInfo.packageName,
+                        icon = pm.getApplicationIcon(appInfo)
+                    )
+                }
+                .sortedBy { it.label.lowercase() }
+
+            cachedApps = result
+            cacheTimestamp = System.currentTimeMillis()
+            return result
+        } finally {
+            loading.set(false)
+        }
     }
 
-    suspend fun loadInstalledAppsWithCustomLabels(context: Context): List<AppInfo> {
+    fun loadInstalledAppsWithCustomLabels(context: Context): List<AppInfo> {
         val base = loadInstalledApps(context)
-        val customLabels = Prefs.customLabelsFlow(context).first()
-        if (customLabels.isEmpty()) return base
+        val customLabels = PrefsSync.customLabels(context)
+        if (customLabels.isEmpty()) {
+            AppCache.putAll(base)
+            return base
+        }
 
-        return base.map { app ->
+        val result = base.map { app ->
             val custom = customLabels[app.packageName]
             if (custom == null) app else app.copy(label = custom)
         }.sortedBy { it.label.lowercase() }
+
+        AppCache.putAll(result)
+        return result
     }
 
     fun launchApp(context: Context, packageName: String) {
