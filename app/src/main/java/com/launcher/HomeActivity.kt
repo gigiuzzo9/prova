@@ -853,21 +853,29 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupDrawer() {
-        drawerRecyclerView.layoutManager = GridLayoutManager(this, 4)
-        drawerRecyclerView.setHasFixedSize(true)
-        drawerRecyclerView.itemAnimator = null
-        drawerAdapter = AppAdapter(
-            onClick = { app ->
-                AppRepository.launchApp(this, app.packageName)
-                closeDrawer()
-            },
-            onLongPress = { app, view ->
-                dragController.onLongPress(app, view, DragController.SOURCE_DRAWER, true)
-            }
-        )
-        drawerRecyclerView.adapter = drawerAdapter
-        drawerOverlay.setOnClickListener { closeDrawer() }
+    val layoutManager = object : GridLayoutManager(this, 4) {
+        override fun supportsPredictiveItemAnimations(): Boolean {
+            return false
+        }
     }
+    drawerRecyclerView.layoutManager = layoutManager
+    drawerRecyclerView.setHasFixedSize(true)
+    drawerRecyclerView.itemAnimator = null
+    drawerRecyclerView.isNestedScrollingEnabled = false
+    drawerRecyclerView.setItemViewCacheSize(20)
+    drawerRecyclerView.recycledViewPool.setMaxRecycledViews(0, 30)
+    drawerAdapter = AppAdapter(
+        onClick = { app ->
+            AppRepository.launchApp(this, app.packageName)
+            closeDrawer()
+        },
+        onLongPress = { app, view ->
+            dragController.onLongPress(app, view, DragController.SOURCE_DRAWER, true)
+        }
+    )
+    drawerRecyclerView.adapter = drawerAdapter
+    drawerOverlay.setOnClickListener { closeDrawer() }
+}
 
     private fun setupContextMenu() {
         contextMenuView = AppContextMenuView(this)
