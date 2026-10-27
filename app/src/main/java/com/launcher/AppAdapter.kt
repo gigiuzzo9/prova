@@ -20,9 +20,8 @@ class AppAdapter(
         setHasStableIds(true)
     }
 
-    override fun getItemId(position: Int): Long {
-        return getItem(position).packageName.hashCode().toLong()
-    }
+    override fun getItemId(position: Int): Long =
+        getItem(position).packageName.hashCode().toLong()
 
     fun setDraggingPackage(pkg: String?) {
         if (draggingPackage == pkg) return
