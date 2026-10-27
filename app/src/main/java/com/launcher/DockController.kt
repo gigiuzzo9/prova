@@ -1,12 +1,10 @@
 package com.simplylauncher
 
-import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class DockController(
@@ -20,9 +18,18 @@ class DockController(
 
     fun refresh() {
         activity.lifecycleScope.launch {
-            val dockItems = Prefs.dockItemsFlow(activity).first()
-            val allApps = AppRepository.loadInstalledAppsWithCustomLabels(activity)
-            val byPkg = allApps.associateBy { it.packageName }
+            val dockItems = PrefsSync.dockItems(activity)
+            val byPkg = HashMap<String, AppInfo>()
+            dockItems.filter { it.isNotBlank() }.forEach { pkg ->
+                AppCache.get(pkg)?.let { byPkg[pkg] = it }
+            }
+
+            // Se manca qualcuno in cache, ricarica
+            if (byPkg.size < dockItems.count { it.isNotBlank() }) {
+                val allApps = AppRepository.loadInstalledAppsWithCustomLabels(activity)
+                AppCache.putAll(allApps)
+                allApps.forEach { byPkg[it.packageName] = it }
+            }
 
             slots.forEachIndexed { index, slot ->
                 slot.removeAllViews()
@@ -56,18 +63,15 @@ class DockController(
     }
 
     fun setDraggingPackage(pkg: String?) {
-        Log.d("GHOST_DOCK", "setDraggingPackage($pkg) slots=${slots.size}")
-        slots.forEachIndexed { i, slot ->
-            val iv = slot.getChildAt(0) as? ImageView ?: return@forEachIndexed
+        slots.forEach { slot ->
+            val iv = slot.getChildAt(0) as? ImageView ?: return@forEach
             val slotPkg = slot.tag as? String
-            val hide = slotPkg != null && slotPkg == pkg
-            iv.alpha = if (hide) 0f else 1f
-            Log.d("GHOST_DOCK", "  slot=$i pkg=$slotPkg hide=$hide")
+            iv.alpha = if (slotPkg != null && slotPkg == pkg) 0f else 1f
         }
     }
 
     suspend fun swapDockSlots(pkg: String, slotIndex: Int) {
-        val dockItems = Prefs.dockItemsFlow(activity).first().toMutableList()
+        val dockItems = PrefsSync.dockItems(activity).toMutableList()
         while (dockItems.size < 4) dockItems.add("")
 
         val fromIndex = dockItems.indexOf(pkg)
@@ -76,7 +80,7 @@ class DockController(
             val b = dockItems[slotIndex]
             dockItems[fromIndex] = b
             dockItems[slotIndex] = a
-            Prefs.setDockItems(activity, dockItems)
+            PrefsSync.setDockItems(activity, dockItems)
             refresh()
         }
     }
@@ -86,15 +90,15 @@ class DockController(
     }
 
     private suspend fun addToDockAt(pkg: String, slotIndex: Int) {
-        val dockItems = Prefs.dockItemsFlow(activity).first().toMutableList()
+        val dockItems = PrefsSync.dockItems(activity).toMutableList()
         while (dockItems.size < 4) dockItems.add("")
 
         dockItems.replaceAll { if (it == pkg) "" else it }
 
-        val homeSlots = Prefs.homeSlotsFlow(activity).first()
+        val homeSlots = PrefsSync.homeSlots(activity)
         val filtered = homeSlots.filter { it.packageName != pkg }
         if (filtered.size != homeSlots.size) {
-            Prefs.setHomeSlots(activity, filtered)
+            PrefsSync.setHomeSlots(activity, filtered)
             activity.removeAppFromGridOnly(pkg)
         }
 
@@ -108,7 +112,7 @@ class DockController(
             }
         }
 
-        Prefs.setDockItems(activity, dockItems)
+        PrefsSync.setDockItems(activity, dockItems)
         refresh()
     }
 }
