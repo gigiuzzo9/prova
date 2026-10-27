@@ -29,6 +29,7 @@ import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import kotlin.math.max
+import kotlinx.coroutines.flow.first
 
 class HomeActivity : AppCompatActivity() {
 
@@ -1217,24 +1218,21 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun applyDrawerBackground() {
-        if (drawerBgApplied) return
-        lifecycleScope.launch {
-            currentDrawerColor = Prefs.colorFlow(this@HomeActivity).let { color ->
-                // fallback: usa il valore corrente
-                color
-            }
-            currentDrawerAlpha = Prefs.alphaFlow(this@HomeActivity).let { alpha -> alpha }
-            drawerContainer.setCardBackgroundColor(
-                Color.argb(
-                    (currentDrawerAlpha * 255).toInt(),
-                    Color.red(currentDrawerColor),
-                    Color.green(currentDrawerColor),
-                    Color.blue(currentDrawerColor)
-                )
+    if (drawerBgApplied) return
+    lifecycleScope.launch {
+        currentDrawerColor = Prefs.colorFlow(this@HomeActivity).first()
+        currentDrawerAlpha = Prefs.alphaFlow(this@HomeActivity).first()
+        drawerContainer.setCardBackgroundColor(
+            Color.argb(
+                (currentDrawerAlpha * 255).toInt(),
+                Color.red(currentDrawerColor),
+                Color.green(currentDrawerColor),
+                Color.blue(currentDrawerColor)
             )
-            drawerBgApplied = true
-        }
+        )
+        drawerBgApplied = true
     }
+}
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
