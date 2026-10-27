@@ -32,19 +32,20 @@ class DockController(
                 allApps.forEach { byPkg[it.packageName] = it }
             }
 
+            val density = activity.resources.displayMetrics.density
+            val size = (62 * density).toInt()
+
             slots.forEachIndexed { index, slot ->
                 slot.removeAllViews()
                 val pkg = dockItems.getOrNull(index)
                 val app = if (pkg.isNullOrBlank()) null else byPkg[pkg]
 
                 if (app != null) {
-                    val size = (62 * resources.displayMetrics.density).toInt()
                     val bitmap: Bitmap = app.icon.toBitmap(size, size, Bitmap.Config.ARGB_8888)
-                    val imageView = ImageView(activity).apply {
-                        setImageBitmap(bitmap)
-                        layoutParams = FrameLayout.LayoutParams(size, size).apply {
-                            gravity = Gravity.CENTER
-                        }
+                    val imageView = ImageView(activity)
+                    imageView.setImageBitmap(bitmap)
+                    imageView.layoutParams = FrameLayout.LayoutParams(size, size).apply {
+                        gravity = Gravity.CENTER
                     }
                     slot.addView(imageView)
                     slot.tag = app.packageName
