@@ -1,6 +1,5 @@
 package com.simplylauncher
 
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -17,15 +16,18 @@ class AppAdapter(
 
     private var draggingPackage: String? = null
 
+    init {
+        setHasStableIds(true)
+    }
+
+    override fun getItemId(position: Int): Long {
+        return getItem(position).packageName.hashCode().toLong()
+    }
+
     fun setDraggingPackage(pkg: String?) {
-        Log.d("GHOST_DRAWER", "setDraggingPackage($pkg) old=$draggingPackage size=${currentList.size}")
-        if (draggingPackage == pkg) {
-            Log.d("GHOST_DRAWER", "  skip (same)")
-            return
-        }
+        if (draggingPackage == pkg) return
         draggingPackage = pkg
         notifyDataSetChanged()
-        Log.d("GHOST_DRAWER", "  notified")
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AppViewHolder {
@@ -46,9 +48,7 @@ class AppAdapter(
             icon.setImageDrawable(app.icon)
             label.text = app.label
 
-            val hide = app.packageName == draggingPackage
-            itemView.alpha = if (hide) 0f else 1f
-            if (hide) Log.d("GHOST_DRAWER", "bind HIDE ${app.packageName}")
+            itemView.alpha = if (app.packageName == draggingPackage) 0f else 1f
 
             itemView.setOnClickListener { onClick(app) }
             itemView.setOnLongClickListener { view ->
