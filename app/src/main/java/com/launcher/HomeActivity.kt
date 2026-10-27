@@ -26,10 +26,10 @@ import androidx.cardview.widget.CardView
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import kotlin.math.max
-import kotlinx.coroutines.flow.first
 
 class HomeActivity : AppCompatActivity() {
 
@@ -97,7 +97,8 @@ class HomeActivity : AppCompatActivity() {
                 AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
                 loadHomeApps()
                 dockController.refresh()
-                loadDrawerApps()
+                val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                drawerAdapter.submitList(apps)
             }
         }
     }
@@ -166,7 +167,6 @@ class HomeActivity : AppCompatActivity() {
         homeScreenGrid.setGridSize(currentCols, currentRows)
         homeScreenGrid.setPageCount(currentPageCount)
 
-        // Popola AppCache UNA volta, poi mai più PMS finché non cambiano i pacchetti
         lifecycleScope.launch {
             AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
             loadHomeApps()
@@ -853,20 +853,9 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupDrawer() {
-        drawerRecyclerView.layoutManager = GridLayoutManager(this, 4).apply {
-            initialPrefetchItemCount = 8
-        }
+        drawerRecyclerView.layoutManager = GridLayoutManager(this, 4)
         drawerRecyclerView.setHasFixedSize(true)
         drawerRecyclerView.itemAnimator = null
-        drawerRecyclerView.isNestedScrollingEnabled = false
-        drawerRecyclerView.setItemViewCacheSize(20)
-        drawerRecyclerView.addItemDecoration(object : RecyclerView.ItemDecoration() {
-            override fun getItemOffsets(
-                outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
-            ) {
-                outRect.bottom = (12 * resources.displayMetrics.density).toInt()
-            }
-        })
         drawerAdapter = AppAdapter(
             onClick = { app ->
                 AppRepository.launchApp(this, app.packageName)
@@ -899,7 +888,8 @@ class HomeActivity : AppCompatActivity() {
                     AppRepository.loadInstalledAppsWithCustomLabels(this)
                     loadHomeApps()
                     dockController.refresh()
-                    loadDrawerApps()
+                    val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
+                    drawerAdapter.submitList(apps)
                 }
             }
         }
@@ -1156,7 +1146,6 @@ class HomeActivity : AppCompatActivity() {
             homeScreenGrid.setPageCount(currentPageCount)
         }
 
-        // Popola AppCache solo se vuota
         if (AppCache.size() == 0) {
             AppRepository.loadInstalledAppsWithCustomLabels(this)
         }
@@ -1183,8 +1172,8 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun loadDrawerApps() {
+        if (drawerAdapter.itemCount > 0) return
         lifecycleScope.launch {
-            // Legge da AppCache. PMS solo se la cache è vuota.
             val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
             drawerAdapter.submitList(apps)
         }
@@ -1214,25 +1203,24 @@ class HomeActivity : AppCompatActivity() {
         widgetContainer.visibility = View.VISIBLE
         pageIndicator.visibility = View.VISIBLE
         dockLayout.visibility = View.VISIBLE
-        // NON chiamare loadHomeApps(): la home è già popolata.
     }
 
     private fun applyDrawerBackground() {
-    if (drawerBgApplied) return
-    lifecycleScope.launch {
-        currentDrawerColor = Prefs.colorFlow(this@HomeActivity).first()
-        currentDrawerAlpha = Prefs.alphaFlow(this@HomeActivity).first()
-        drawerContainer.setCardBackgroundColor(
-            Color.argb(
-                (currentDrawerAlpha * 255).toInt(),
-                Color.red(currentDrawerColor),
-                Color.green(currentDrawerColor),
-                Color.blue(currentDrawerColor)
+        if (drawerBgApplied) return
+        lifecycleScope.launch {
+            currentDrawerColor = Prefs.colorFlow(this@HomeActivity).first()
+            currentDrawerAlpha = Prefs.alphaFlow(this@HomeActivity).first()
+            drawerContainer.setCardBackgroundColor(
+                Color.argb(
+                    (currentDrawerAlpha * 255).toInt(),
+                    Color.red(currentDrawerColor),
+                    Color.green(currentDrawerColor),
+                    Color.blue(currentDrawerColor)
+                )
             )
-        )
-        drawerBgApplied = true
+            drawerBgApplied = true
+        }
     }
-}
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
@@ -1305,7 +1293,6 @@ class HomeActivity : AppCompatActivity() {
                 loadDrawerApps()
             }
         } else {
-            // Cache già pronta: aggiorna solo la UI, ZERO PMS
             homeScreenGrid.setItems(PrefsSync.homeSlots(this))
             dockController.refresh()
         }
