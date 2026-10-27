@@ -3,76 +3,42 @@ package com.simplylauncher
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import java.util.concurrent.atomic.AtomicBoolean
 
 object AppRepository {
 
     @Volatile
-    private var cachedApps: List<AppInfo>? = null
-
-    @Volatile
     private var cacheTimestamp: Long = 0L
 
-    private const val CACHE_TTL_MS = 60_000L
-
-    private val loading = AtomicBoolean(false)
+    private const val CACHE_TTL_MS = 5 * 60_000L
 
     fun invalidateCache() {
-        cachedApps = null
-        cacheTimestamp = 0L
         AppCache.clear()
-    }
-
-    fun loadInstalledApps(context: Context): List<AppInfo> {
-        val cached = cachedApps
-        if (cached != null && System.currentTimeMillis() - cacheTimestamp < CACHE_TTL_MS) {
-            return cached
-        }
-
-        if (!loading.compareAndSet(false, true)) {
-            // Un altro thread sta caricando; restituisci quello che c'è
-            return cachedApps ?: emptyList()
-        }
-
-        try {
-            val pm = context.packageManager
-            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            val resolved = pm.queryIntentActivities(intent, 0)
-
-            val result = resolved
-                .map { it.activityInfo.applicationInfo }
-                .distinctBy { it.packageName }
-                .map { appInfo ->
-                    AppInfo(
-                        label = pm.getApplicationLabel(appInfo).toString(),
-                        packageName = appInfo.packageName,
-                        icon = pm.getApplicationIcon(appInfo)
-                    )
-                }
-                .sortedBy { it.label.lowercase() }
-
-            cachedApps = result
-            cacheTimestamp = System.currentTimeMillis()
-            return result
-        } finally {
-            loading.set(false)
-        }
+        cacheTimestamp = 0L
     }
 
     fun loadInstalledAppsWithCustomLabels(context: Context): List<AppInfo> {
-        val base = loadInstalledApps(context)
-        val customLabels = PrefsSync.customLabels(context)
-        if (customLabels.isEmpty()) {
-            AppCache.putAll(base)
-            return base
+        // Se la cache è già popolata e "fresca", usa quella. ZERO query PMS.
+        if (AppCache.size() > 0 && System.currentTimeMillis() - cacheTimestamp < CACHE_TTL_MS) {
+            return AppCache.snapshot()
         }
 
-        val result = base.map { app ->
-            val custom = customLabels[app.packageName]
-            if (custom == null) app else app.copy(label = custom)
-        }.sortedBy { it.label.lowercase() }
+        val pm = context.packageManager
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val resolved = pm.queryIntentActivities(intent, 0)
+        val customLabels = PrefsSync.customLabels(context)
+
+        val result = resolved
+            .map { it.activityInfo.applicationInfo }
+            .distinctBy { it.packageName }
+            .map { appInfo ->
+                val pkg = appInfo.packageName
+                val label = customLabels[pkg] ?: pm.getApplicationLabel(appInfo).toString()
+                AppInfo(label = label, packageName = pkg, icon = pm.getApplicationIcon(appInfo))
+            }
+            .sortedBy { it.label.lowercase() }
 
         AppCache.putAll(result)
+        cacheTimestamp = System.currentTimeMillis()
         return result
     }
 
