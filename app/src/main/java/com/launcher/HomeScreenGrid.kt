@@ -89,6 +89,11 @@ class HomeScreenGrid @JvmOverloads constructor(
         addView(drawingArea)
     }
 
+    /** Invalida SOLO la drawingArea, che è l'unica cosa che disegna. */
+    private fun invalidateDrawing() {
+        drawingArea.invalidate()
+    }
+
     fun attachWidgetContainer(container: FrameLayout) {
         widgetView = container
     }
@@ -100,14 +105,14 @@ class HomeScreenGrid @JvmOverloads constructor(
             cells.clear()
             gridCenters.clear()
             requestLayout()
-            invalidate()
+            invalidateDrawing()
         }
     }
 
     fun setPageCount(count: Int) {
         pageCount = count.coerceAtLeast(1)
         if (currentPage >= pageCount) currentPage = pageCount - 1
-        invalidate()
+        invalidateDrawing()
     }
 
     fun getPageCount(): Int = pageCount
@@ -115,7 +120,7 @@ class HomeScreenGrid @JvmOverloads constructor(
 
     fun setItems(newItems: List<HomeSlot>) {
         items = newItems
-        invalidate()
+        invalidateDrawing()
     }
 
     fun skipToPage(page: Int) {
@@ -123,7 +128,7 @@ class HomeScreenGrid @JvmOverloads constructor(
             currentPage = page
             swipeOffset = 0f
             pageChangeListener?.invoke(page)
-            invalidate()
+            invalidateDrawing()
         }
     }
 
@@ -131,7 +136,7 @@ class HomeScreenGrid @JvmOverloads constructor(
         if (currentPage < pageCount - 1) {
             currentPage++
             pageChangeListener?.invoke(currentPage)
-            invalidate()
+            invalidateDrawing()
             return true
         }
         return false
@@ -141,7 +146,7 @@ class HomeScreenGrid @JvmOverloads constructor(
         if (currentPage > 0) {
             currentPage--
             pageChangeListener?.invoke(currentPage)
-            invalidate()
+            invalidateDrawing()
             return true
         }
         return false
@@ -149,18 +154,18 @@ class HomeScreenGrid @JvmOverloads constructor(
 
     fun setDraggingItem(slot: HomeSlot?) {
         draggingItem = slot
-        invalidate()
+        invalidateDrawing()
     }
 
     fun setDraggingCoords(x: Float, y: Float) {
         draggingCoords = Pair(x, y)
-        invalidate()
+        invalidateDrawing()
     }
 
     fun clearDragging() {
         draggingItem = null
         draggingCoords = Pair(-1f, -1f)
-        invalidate()
+        invalidateDrawing()
     }
 
     fun getItemAt(x: Float, y: Float): HomeSlot? = findSlotAt(x, y)
@@ -335,7 +340,7 @@ class HomeScreenGrid @JvmOverloads constructor(
                 if (abs(dx) > abs(dy) && abs(dx) > swipeThreshold) {
                     isSwiping = true
                     swipeOffset = dx
-                    invalidate()
+                    invalidateDrawing()
                 }
                 return true
             }
@@ -357,7 +362,7 @@ class HomeScreenGrid @JvmOverloads constructor(
                     }
                     swipeOffset = 0f
                     isSwiping = false
-                    invalidate()
+                    invalidateDrawing()
                     return true
                 }
 
