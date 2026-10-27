@@ -218,6 +218,9 @@ class HomeScreenGrid @JvmOverloads constructor(
     // --- Drawing ---
 
     fun drawInto(canvas: Canvas) {
+        if (cells.isEmpty()) {
+            ensureCells()
+        }
         if (cells.isEmpty()) return
 
         val pageOffset = -(currentPage * width) - swipeOffset.toInt()
