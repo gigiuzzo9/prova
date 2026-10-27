@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
 import android.os.Bundle
@@ -22,6 +23,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.flow.first
@@ -748,10 +750,10 @@ class HomeActivity : AppCompatActivity() {
                 .firstOrNull { it.tag == widgetId } as? LauncherAppWidgetHostView
 
             if (hostView != null && hostView.width > 0 && hostView.height > 0) {
-                val bitmap = android.graphics.Bitmap.createBitmap(
+                val bitmap = Bitmap.createBitmap(
                     hostView.width,
                     hostView.height,
-                    android.graphics.Bitmap.Config.ARGB_8888
+                    Bitmap.Config.ARGB_8888
                 )
                 val canvas = android.graphics.Canvas(bitmap)
                 hostView.draw(canvas)
@@ -760,11 +762,16 @@ class HomeActivity : AppCompatActivity() {
                 dragOverlayView.setImageDrawable(null)
             }
         } else {
-            dragOverlayView.layoutParams = FrameLayout.LayoutParams(
-                (56 * resources.displayMetrics.density).toInt(),
-                (56 * resources.displayMetrics.density).toInt()
-            )
-            dragOverlayView.setImageDrawable(AppCache.get(pkg)?.icon)
+            val sizePx = (56 * resources.displayMetrics.density).toInt()
+            dragOverlayView.layoutParams = FrameLayout.LayoutParams(sizePx, sizePx)
+            val appIcon = AppCache.get(pkg)
+            if (appIcon != null) {
+                dragOverlayView.setImageBitmap(
+                    appIcon.icon.toBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+                )
+            } else {
+                dragOverlayView.setImageDrawable(null)
+            }
         }
 
         dragOverlayView.visibility = View.VISIBLE
