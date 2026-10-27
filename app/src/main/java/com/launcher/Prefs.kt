@@ -24,6 +24,8 @@ object Prefs {
     private val KEY_CUSTOM_LABELS = stringPreferencesKey("custom_labels")
     private val KEY_WIDGET_SLOTS = stringPreferencesKey("widget_slots")
 
+    // ---- Flow (usati da SettingsActivity, drawer background, ecc.) ----
+
     fun colorFlow(context: Context): Flow<Int> =
         context.dataStore.data.map { it[KEY_COLOR] ?: 0xFF000000.toInt() }
 
@@ -82,6 +84,8 @@ object Prefs {
             }
         }
 
+    // ---- Scritture (doppia scrittura: DataStore + PrefsSync) ----
+
     suspend fun setColor(context: Context, color: Int) {
         context.dataStore.edit { it[KEY_COLOR] = color }
     }
@@ -92,14 +96,17 @@ object Prefs {
 
     suspend fun setCols(context: Context, cols: Int) {
         context.dataStore.edit { it[KEY_COLS] = cols }
+        PrefsSync.setCols(context, cols)
     }
 
     suspend fun setRows(context: Context, rows: Int) {
         context.dataStore.edit { it[KEY_ROWS] = rows }
+        PrefsSync.setRows(context, rows)
     }
 
     suspend fun setPageCount(context: Context, count: Int) {
         context.dataStore.edit { it[KEY_PAGE_COUNT] = count.coerceAtLeast(1) }
+        PrefsSync.setPageCount(context, count)
     }
 
     suspend fun setHomeSlots(context: Context, slots: List<HomeSlot>) {
@@ -109,10 +116,12 @@ object Prefs {
             val maxPage = slots.maxOfOrNull { s -> s.page } ?: 0
             it[KEY_PAGE_COUNT] = maxPage + 1
         }
+        PrefsSync.setHomeSlots(context, slots)
     }
 
     suspend fun setWidgetSlots(context: Context, slots: List<WidgetSlot>) {
         context.dataStore.edit { it[KEY_WIDGET_SLOTS] = WidgetSlot.listToString(slots) }
+        PrefsSync.setWidgetSlots(context, slots)
     }
 
     suspend fun setHomeItems(context: Context, items: List<String>) {
@@ -125,6 +134,7 @@ object Prefs {
         val normalized = items.toMutableList()
         while (normalized.size < 4) normalized.add("")
         context.dataStore.edit { it[KEY_DOCK_ITEMS] = normalized.joinToString(",") }
+        PrefsSync.setDockItems(context, normalized)
     }
 
     suspend fun setCustomLabel(context: Context, packageName: String, label: String) {
@@ -138,5 +148,6 @@ object Prefs {
             map[packageName] = label
             prefs[KEY_CUSTOM_LABELS] = map.entries.joinToString("|") { "${it.key}:${it.value}" }
         }
+        PrefsSync.setCustomLabel(context, packageName, label)
     }
 }
