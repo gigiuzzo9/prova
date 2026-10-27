@@ -1,9 +1,11 @@
 package com.simplylauncher
 
+import android.graphics.Bitmap
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
@@ -24,7 +26,6 @@ class DockController(
                 AppCache.get(pkg)?.let { byPkg[pkg] = it }
             }
 
-            // Se manca qualcuno in cache, ricarica
             if (byPkg.size < dockItems.count { it.isNotBlank() }) {
                 val allApps = AppRepository.loadInstalledAppsWithCustomLabels(activity)
                 AppCache.putAll(allApps)
@@ -37,9 +38,10 @@ class DockController(
                 val app = if (pkg.isNullOrBlank()) null else byPkg[pkg]
 
                 if (app != null) {
+                    val size = (62 * resources.displayMetrics.density).toInt()
+                    val bitmap: Bitmap = app.icon.toBitmap(size, size, Bitmap.Config.ARGB_8888)
                     val imageView = ImageView(activity).apply {
-                        setImageDrawable(app.icon)
-                        val size = (62 * resources.displayMetrics.density).toInt()
+                        setImageBitmap(bitmap)
                         layoutParams = FrameLayout.LayoutParams(size, size).apply {
                             gravity = Gravity.CENTER
                         }
