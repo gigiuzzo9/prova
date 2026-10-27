@@ -23,4 +23,6 @@ object AppCache {
     }
 
     fun size(): Int = map.size
+
+    fun snapshot(): List<AppInfo> = map.values.sortedBy { it.label.lowercase() }
 }
