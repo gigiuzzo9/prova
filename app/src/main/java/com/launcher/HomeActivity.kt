@@ -566,63 +566,61 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun startResize(
-        slot: WidgetSlot,
-        info: AppWidgetProviderInfo,
-        cellW: Int,
-        cellH: Int,
-        hostView: LauncherAppWidgetHostView,
-        pageIndex: Int
-    ) {
-        resizingWidgetSlot = slot
-        resizingWidgetView = hostView
-        isResizing = true
+    slot: WidgetSlot,
+    info: AppWidgetProviderInfo,
+    cellW: Int,
+    cellH: Int,
+    hostView: LauncherAppWidgetHostView,
+    pageIndex: Int
+) {
+    resizingWidgetSlot = slot
+    resizingWidgetView = hostView
+    isResizing = true
 
-        val containerLoc = IntArray(2)
-        widgetContainer.getLocationOnScreen(containerLoc)
-        val overlayLoc = IntArray(2)
-        resizeOverlay.getLocationOnScreen(overlayLoc)
+    val containerLoc = IntArray(2)
+    widgetContainer.getLocationOnScreen(containerLoc)
+    val overlayLoc = IntArray(2)
+    resizeOverlay.getLocationOnScreen(overlayLoc)
 
-        val offsetX = containerLoc[0] - overlayLoc[0]
-        val offsetY = containerLoc[1] - overlayLoc[1]
+    val offsetX = containerLoc[0] - overlayLoc[0]
+    val offsetY = containerLoc[1] - overlayLoc[1]
 
-        val frameLeftAbs = offsetX + slot.col * cellW
-        val frameTopAbs = offsetY + slot.row * cellH
-        val frameRightAbs = frameLeftAbs + slot.widthCells * cellW
-        val frameBottomAbs = frameTopAbs + slot.heightCells * cellH
+    val frameLeftAbs = offsetX + slot.col * cellW
+    val frameTopAbs = offsetY + slot.row * cellH
+    val frameRightAbs = frameLeftAbs + slot.widthCells * cellW
+    val frameBottomAbs = frameTopAbs + slot.heightCells * cellH
 
-        val sideMargins = Rect(offsetX, offsetY, 0, 0)
+    val sideMargins = Rect(offsetX, offsetY, 0, 0)
 
-        val allWidgets = PrefsSync.widgetSlots(this)
-        val allSlots = allWidgets.filter { it.page == pageIndex }.toMutableList() as ArrayList<WidgetSlot>
+    val allWidgets = PrefsSync.widgetSlots(this)
+    val allSlots = allWidgets.filter { it.page == pageIndex }.toMutableList() as ArrayList<WidgetSlot>
 
-        resizeFrame.updateFrameCoords(
-            coords = Rect(frameLeftAbs, frameTopAbs, frameRightAbs, frameBottomAbs),
-            cellWidth = cellW,
-            cellHeight = cellH,
-            sideMargins = sideMargins,
-            slot = slot,
-            allSlots = allSlots
+    resizeFrame.updateFrameCoords(
+        coords = Rect(frameLeftAbs, frameTopAbs, frameRightAbs, frameBottomAbs),
+        cellWidth = cellW,
+        cellHeight = cellH,
+        sideMargins = sideMargins,
+        slot = slot,
+        allSlots = allSlots
+    )
+
+    resizeFrame.onResizeListener = { cellsRect ->
+        val newSlot = slot.copy(
+            row = cellsRect.top,
+            col = cellsRect.left,
+            widthCells = cellsRect.right - cellsRect.left + 1,
+            heightCells = cellsRect.bottom - cellsRect.top + 1
         )
-
-        resizeFrame.onResizeListener = { cellsRect ->
-            val newSlot = slot.copy(
-                row = cellsRect.top,
-                col = cellsRect.left,
-                widthCells = cellsRect.right - cellsRect.left + 1,
-                heightCells = cellsRect.bottom - cellsRect.top + 1
-            )
-            resizingWidgetSlot = newSlot
-            updateWidgetPositionAndSize(hostView, newSlot, cellW, cellH)
-        }
-
-        resizeOverlay.setOnClickListener { endResizeMode() }
-        resizeOverlay.visibility = View.VISIBLE
-        resizeOverlay.bringToFront()
-        resizeOverlay.elevation = 20f * resources.displayMetrics.density
-        resizeFrame.visibility = View.VISIBLE
-        resizeFrame.bringToFront()
-        resizeFrame.elevation = 25f * resources.displayMetrics.density
+        resizingWidgetSlot = newSlot
+        updateWidgetPositionAndSize(hostView, newSlot, cellW, cellH)
     }
+
+    resizeOverlay.setOnClickListener { endResizeMode() }
+    resizeOverlay.visibility = View.VISIBLE
+    resizeOverlay.bringToFront()
+    resizeOverlay.elevation = 20f * resources.displayMetrics.density
+    resizeFrame.visibility = View.VISIBLE
+}
 
     private fun updateWidgetPositionAndSize(
         hostView: LauncherAppWidgetHostView,
