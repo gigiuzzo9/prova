@@ -19,6 +19,7 @@ object AppRepository {
     fun loadInstalledAppsWithCustomLabels(context: Context): List<AppInfo> {
         // Se la cache è già popolata e "fresca", usa quella. ZERO query PMS.
         if (AppCache.size() > 0 && System.currentTimeMillis() - cacheTimestamp < CACHE_TTL_MS) {
+            android.util.Log.d("APP_REPO", "Using cache: ${AppCache.size()} apps")
             return AppCache.snapshot()
         }
 
@@ -39,6 +40,10 @@ object AppRepository {
 
         AppCache.putAll(result)
         cacheTimestamp = System.currentTimeMillis()
+
+        android.util.Log.d("APP_REPO", "Query PMS: ${result.size} apps")
+        result.forEach { android.util.Log.d("APP_REPO", "  ${it.packageName} - ${it.label}") }
+
         return result
     }
 
