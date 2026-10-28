@@ -97,6 +97,7 @@ class HomeActivity : AppCompatActivity() {
                 dockController.refresh()
                 val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
                 drawerAdapter.submitList(apps)
+                renderWidgets()
             }
         }
     }
@@ -180,6 +181,7 @@ class HomeActivity : AppCompatActivity() {
                 loadHomeApps()
                 dockController.refresh()
                 loadDrawerApps()
+                renderWidgets()
             }
         }
 
@@ -717,7 +719,7 @@ class HomeActivity : AppCompatActivity() {
     private fun setDraggingApp(pkg: String?, source: String) {
         when (source) {
             DragController.SOURCE_HOME -> {
-                // Il ghost è gestito da HomeScreenGrid.drawInto
+                homeScreenGrid.setDraggingPackage(pkg, homeScreenGrid.getCurrentPage())
             }
             DragController.SOURCE_DRAWER -> {
                 drawerAdapter.setDraggingPackage(pkg)
@@ -891,6 +893,7 @@ class HomeActivity : AppCompatActivity() {
                     dockController.refresh()
                     val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
                     drawerAdapter.submitList(apps)
+                    renderWidgets()
                 }
             }
         }
@@ -946,6 +949,7 @@ class HomeActivity : AppCompatActivity() {
                     pageIndicator.setPageCount(currentPageCount)
                     homeScreenGrid.setPageCount(currentPageCount)
                     loadHomeApps()
+                    renderWidgets()
                 }
             }
         }
@@ -1123,8 +1127,12 @@ class HomeActivity : AppCompatActivity() {
             dockController.refresh()
         }
 
-        loadHomeApps()
-        widgetContainer.postDelayed({ renderWidgets() }, 50)
+        // NON chiamare renderWidgets: i widget non sono cambiati.
+        // NON chiamare loadHomeApps: causa renderWidgets indiretto che resetta i widget.
+        // Aggiorna solo la griglia:
+        homeScreenGrid.setGridSize(currentCols, currentRows)
+        homeScreenGrid.setPageCount(currentPageCount)
+        homeScreenGrid.setItems(PrefsSync.homeSlots(this))
     }
 
     private fun handleDropOnDrawer(pkg: String) {
@@ -1132,7 +1140,7 @@ class HomeActivity : AppCompatActivity() {
         PrefsSync.setHomeSlots(this, slots.filter { it.packageName != pkg })
         val dockItems = PrefsSync.dockItems(this)
         PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
-        loadHomeApps()
+        homeScreenGrid.setItems(PrefsSync.homeSlots(this))
         dockController.refresh()
     }
 
@@ -1161,8 +1169,7 @@ class HomeActivity : AppCompatActivity() {
         if (!drawerOpen) {
             emptyMessage.visibility = if (slots.isEmpty()) View.VISIBLE else View.GONE
         }
-
-        widgetContainer.post { renderWidgets() }
+        // NON chiamare renderWidgets() qui: i widget non dipendono dagli slot delle app.
     }
 
     fun reloadHomeGrid() { loadHomeApps() }
@@ -1204,6 +1211,7 @@ class HomeActivity : AppCompatActivity() {
         widgetContainer.visibility = View.VISIBLE
         pageIndicator.visibility = View.VISIBLE
         dockLayout.visibility = View.VISIBLE
+        // Non toccare i widget: sono già lì.
     }
 
     private fun applyDrawerBackground() {
@@ -1292,10 +1300,12 @@ class HomeActivity : AppCompatActivity() {
                 loadHomeApps()
                 dockController.refresh()
                 loadDrawerApps()
+                renderWidgets()
             }
         } else {
             homeScreenGrid.setItems(PrefsSync.homeSlots(this))
             dockController.refresh()
+            // NON chiamare renderWidgets: i widget sono già lì.
         }
     }
 
