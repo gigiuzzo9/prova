@@ -28,6 +28,16 @@
         app:layout_constraintStart_toStartOf="@id/homeScreenGrid"
         app:layout_constraintEnd_toEndOf="@id/homeScreenGrid" />
 
+    <FrameLayout
+        android:id="@+id/widgetContainer2"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        app:layout_constraintTop_toTopOf="@id/homeScreenGrid"
+        app:layout_constraintBottom_toBottomOf="@id/homeScreenGrid"
+        app:layout_constraintStart_toStartOf="@id/homeScreenGrid"
+        app:layout_constraintEnd_toEndOf="@id/homeScreenGrid" />
+
     <com.simplylauncher.PageIndicatorView
         android:id="@+id/pageIndicator"
         android:layout_width="wrap_content"
