@@ -211,7 +211,11 @@ class HomeActivity : AppCompatActivity() {
         }
         homeScreenGrid.pageChangeListener = { page ->
             pageIndicator.setCurrentPage(page)
+            // Nascondi widget durante il render per evitare il "buco"
+            widgetContainer.visibility = View.INVISIBLE
+            widgetContainer.translationX = 0f
             renderWidgets()
+            widgetContainer.visibility = View.VISIBLE
         }
     }
 
@@ -1127,9 +1131,6 @@ class HomeActivity : AppCompatActivity() {
             dockController.refresh()
         }
 
-        // NON chiamare renderWidgets: i widget non sono cambiati.
-        // NON chiamare loadHomeApps: causa renderWidgets indiretto che resetta i widget.
-        // Aggiorna solo la griglia:
         homeScreenGrid.setGridSize(currentCols, currentRows)
         homeScreenGrid.setPageCount(currentPageCount)
         homeScreenGrid.setItems(PrefsSync.homeSlots(this))
@@ -1169,7 +1170,6 @@ class HomeActivity : AppCompatActivity() {
         if (!drawerOpen) {
             emptyMessage.visibility = if (slots.isEmpty()) View.VISIBLE else View.GONE
         }
-        // NON chiamare renderWidgets() qui: i widget non dipendono dagli slot delle app.
     }
 
     fun reloadHomeGrid() { loadHomeApps() }
@@ -1211,7 +1211,6 @@ class HomeActivity : AppCompatActivity() {
         widgetContainer.visibility = View.VISIBLE
         pageIndicator.visibility = View.VISIBLE
         dockLayout.visibility = View.VISIBLE
-        // Non toccare i widget: sono già lì.
     }
 
     private fun applyDrawerBackground() {
@@ -1305,7 +1304,6 @@ class HomeActivity : AppCompatActivity() {
         } else {
             homeScreenGrid.setItems(PrefsSync.homeSlots(this))
             dockController.refresh()
-            // NON chiamare renderWidgets: i widget sono già lì.
         }
     }
 
