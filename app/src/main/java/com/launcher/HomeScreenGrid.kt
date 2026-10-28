@@ -1,385 +1,1328 @@
 package com.simplylauncher
 
-import android.annotation.SuppressLint
+import android.appwidget.AppWidgetHost
+import android.appwidget.AppWidgetHostView
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
 import android.graphics.Rect
-import android.text.Layout
-import android.text.StaticLayout
-import android.text.TextPaint
-import android.text.TextUtils
-import android.util.AttributeSet
+import android.os.Bundle
+import android.provider.Settings
+import android.util.SizeF
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.AnimationUtils
 import android.widget.FrameLayout
-import kotlin.math.abs
-import kotlin.math.min
+import android.widget.ImageView
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlin.math.ceil
+import kotlin.math.max
 
-class HomeScreenGrid @JvmOverloads constructor(
-    context: Context,
-    attrs: AttributeSet? = null,
-    defStyleAttr: Int = 0
-) : FrameLayout(context, attrs, defStyleAttr) {
+class HomeActivity : AppCompatActivity() {
 
-    private val drawingArea = HomeScreenGridDrawingArea(context)
+    private lateinit var homeScreenGrid: HomeScreenGrid
+    private lateinit var widgetContainer: FrameLayout
+    private lateinit var pageIndicator: PageIndicatorView
+    private lateinit var emptyMessage: TextView
+    private lateinit var dockDrawerButton: FrameLayout
+    private lateinit var dockLayout: View
+    private lateinit var dockSlots: List<FrameLayout>
+    private lateinit var resizeOverlay: FrameLayout
+    private lateinit var resizeFrame: WidgetResizeFrame
+    private lateinit var dragOverlayView: ImageView
+    private var dragOverlayPending = false
+    private var dragOverlayLastX = 0f
+    private var dragOverlayLastY = 0f
 
-    private var columnCount = 4
-    private var rowCount = 6
-    private var pageCount = 1
-    private var currentPage = 0
+    private lateinit var drawerOverlay: FrameLayout
+    private lateinit var drawerRecyclerView: RecyclerView
+    private lateinit var drawerAdapter: AppAdapter
+    private var drawerOpen = false
 
-    private var items: List<HomeSlot> = emptyList()
+    private lateinit var contextMenuView: AppContextMenuView
+    private var currentApp: AppInfo? = null
+    private var currentAnchor: View? = null
 
-    private var cellWidth = 0
-    private var cellHeight = 0
-    private var iconSize = 0
-    private var iconMargin = 0
-    private var labelSideMargin = 0
+    private lateinit var homePopupMenu: HomePopupMenu
 
-    private val cells = mutableMapOf<Pair<Int, Int>, Rect>()
+    private lateinit var dragController: DragController
+    private lateinit var dockController: DockController
 
-    private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        textSize = 11f * resources.displayMetrics.scaledDensity
-        setShadowLayer(3f, 0f, 0f, Color.BLACK)
-    }
+    private lateinit var appWidgetHost: AppWidgetHost
+    private lateinit var appWidgetManager: AppWidgetManager
+    private val widgetHostId = 1001
+    private var pendingWidgetId = -1
+    private var pendingWidgetPage = 0
+    private var pendingWidgetRow = 0
+    private var pendingWidgetCol = 0
+    private var pendingWidgetWidthCells = 2
+    private var pendingWidgetHeightCells = 1
 
-    private val dragShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0x66FFFFFF
-        style = Paint.Style.STROKE
-        strokeWidth = 2f * resources.displayMetrics.density
-    }
+    private var resizingWidgetSlot: WidgetSlot? = null
+    private var resizingWidgetView: LauncherAppWidgetHostView? = null
+    private var widgetPopupWindow: android.widget.PopupWindow? = null
 
-    var itemClickListener: ((HomeSlot) -> Unit)? = null
-    var itemLongClickListener: ((HomeSlot, View) -> Unit)? = null
-    var emptyCellLongClickListener: ((View) -> Unit)? = null
+    private var currentCols = 4
+    private var currentRows = 6
+    private var currentPageCount = 1
+    private var isDropInProgress = false
+    private var isResizing = false
+    private var currentDrawerColor: Int = Color.BLACK
+    private var currentDrawerAlpha: Float = 0.9f
 
-    private var draggingItem: HomeSlot? = null
-    private var draggingCoords = Pair(-1f, -1f)
+    private var drawerBgApplied = false
 
-    private var touchDownX = 0f
-    private var touchDownY = 0f
-    private var touchDownTime = 0L
-    private var longPressTriggered = false
-    private val longPressTimeout = android.view.ViewConfiguration.getLongPressTimeout().toLong()
-    private val longPressRunnable = Runnable {
-        val slot = findSlotAt(touchDownX, touchDownY)
-        longPressTriggered = true
-        if (slot != null && slot.packageName.isNotEmpty()) {
-            itemLongClickListener?.invoke(slot, this)
-        } else {
-            emptyCellLongClickListener?.invoke(this)
+    private val REQUEST_PICK_WIDGET = 100
+    private val REQUEST_BIND_WIDGET = 101
+    private val REQUEST_CONFIGURE_WIDGET = 102
+
+    private val reloadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            AppRepository.invalidateCache()
+            lifecycleScope.launch {
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                loadHomeApps()
+                dockController.refresh()
+                val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                drawerAdapter.submitList(apps)
+                renderWidgets()
+            }
         }
     }
 
-    private var swipeOffset = 0f
-    private var isSwiping = false
-    private val swipeThreshold = 20f * resources.displayMetrics.density
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_home)
 
-    init {
-        setWillNotDraw(false)
-        drawingArea.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
-        addView(drawingArea)
+        window.statusBarColor = Color.BLACK
+        window.navigationBarColor = Color.parseColor("#80000000")
+
+        homeScreenGrid = findViewById(R.id.homeScreenGrid)
+        widgetContainer = findViewById(R.id.widgetContainer)
+        pageIndicator = findViewById(R.id.pageIndicator)
+        emptyMessage = findViewById(R.id.emptyMessage)
+        dockDrawerButton = findViewById(R.id.dockDrawerButton)
+        dockLayout = findViewById(R.id.dockLayout)
+        resizeOverlay = findViewById(R.id.resizeOverlay)
+        resizeFrame = findViewById(R.id.resizeFrame)
+
+        dragOverlayView = ImageView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                (56 * resources.displayMetrics.density).toInt(),
+                (56 * resources.displayMetrics.density).toInt()
+            )
+            visibility = View.GONE
+            elevation = 30f * resources.displayMetrics.density
+        }
+        (findViewById<FrameLayout>(android.R.id.content)).addView(dragOverlayView)
+
+        dockSlots = listOf(
+            findViewById(R.id.dockSlot1),
+            findViewById(R.id.dockSlot2),
+            findViewById(R.id.dockSlot3),
+            findViewById(R.id.dockSlot4)
+        )
+
+        drawerOverlay = findViewById(R.id.drawerOverlay)
+        drawerRecyclerView = findViewById(R.id.drawerRecyclerView)
+
+        appWidgetManager = AppWidgetManager.getInstance(this)
+        appWidgetHost = object : AppWidgetHost(this, widgetHostId) {
+            override fun onCreateView(
+                context: Context,
+                appWidgetId: Int,
+                appWidget: AppWidgetProviderInfo
+            ): AppWidgetHostView {
+                return LauncherAppWidgetHostView(context)
+            }
+        }
+
+        setupResizeFrame()
+        setupGrid()
+        setupDragController()
+        setupDockController()
+        setupDrawer()
+        setupContextMenu()
+        setupHomePopup()
+        setupDrawerButton()
+
+        currentCols = PrefsSync.cols(this)
+        currentRows = PrefsSync.rows(this)
+        currentPageCount = PrefsSync.pageCount(this)
+
+        homeScreenGrid.setGridSize(currentCols, currentRows)
+        homeScreenGrid.setPageCount(currentPageCount)
+
+        lifecycleScope.launch {
+            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+            loadHomeApps()
+            dockController.refresh()
+            loadDrawerApps()
+        }
+
+        if (FirstRunSetup.isFirstRun(this)) {
+            lifecycleScope.launch {
+                FirstRunSetup.populateHome(this@HomeActivity)
+                FirstRunSetup.markDone(this@HomeActivity)
+                AppRepository.invalidateCache()
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                loadHomeApps()
+                dockController.refresh()
+                loadDrawerApps()
+                renderWidgets()
+            }
+        }
+
+        askLauncherIfNeeded()
+
+        registerReceiver(
+            reloadReceiver,
+            IntentFilter("com.simplylauncher.RELOAD"),
+            RECEIVER_NOT_EXPORTED
+        )
     }
 
-    private fun invalidateDrawing() {
-        drawingArea.invalidate()
-    }
-
-    fun setGridSize(cols: Int, rows: Int) {
-        if (columnCount != cols || rows != rowCount) {
-            columnCount = cols
-            rowCount = rows
-            cells.clear()
-            requestLayout()
-            invalidateDrawing()
+    private fun setupGrid() {
+        homeScreenGrid.itemClickListener = { slot ->
+            if (slot.packageName.isNotEmpty()) {
+                AppRepository.launchApp(this, slot.packageName)
+            }
+        }
+        homeScreenGrid.itemLongClickListener = { slot, view ->
+            val app = AppCache.get(slot.packageName)
+            if (app != null) {
+                dragController.onLongPress(app, view, DragController.SOURCE_HOME, false)
+            }
+        }
+        homeScreenGrid.emptyCellLongClickListener = { view ->
+            showHomePopup(view)
+        }
+        homeScreenGrid.pageChangeListener = { page ->
+            pageIndicator.setCurrentPage(page)
+            // Nascondi widget durante il render per evitare il "buco"
+            widgetContainer.visibility = View.INVISIBLE
+            widgetContainer.translationX = 0f
+            renderWidgets()
+            widgetContainer.visibility = View.VISIBLE
         }
     }
 
-    fun setPageCount(count: Int) {
-        pageCount = count.coerceAtLeast(1)
-        if (currentPage >= pageCount) currentPage = pageCount - 1
-        invalidateDrawing()
+    private fun setupResizeFrame() {
+        resizeFrame.onClickListener = { endResizeMode() }
     }
 
-    fun getPageCount(): Int = pageCount
-    fun getCurrentPage(): Int = currentPage
+    private fun endResizeMode() {
+        val slot = resizingWidgetSlot
+        val hostView = resizingWidgetView
 
-    fun setItems(newItems: List<HomeSlot>) {
-        items = newItems
-        invalidateDrawing()
+        if (slot != null && hostView != null) {
+            val cellW = homeScreenGrid.width / currentCols
+            val cellH = homeScreenGrid.height / currentRows
+            val lp = hostView.layoutParams as FrameLayout.LayoutParams
+            val newWidthCells = (lp.width / cellW).coerceAtLeast(1)
+            val newHeightCells = (lp.height / cellH).coerceAtLeast(1)
+            val newCol = (lp.leftMargin / cellW).coerceAtLeast(0)
+            val newRow = (lp.topMargin / cellH).coerceAtLeast(0)
+
+            val newSlot = slot.copy(
+                row = newRow,
+                col = newCol,
+                widthCells = newWidthCells,
+                heightCells = newHeightCells
+            )
+
+            val widgets = PrefsSync.widgetSlots(this).toMutableList()
+            val index = widgets.indexOfFirst { it.appWidgetId == slot.appWidgetId }
+            if (index != -1) {
+                widgets[index] = newSlot
+                PrefsSync.setWidgetSlots(this, widgets)
+            }
+        }
+
+        resizingWidgetSlot = null
+        resizingWidgetView = null
+        isResizing = false
+        resizeOverlay.visibility = View.GONE
+        resizeFrame.visibility = View.GONE
+        widgetContainer.postDelayed({ renderWidgets() }, 50)
     }
 
-    fun skipToPage(page: Int) {
-        if (page in 0 until pageCount && page != currentPage) {
-            currentPage = page
-            swipeOffset = 0f
-            invalidateDrawing()
+    override fun onStart() {
+        super.onStart()
+        appWidgetHost.startListening()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        try { appWidgetHost.stopListening() } catch (_: Exception) {}
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        when (requestCode) {
+            REQUEST_PICK_WIDGET -> {
+                if (resultCode == RESULT_OK && data != null) {
+                    val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
+                    val needsBind = data.getBooleanExtra(WidgetPickerActivity.EXTRA_NEEDS_BIND, false)
+                    val provider: android.content.ComponentName? =
+                        if (android.os.Build.VERSION.SDK_INT >= 33) {
+                            data.getParcelableExtra(
+                                WidgetPickerActivity.EXTRA_PROVIDER,
+                                android.content.ComponentName::class.java
+                            )
+                        } else {
+                            @Suppress("DEPRECATION")
+                            data.getParcelableExtra(WidgetPickerActivity.EXTRA_PROVIDER)
+                        }
+
+                    if (widgetId != -1) {
+                        pendingWidgetId = widgetId
+                        if (needsBind && provider != null) {
+                            val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
+                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, Bundle())
+                            }
+                            startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
+                        } else {
+                            findFreeCellAndPlaceWidget()
+                        }
+                    }
+                } else {
+                    if (pendingWidgetId != -1) {
+                        appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+                        pendingWidgetId = -1
+                    }
+                }
+            }
+            REQUEST_BIND_WIDGET -> {
+                if (resultCode == RESULT_OK) {
+                    val boundId = data?.getIntExtra(
+                        AppWidgetManager.EXTRA_APPWIDGET_ID,
+                        pendingWidgetId
+                    ) ?: pendingWidgetId
+                    pendingWidgetId = boundId
+
+                    val info = appWidgetManager.getAppWidgetInfo(boundId)
+                    if (info == null) {
+                        Toast.makeText(this, "Widget non disponibile dopo il bind", Toast.LENGTH_SHORT).show()
+                        appWidgetHost.deleteAppWidgetId(boundId)
+                        pendingWidgetId = -1
+                        return
+                    }
+
+                    if (info.configure != null) {
+                        try {
+                            appWidgetHost.startAppWidgetConfigureActivityForResult(
+                                this@HomeActivity,
+                                pendingWidgetId,
+                                0,
+                                REQUEST_CONFIGURE_WIDGET,
+                                null
+                            )
+                        } catch (e: Exception) {
+                            appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+                            pendingWidgetId = -1
+                        }
+                    } else {
+                        findFreeCellAndPlaceWidget()
+                    }
+                } else {
+                    Toast.makeText(this, R.string.widget_bind_denied, Toast.LENGTH_SHORT).show()
+                    appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+                    pendingWidgetId = -1
+                }
+            }
+            REQUEST_CONFIGURE_WIDGET -> {
+                if (resultCode == RESULT_OK) saveWidgetToHome()
+                else Toast.makeText(this, R.string.widget_config_cancelled, Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
-    fun nextPage(): Boolean {
-        if (currentPage < pageCount - 1) {
-            currentPage++
-            invalidateDrawing()
-            return true
+    private fun findFreeCellAndPlaceWidget() {
+        if (pendingWidgetId == -1) return
+        if (currentCols <= 0 || currentRows <= 0) {
+            appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+            pendingWidgetId = -1
+            return
         }
-        return false
-    }
 
-    fun prevPage(): Boolean {
-        if (currentPage > 0) {
-            currentPage--
-            invalidateDrawing()
-            return true
+        val slots = PrefsSync.homeSlots(this)
+        val widgets = PrefsSync.widgetSlots(this)
+        val occupied = mutableSetOf<Pair<Int, Int>>()
+        slots.filter { it.page == pendingWidgetPage }.forEach { occupied.add(it.row to it.col) }
+        widgets.filter { it.page == pendingWidgetPage }.forEach {
+            for (r in it.row until it.row + it.heightCells) {
+                for (c in it.col until it.col + it.widthCells) occupied.add(r to c)
+            }
         }
-        return false
-    }
 
-    fun setDraggingItem(slot: HomeSlot?) {
-        draggingItem = slot
-        invalidateDrawing()
-    }
-
-    fun setDraggingPackage(pkg: String?, page: Int) {
-        draggingItem = if (pkg == null) {
-            null
-        } else {
-            items.firstOrNull { it.packageName == pkg && it.page == page }
-                ?: HomeSlot(pkg, -1, -1, page)
+        val info = appWidgetManager.getAppWidgetInfo(pendingWidgetId)
+        if (info == null) {
+            Toast.makeText(this, "Widget non valido", Toast.LENGTH_SHORT).show()
+            appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+            pendingWidgetId = -1
+            return
         }
-        invalidateDrawing()
-    }
 
-    fun setDraggingCoords(x: Float, y: Float) {
-        draggingCoords = Pair(x, y)
-        invalidateDrawing()
-    }
+        var widthCells = 0
+        var heightCells = 0
 
-    fun clearDragging() {
-        draggingItem = null
-        draggingCoords = Pair(-1f, -1f)
-        invalidateDrawing()
-    }
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            if (info.targetCellWidth > 0) widthCells = info.targetCellWidth
+            if (info.targetCellHeight > 0) heightCells = info.targetCellHeight
+        }
+        if (widthCells <= 0 && info.minWidth > 0) widthCells = getCellCount(info.minWidth)
+        if (heightCells <= 0 && info.minHeight > 0) heightCells = getCellCount(info.minHeight)
+        if (widthCells <= 0) widthCells = 1
+        if (heightCells <= 0) heightCells = 1
 
-    fun getItemAt(x: Float, y: Float): HomeSlot? = findSlotAt(x, y)
+        pendingWidgetWidthCells = widthCells.coerceIn(1, currentCols)
+        pendingWidgetHeightCells = heightCells.coerceIn(1, currentRows)
 
-    fun getCellCoords(x: Float, y: Float): Pair<Int, Int>? {
-        ensureCells()
-        val col = (x / cellWidth).toInt()
-        val row = (y / cellHeight).toInt()
-        if (col in 0 until columnCount && row in 0 until rowCount) return Pair(row, col)
-        return null
-    }
+        if (pendingWidgetWidthCells > currentCols || pendingWidgetHeightCells > currentRows) {
+            Toast.makeText(this, "Widget troppo grande per la griglia", Toast.LENGTH_SHORT).show()
+            appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+            pendingWidgetId = -1
+            return
+        }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-        if (width > 0 && height > 0) ensureCells()
-    }
+        var found = false
+        for (r in 0..(currentRows - pendingWidgetHeightCells)) {
+            for (c in 0..(currentCols - pendingWidgetWidthCells)) {
+                var free = true
+                for (dr in 0 until pendingWidgetHeightCells) {
+                    for (dc in 0 until pendingWidgetWidthCells) {
+                        if (occupied.contains(r + dr to c + dc)) { free = false; break }
+                    }
+                    if (!free) break
+                }
+                if (free) {
+                    pendingWidgetRow = r
+                    pendingWidgetCol = c
+                    found = true
+                    break
+                }
+            }
+            if (found) break
+        }
 
-    private fun ensureCells() {
-        if (cells.isNotEmpty() && cellWidth > 0) return
-        cellWidth = width / columnCount
-        cellHeight = height / rowCount
-        iconMargin = (cellWidth * 0.08f).toInt()
-        iconSize = min(cellWidth, cellHeight) - 2 * iconMargin
-        labelSideMargin = (cellWidth * 0.04f).toInt()
-        cells.clear()
-        for (r in 0 until rowCount) {
-            for (c in 0 until columnCount) {
-                cells[Pair(r, c)] = Rect(
-                    c * cellWidth,
-                    r * cellHeight,
-                    (c + 1) * cellWidth,
-                    (r + 1) * cellHeight
+        if (!found) {
+            Toast.makeText(this, "Nessuno spazio libero", Toast.LENGTH_SHORT).show()
+            appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+            pendingWidgetId = -1
+            return
+        }
+
+        if (info.configure != null) {
+            try {
+                appWidgetHost.startAppWidgetConfigureActivityForResult(
+                    this@HomeActivity,
+                    pendingWidgetId,
+                    0,
+                    REQUEST_CONFIGURE_WIDGET,
+                    null
                 )
+            } catch (e: Exception) {
+                appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+                pendingWidgetId = -1
+            }
+        } else {
+            saveWidgetToHome()
+        }
+    }
+
+    private fun getCellCount(sizeDp: Int): Int {
+        val density = resources.displayMetrics.density
+        val tiles = ceil(((sizeDp / density) - 30) / 70.0).toInt()
+        return max(tiles, 1)
+    }
+
+    private fun saveWidgetToHome() {
+        val widgets = PrefsSync.widgetSlots(this).toMutableList()
+        widgets.add(
+            WidgetSlot(
+                appWidgetId = pendingWidgetId,
+                row = pendingWidgetRow,
+                col = pendingWidgetCol,
+                widthCells = pendingWidgetWidthCells,
+                heightCells = pendingWidgetHeightCells,
+                page = pendingWidgetPage
+            )
+        )
+        PrefsSync.setWidgetSlots(this, widgets)
+        Toast.makeText(this, R.string.widget_added, Toast.LENGTH_SHORT).show()
+        widgetContainer.post { renderWidgets() }
+    }
+
+    private fun startWidgetPicker() {
+        val appWidgetId = appWidgetHost.allocateAppWidgetId()
+        pendingWidgetId = appWidgetId
+        pendingWidgetPage = homeScreenGrid.getCurrentPage()
+        pendingWidgetWidthCells = 2.coerceAtMost(currentCols)
+        pendingWidgetHeightCells = 1
+
+        val intent = Intent(this, WidgetPickerActivity::class.java).apply {
+            putExtra(WidgetPickerActivity.EXTRA_APPWIDGET_ID, appWidgetId)
+        }
+        startActivityForResult(intent, REQUEST_PICK_WIDGET)
+    }
+
+    private fun renderWidgets() {
+        val allWidgets = PrefsSync.widgetSlots(this)
+        widgetContainer.removeAllViews()
+
+        val pageIndex = homeScreenGrid.getCurrentPage()
+        val cellW = homeScreenGrid.width / currentCols
+        val cellH = homeScreenGrid.height / currentRows
+
+        val pageWidgets = allWidgets.filter { it.page == pageIndex }
+        for (slot in pageWidgets) {
+            try {
+                val info = appWidgetManager.getAppWidgetInfo(slot.appWidgetId) ?: continue
+                val hostView = appWidgetHost.createView(baseContext, slot.appWidgetId, info) as LauncherAppWidgetHostView
+                hostView.setAppWidget(slot.appWidgetId, info)
+                hostView.tag = slot.appWidgetId
+
+                val widgetWidth = cellW * slot.widthCells
+                val widgetHeight = cellH * slot.heightCells
+
+                val lp = FrameLayout.LayoutParams(widgetWidth, widgetHeight).apply {
+                    leftMargin = slot.col * cellW
+                    topMargin = slot.row * cellH
+                }
+                widgetContainer.addView(hostView, lp)
+
+                hostView.post {
+                    try {
+                        val density = resources.displayMetrics.density
+                        val wDp = (widgetWidth / density).toInt()
+                        val hDp = (widgetHeight / density).toInt()
+                        if (android.os.Build.VERSION.SDK_INT >= 31) {
+                            hostView.updateAppWidgetSize(Bundle(), listOf(SizeF(wDp.toFloat(), hDp.toFloat())))
+                        } else {
+                            hostView.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                hostView.onLongPress = {
+                    dragController.onWidgetLongPress(slot, info, hostView)
+                    showWidgetMenu(slot, info, cellW, cellH, hostView, pageIndex)
+                }
+                hostView.onIgnoreIntercepted = {
+                    widgetPopupWindow?.dismiss()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("WIDGET_DEBUG", "Errore render widget ${slot.appWidgetId}", e)
             }
         }
     }
 
-    private fun findSlotAt(x: Float, y: Float): HomeSlot? {
-        if (cells.isEmpty()) return null
-        val cell = getCellCoords(x, y) ?: return null
-        return items.firstOrNull {
-            it.page == currentPage && it.row == cell.first && it.col == cell.second
-        } ?: HomeSlot("", cell.first, cell.second, currentPage)
-    }
+    private fun startResize(
+        slot: WidgetSlot,
+        info: AppWidgetProviderInfo,
+        cellW: Int,
+        cellH: Int,
+        hostView: LauncherAppWidgetHostView,
+        pageIndex: Int
+    ) {
+        resizingWidgetSlot = slot
+        resizingWidgetView = hostView
+        isResizing = true
 
-    private fun getIconBitmap(pkg: String): Bitmap? {
-        if (iconSize <= 0) return null
-        return AppCache.getIconBitmap(pkg, iconSize)
-    }
+        val containerLoc = IntArray(2)
+        widgetContainer.getLocationOnScreen(containerLoc)
+        val overlayLoc = IntArray(2)
+        resizeOverlay.getLocationOnScreen(overlayLoc)
 
-    // --- Drawing ---
+        val offsetX = containerLoc[0] - overlayLoc[0]
+        val offsetY = containerLoc[1] - overlayLoc[1]
 
-    fun drawInto(canvas: Canvas) {
-        if (cells.isEmpty()) ensureCells()
-        if (cells.isEmpty()) return
+        val frameLeftAbs = offsetX + slot.col * cellW
+        val frameTopAbs = offsetY + slot.row * cellH
+        val frameRightAbs = frameLeftAbs + slot.widthCells * cellW
+        val frameBottomAbs = frameTopAbs + slot.heightCells * cellH
 
-        val pageOffset = -(currentPage * width) + swipeOffset.toInt()
+        val sideMargins = Rect(offsetX, offsetY, 0, 0)
 
-        canvas.save()
-        canvas.translate(pageOffset.toFloat(), 0f)
-        drawPage(canvas, currentPage)
-        canvas.restore()
+        val allWidgets = PrefsSync.widgetSlots(this)
+        val allSlots = allWidgets.filter { it.page == pageIndex }.toMutableList() as ArrayList<WidgetSlot>
 
-        if (swipeOffset > 0 && currentPage > 0) {
-            canvas.save()
-            canvas.translate((pageOffset + width).toFloat(), 0f)
-            drawPage(canvas, currentPage - 1)
-            canvas.restore()
-        } else if (swipeOffset < 0 && currentPage < pageCount - 1) {
-            canvas.save()
-            canvas.translate((pageOffset - width).toFloat(), 0f)
-            drawPage(canvas, currentPage + 1)
-            canvas.restore()
+        resizeFrame.updateFrameCoords(
+            coords = Rect(frameLeftAbs, frameTopAbs, frameRightAbs, frameBottomAbs),
+            cellWidth = cellW,
+            cellHeight = cellH,
+            sideMargins = sideMargins,
+            slot = slot,
+            allSlots = allSlots
+        )
+
+        resizeFrame.onResizeListener = { cellsRect ->
+            val newSlot = slot.copy(
+                row = cellsRect.top,
+                col = cellsRect.left,
+                widthCells = cellsRect.right - cellsRect.left + 1,
+                heightCells = cellsRect.bottom - cellsRect.top + 1
+            )
+            resizingWidgetSlot = newSlot
+            updateWidgetPositionAndSize(hostView, newSlot, cellW, cellH)
         }
 
-        drawingItem(canvas)
+        resizeOverlay.setOnClickListener { endResizeMode() }
+        resizeOverlay.visibility = View.VISIBLE
+        resizeOverlay.bringToFront()
+        resizeOverlay.elevation = 20f * resources.displayMetrics.density
+        resizeFrame.visibility = View.VISIBLE
     }
 
-    private fun drawPage(canvas: Canvas, page: Int) {
-        items.filter { it.page == page && it.packageName.isNotEmpty() }.forEach { slot ->
-            if (draggingItem?.packageName == slot.packageName && draggingItem?.page == slot.page) {
-                return@forEach
+    private fun updateWidgetPositionAndSize(
+        hostView: LauncherAppWidgetHostView,
+        slot: WidgetSlot,
+        cellW: Int,
+        cellH: Int
+    ) {
+        val lp = hostView.layoutParams as FrameLayout.LayoutParams
+        lp.width = cellW * slot.widthCells
+        lp.height = cellH * slot.heightCells
+        lp.leftMargin = slot.col * cellW
+        lp.topMargin = slot.row * cellH
+        hostView.layoutParams = lp
+
+        hostView.post {
+            try {
+                val density = resources.displayMetrics.density
+                val wDp = (lp.width / density).toInt()
+                val hDp = (lp.height / density).toInt()
+                if (android.os.Build.VERSION.SDK_INT >= 31) {
+                    hostView.updateAppWidgetSize(Bundle(), listOf(SizeF(wDp.toFloat(), hDp.toFloat())))
+                } else {
+                    hostView.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun showWidgetMenu(
+        slot: WidgetSlot,
+        info: AppWidgetProviderInfo,
+        cellW: Int,
+        cellH: Int,
+        hostView: LauncherAppWidgetHostView,
+        pageIndex: Int
+    ) {
+        val ctx = this
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
+
+        val container = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            val drawable = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(6).toFloat()
+                setColor(Color.WHITE)
             }
-            val cell = cells[Pair(slot.row, slot.col)] ?: return@forEach
-            drawIconAt(canvas, slot, cell)
+            background = drawable
+            elevation = 8f * density
+        }
+
+        fun addItem(text: String, onClick: () -> Unit) {
+            val tv = TextView(ctx).apply {
+                this.text = text
+                setTextColor(Color.BLACK)
+                textSize = 15f
+                setPadding(dp(20), dp(14), dp(20), dp(14))
+                val outValue = android.util.TypedValue()
+                context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+                setBackgroundResource(outValue.resourceId)
+                setOnClickListener {
+                    onClick()
+                    widgetPopupWindow?.dismiss()
+                }
+            }
+            container.addView(tv)
+        }
+
+        addItem("Ridimensiona") {
+            dragController.cancelPendingDrag()
+            startResize(slot, info, cellW, cellH, hostView, pageIndex)
+        }
+        addItem("Rimuovi widget") {
+            val current = PrefsSync.widgetSlots(this)
+            PrefsSync.setWidgetSlots(
+                this,
+                current.filter { it.appWidgetId != slot.appWidgetId }
+            )
+            appWidgetHost.deleteAppWidgetId(slot.appWidgetId)
+            renderWidgets()
+        }
+
+        widgetPopupWindow?.dismiss()
+        widgetPopupWindow = android.widget.PopupWindow(
+            container,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            isOutsideTouchable = true
+            isFocusable = true
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
         }
     }
 
-    private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect) {
-        val app = AppCache.get(slot.packageName) ?: return
-        val bitmap = getIconBitmap(slot.packageName) ?: return
+    private fun setupDragController() {
+        dragController = DragController(
+            activity = this,
+            homeRecyclerView = homeScreenGrid,
+            drawerOverlay = drawerOverlay,
+            onDragStart = { source, pkg, widgetId, widthCells, heightCells, x, y ->
+                showDragOverlay(source, pkg, widgetId, widthCells, heightCells, x, y)
+            },
+            onDragMove = { x, y -> updateDragOverlay(x, y) },
+            onDropOnHome = { source, pkg, widgetId, x, y ->
+                hideDragOverlay()
+                if (source == DragController.SOURCE_WIDGET) {
+                    handleWidgetDrop(widgetId, x, y)
+                    true
+                } else {
+                    handleDropOnHome(source, pkg, x, y)
+                }
+            },
+            onDropOnDrawer = { pkg ->
+                hideDragOverlay()
+                handleDropOnDrawer(pkg)
+            },
+            onDropOnDock = { source, pkg, x, y ->
+                hideDragOverlay()
+                handleDropOnDock(source, pkg, x, y)
+            },
+            onDragEnd = { hideDragOverlay() },
+            onVisualDragStart = { source, pkg ->
+                setDraggingApp(pkg, source)
+            },
+            onVisualDragEnd = { source, pkg ->
+                homeScreenGrid.post { setDraggingApp(null, source) }
+            }
+        )
+    }
 
-        val iconLeft = cell.left + (cell.width() - iconSize) / 2
-        val iconTop = cell.top + iconMargin
-        canvas.drawBitmap(bitmap, iconLeft.toFloat(), iconTop.toFloat(), null)
-
-        if (app.label.isNotEmpty()) {
-            val textWidth = cell.width() - 2 * labelSideMargin
-            val layout = StaticLayout.Builder
-                .obtain(app.label, 0, app.label.length, textPaint, textWidth)
-                .setMaxLines(1)
-                .setEllipsize(TextUtils.TruncateAt.END)
-                .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                .build()
-
-            val labelTop = iconTop + iconSize + (iconMargin / 2)
-            canvas.save()
-            canvas.translate(cell.left.toFloat() + labelSideMargin, labelTop.toFloat())
-            layout.draw(canvas)
-            canvas.restore()
+    private fun setDraggingApp(pkg: String?, source: String) {
+        when (source) {
+            DragController.SOURCE_HOME -> {
+                homeScreenGrid.setDraggingPackage(pkg, homeScreenGrid.getCurrentPage())
+            }
+            DragController.SOURCE_DRAWER -> {
+                drawerAdapter.setDraggingPackage(pkg)
+            }
+            DragController.SOURCE_DOCK -> {
+                dockController.setDraggingPackage(pkg)
+            }
         }
     }
 
-    private fun drawingItem(canvas: Canvas) {
-        val dragged = draggingItem ?: return
-        if (draggingCoords.first < 0f) return
+    private fun showDragOverlay(
+        source: String,
+        pkg: String,
+        widgetId: Int,
+        widthCells: Int,
+        heightCells: Int,
+        x: Float,
+        y: Float
+    ) {
+        if (source == DragController.SOURCE_WIDGET) {
+            val cellW = homeScreenGrid.width / currentCols
+            val cellH = homeScreenGrid.height / currentRows
+            val widgetWidthPx = cellW * widthCells
+            val widgetHeightPx = cellH * heightCells
+            dragOverlayView.layoutParams = FrameLayout.LayoutParams(widgetWidthPx, widgetHeightPx)
 
-        val cell = getCellCoords(draggingCoords.first, draggingCoords.second)
-        if (cell != null) {
-            val rect = cells[Pair(cell.first, cell.second)]
-            if (rect != null) {
-                canvas.drawCircle(
-                    rect.exactCenterX(),
-                    rect.exactCenterY(),
-                    iconSize / 2f,
-                    dragShadowPaint
+            val hostView = (0 until widgetContainer.childCount)
+                .map { widgetContainer.getChildAt(it) }
+                .firstOrNull { it.tag == widgetId } as? LauncherAppWidgetHostView
+
+            if (hostView != null && hostView.width > 0 && hostView.height > 0) {
+                val bitmap = Bitmap.createBitmap(
+                    hostView.width,
+                    hostView.height,
+                    Bitmap.Config.ARGB_8888
                 )
+                val canvas = android.graphics.Canvas(bitmap)
+                hostView.draw(canvas)
+                dragOverlayView.setImageBitmap(bitmap)
+            } else {
+                dragOverlayView.setImageDrawable(null)
+            }
+        } else {
+            val sizePx = (56 * resources.displayMetrics.density).toInt()
+            dragOverlayView.layoutParams = FrameLayout.LayoutParams(sizePx, sizePx)
+            val bitmap = AppCache.getIconBitmap(pkg, sizePx)
+            if (bitmap != null) {
+                dragOverlayView.setImageBitmap(bitmap)
+            } else {
+                dragOverlayView.setImageDrawable(null)
             }
         }
 
-        val bitmap = getIconBitmap(dragged.packageName) ?: return
-        val cx = draggingCoords.first - iconSize / 2f
-        val cy = draggingCoords.second - iconSize / 1.2f
-        canvas.drawBitmap(bitmap, cx, cy, null)
+        dragOverlayView.visibility = View.VISIBLE
+        updateDragOverlay(x, y)
     }
 
-    // --- Touch ---
-
-    @SuppressLint("ClickableViewAccessibility")
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                touchDownX = event.x
-                touchDownY = event.y
-                touchDownTime = System.currentTimeMillis()
-                longPressTriggered = false
-                isSwiping = false
-                swipeOffset = 0f
-                postDelayed(longPressRunnable, longPressTimeout)
-                return true
-            }
-
-            MotionEvent.ACTION_MOVE -> {
-                val dx = event.x - touchDownX
-                val dy = event.y - touchDownY
-                if (!longPressTriggered && (abs(dx) > swipeThreshold || abs(dy) > swipeThreshold)) {
-                    removeCallbacks(longPressRunnable)
-                }
-
-                if (draggingItem != null) {
-                    setDraggingCoords(event.x, event.y)
-                    return true
-                }
-
-                if (abs(dx) > abs(dy) && abs(dx) > swipeThreshold) {
-                    val canSwipeLeft = dx < 0 && currentPage < pageCount - 1
-                    val canSwipeRight = dx > 0 && currentPage > 0
-                    if (canSwipeLeft || canSwipeRight) {
-                        isSwiping = true
-                        swipeOffset = dx
-                        invalidateDrawing()
-                    }
-                }
-                return true
-            }
-
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                removeCallbacks(longPressRunnable)
-
-                if (draggingItem != null) {
-                    return true
-                }
-
-                if (isSwiping) {
-                    val oldPage = currentPage
-                    if (swipeOffset < -swipeThreshold * 3 && currentPage < pageCount - 1) {
-                        currentPage++
-                    } else if (swipeOffset > swipeThreshold * 3 && currentPage > 0) {
-                        currentPage--
-                    }
-                    swipeOffset = 0f
-                    isSwiping = false
-                    invalidateDrawing()
-
-                    if (oldPage != currentPage) {
-                        pageChangeListener?.invoke(currentPage)
-                    }
-                    return true
-                }
-
-                if (!longPressTriggered && System.currentTimeMillis() - touchDownTime < longPressTimeout) {
-                    val slot = findSlotAt(event.x, event.y)
-                    if (slot != null && slot.packageName.isNotEmpty()) {
-                        itemClickListener?.invoke(slot)
-                    }
-                }
-                return true
-            }
+    private fun updateDragOverlay(x: Float, y: Float) {
+        if (dragOverlayView.visibility != View.VISIBLE) return
+        dragOverlayLastX = x
+        dragOverlayLastY = y
+        if (dragOverlayPending) return
+        dragOverlayPending = true
+        dragOverlayView.postOnAnimation {
+            dragOverlayPending = false
+            dragOverlayView.x = dragOverlayLastX - dragOverlayView.width / 2f
+            dragOverlayView.y = dragOverlayLastY - dragOverlayView.height / 2f
         }
-        return super.onTouchEvent(event)
     }
 
-    var pageChangeListener: ((Int) -> Unit)? = null
+    private fun hideDragOverlay() {
+        dragOverlayView.visibility = View.GONE
+    }
 
-    fun isPointInside(x: Float, y: Float): Boolean {
+    fun isPointInDock(x: Float, y: Float): Boolean {
         val loc = IntArray(2)
-        getLocationOnScreen(loc)
-        return x >= loc[0] && x <= loc[0] + width && y >= loc[1] && y <= loc[1] + height
+        dockLayout.getLocationOnScreen(loc)
+        return x >= loc[0] && x <= loc[0] + dockLayout.width &&
+                y >= loc[1] && y <= loc[1] + dockLayout.height
+    }
+
+    fun isPointInDrawer(x: Float, y: Float): Boolean {
+        if (!drawerOpen) return false
+        val loc = IntArray(2)
+        drawerOverlay.getLocationOnScreen(loc)
+        return x >= loc[0] && x <= loc[0] + drawerOverlay.width &&
+                y >= loc[1] && y <= loc[1] + drawerOverlay.height
+    }
+
+    private fun handleDropOnDock(source: String, pkg: String, x: Float, y: Float) {
+        var closestIndex = 0
+        var closestDist = Float.MAX_VALUE
+        dockSlots.forEachIndexed { index, slot ->
+            val loc = IntArray(2)
+            slot.getLocationOnScreen(loc)
+            val cx = loc[0] + slot.width / 2f
+            val cy = loc[1] + slot.height / 2f
+            val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble()).toFloat()
+            if (dist < closestDist) { closestDist = dist; closestIndex = index }
+        }
+
+        lifecycleScope.launch {
+            if (source == DragController.SOURCE_DOCK) {
+                dockController.swapDockSlots(pkg, closestIndex)
+            } else {
+                dockController.addToDockAtPublic(pkg, closestIndex)
+            }
+        }
+    }
+
+    private fun handleWidgetDrop(widgetId: Int, x: Float, y: Float) {
+        val pageIndex = homeScreenGrid.getCurrentPage()
+        val cellW = homeScreenGrid.width / currentCols
+        val cellH = homeScreenGrid.height / currentRows
+        val loc = IntArray(2)
+        homeScreenGrid.getLocationOnScreen(loc)
+        val localX = x - loc[0]
+        val localY = y - loc[1]
+        val col = (localX / cellW).toInt().coerceIn(0, currentCols - 1)
+        val row = (localY / cellH).toInt().coerceIn(0, currentRows - 1)
+        moveWidget(widgetId, row, col, pageIndex)
+    }
+
+    private fun setupDockController() {
+        dockController = DockController(
+            activity = this,
+            slots = dockSlots,
+            onAppLongPressed = { app, view ->
+                dragController.onLongPress(app, view, DragController.SOURCE_DOCK, false)
+            }
+        )
+        dockController.setup()
+    }
+
+    private fun setupDrawer() {
+        drawerRecyclerView.layoutManager = MyGridLayoutManager(this, 4)
+        drawerRecyclerView.setHasFixedSize(true)
+        drawerRecyclerView.itemAnimator = null
+        drawerRecyclerView.isNestedScrollingEnabled = false
+        drawerAdapter = AppAdapter(
+            onClick = { app ->
+                AppRepository.launchApp(this, app.packageName)
+                closeDrawer()
+            },
+            onLongPress = { app, view ->
+                dragController.onLongPress(app, view, DragController.SOURCE_DRAWER, true)
+            }
+        )
+        drawerRecyclerView.adapter = drawerAdapter
+        drawerOverlay.setOnClickListener { closeDrawer() }
+    }
+
+    private fun setupContextMenu() {
+        contextMenuView = AppContextMenuView(this)
+        contextMenuView.onMove = { contextMenuView.dismiss() }
+        contextMenuView.onUninstall = {
+            currentApp?.let { app ->
+                val intent = Intent(Intent.ACTION_DELETE).apply {
+                    data = android.net.Uri.parse("package:${app.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+            }
+        }
+        contextMenuView.onRename = {
+            currentApp?.let { app ->
+                RenameDialog.show(this, app) {
+                    AppRepository.invalidateCache()
+                    AppRepository.loadInstalledAppsWithCustomLabels(this)
+                    loadHomeApps()
+                    dockController.refresh()
+                    val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
+                    drawerAdapter.submitList(apps)
+                    renderWidgets()
+                }
+            }
+        }
+        contextMenuView.onRemove = {
+            currentApp?.let { app ->
+                val homeSlots = PrefsSync.homeSlots(this)
+                val dockItems = PrefsSync.dockItems(this)
+                PrefsSync.setHomeSlots(this, homeSlots.filter { it.packageName != app.packageName })
+                PrefsSync.setDockItems(this, dockItems.map { if (it == app.packageName) "" else it })
+                loadHomeApps()
+                dockController.refresh()
+            }
+        }
+        contextMenuView.onDismiss = { currentApp = null; currentAnchor = null }
+    }
+
+    private fun setupHomePopup() {
+        homePopupMenu = HomePopupMenu(this)
+        homePopupMenu.onAddWidget = {
+            homePopupMenu.dismiss()
+            startWidgetPicker()
+        }
+        homePopupMenu.onAddPage = {
+            currentPageCount += 1
+            PrefsSync.setPageCount(this, currentPageCount)
+            pageIndicator.setPageCount(currentPageCount)
+            homeScreenGrid.setPageCount(currentPageCount)
+        }
+        homePopupMenu.onChangeWallpaper = {
+            try { startActivity(Intent(Intent.ACTION_SET_WALLPAPER)) } catch (_: Exception) {}
+        }
+        homePopupMenu.onRemovePage = {
+            if (currentPageCount > 1) {
+                val currentPageIndex = homeScreenGrid.getCurrentPage()
+                val slots = PrefsSync.homeSlots(this)
+                val widgets = PrefsSync.widgetSlots(this)
+                val itemsOnPage = slots.count { it.page == currentPageIndex } +
+                        widgets.count { it.page == currentPageIndex }
+                if (itemsOnPage > 0) {
+                    Toast.makeText(this, "La pagina non è vuota", Toast.LENGTH_SHORT).show()
+                } else {
+                    val newSlots = slots.map {
+                        if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
+                    }
+                    val newWidgets = widgets.map {
+                        if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
+                    }
+                    PrefsSync.setHomeSlots(this, newSlots)
+                    PrefsSync.setWidgetSlots(this, newWidgets)
+                    currentPageCount -= 1
+                    if (currentPageCount < 1) currentPageCount = 1
+                    PrefsSync.setPageCount(this, currentPageCount)
+                    pageIndicator.setPageCount(currentPageCount)
+                    homeScreenGrid.setPageCount(currentPageCount)
+                    loadHomeApps()
+                    renderWidgets()
+                }
+            }
+        }
+    }
+
+    private fun setupDrawerButton() {
+        dockDrawerButton.removeAllViews()
+        val imageView = ImageView(this).apply {
+            setImageResource(R.drawable.ic_drawer)
+            val size = (62 * resources.displayMetrics.density).toInt()
+            layoutParams = FrameLayout.LayoutParams(size, size).apply { gravity = Gravity.CENTER }
+        }
+        dockDrawerButton.addView(imageView)
+        dockDrawerButton.setOnClickListener { openDrawer() }
+    }
+
+    private fun showHomePopup(anchor: View) {
+        homePopupMenu.show(anchor, showRemovePage = currentPageCount > 1)
+    }
+
+    fun showContextMenuForDrag(app: AppInfo, anchor: View, fromDrawer: Boolean) {
+        currentApp = app
+        currentAnchor = anchor
+        contextMenuView.show(
+            anchor,
+            showRemove = !fromDrawer,
+            drawerIsWhite = fromDrawer && (currentDrawerColor == Color.WHITE)
+        )
+    }
+
+    fun dismissDragPopup() {
+        contextMenuView.dismiss()
+        currentApp = null
+        currentAnchor = null
+    }
+
+    fun dismissWidgetPopup() {
+        widgetPopupWindow?.dismiss()
+        widgetPopupWindow = null
+    }
+
+    fun onDragFromDrawerStarted() {
+        drawerOverlay.visibility = View.GONE
+        drawerOverlay.alpha = 1f
+        drawerOpen = false
+        homeScreenGrid.visibility = View.VISIBLE
+        pageIndicator.visibility = View.VISIBLE
+        dockLayout.visibility = View.VISIBLE
+        widgetContainer.postDelayed({ renderWidgets() }, 200)
+    }
+
+    fun onDragFromDrawerEnded() {
+        if (!drawerOpen) drawerOverlay.alpha = 1f
+    }
+
+    fun getCurrentCols(): Int = currentCols
+    fun getCurrentRows(): Int = currentRows
+
+    fun moveWidget(widgetId: Int, row: Int, col: Int, pageIndex: Int) {
+        val widgets = PrefsSync.widgetSlots(this).toMutableList()
+        val index = widgets.indexOfFirst { it.appWidgetId == widgetId }
+        if (index == -1) return
+        val slot = widgets[index]
+
+        val newRow = (row - (slot.heightCells - 1) / 2).coerceIn(0, currentRows - slot.heightCells)
+        val newCol = (col - (slot.widthCells - 1) / 2).coerceIn(0, currentCols - slot.widthCells)
+
+        val occupiedCells = mutableSetOf<Pair<Int, Int>>()
+        val slots = PrefsSync.homeSlots(this)
+        slots.filter { it.page == pageIndex }.forEach { occupiedCells.add(it.row to it.col) }
+        widgets.filter { it.page == pageIndex && it.appWidgetId != widgetId }.forEach { w ->
+            for (r in w.row until w.row + w.heightCells) {
+                for (c in w.col until w.col + w.widthCells) {
+                    occupiedCells.add(r to c)
+                }
+            }
+        }
+
+        var canMove = true
+        for (r in newRow until newRow + slot.heightCells) {
+            for (c in newCol until newCol + slot.widthCells) {
+                if (occupiedCells.contains(r to c)) {
+                    canMove = false
+                    break
+                }
+            }
+            if (!canMove) break
+        }
+
+        if (canMove) {
+            widgets[index] = slot.copy(row = newRow, col = newCol, page = pageIndex)
+            PrefsSync.setWidgetSlots(this, widgets)
+            renderWidgets()
+        } else {
+            Toast.makeText(this, "Spazio occupato", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun handleDropOnHome(source: String, pkg: String, x: Float, y: Float): Boolean {
+        if (isDropInProgress) return false
+        isDropInProgress = true
+        val pageIndex = homeScreenGrid.getCurrentPage()
+
+        val loc = IntArray(2)
+        homeScreenGrid.getLocationOnScreen(loc)
+        val localX = x - loc[0]
+        val localY = y - loc[1]
+
+        val cellW = homeScreenGrid.width / currentCols
+        val cellH = homeScreenGrid.height / currentRows
+        val col = (localX / cellW).toInt().coerceIn(0, currentCols - 1)
+        val row = (localY / cellH).toInt().coerceIn(0, currentRows - 1)
+
+        val widgetSlots = PrefsSync.widgetSlots(this)
+        val widgetCells = mutableSetOf<Pair<Int, Int>>()
+        widgetSlots.filter { it.page == pageIndex }.forEach { w ->
+            for (r in w.row until w.row + w.heightCells) {
+                for (c in w.col until w.col + w.widthCells) {
+                    widgetCells.add(r to c)
+                }
+            }
+        }
+
+        if (widgetCells.contains(row to col)) {
+            var found = false
+            val currentSlots = PrefsSync.homeSlots(this)
+            for (r in 0 until currentRows) {
+                for (c in 0 until currentCols) {
+                    val occupiedBySlot = currentSlots.any {
+                        it.page == pageIndex && it.row == r && it.col == c && it.packageName != pkg
+                    }
+                    val occupiedByWidget = widgetCells.contains(r to c)
+                    if (!occupiedBySlot && !occupiedByWidget) {
+                        moveToCell(pkg, r, c, pageIndex)
+                        found = true
+                        break
+                    }
+                }
+                if (found) break
+            }
+            isDropInProgress = false
+            return true
+        }
+
+        moveToCell(pkg, row, col, pageIndex)
+        isDropInProgress = false
+        return true
+    }
+
+    private fun moveToCell(pkg: String, row: Int, col: Int, pageIndex: Int) {
+        val slots = PrefsSync.homeSlots(this).toMutableList()
+
+        val existingSlot = slots.firstOrNull {
+            it.page == pageIndex && it.row == row && it.col == col && it.packageName != pkg
+        }
+        val sourceSlot = slots.firstOrNull { it.packageName == pkg }
+
+        slots.removeAll { it.packageName == pkg }
+
+        if (existingSlot != null) {
+            if (sourceSlot != null) {
+                slots.removeAll { it.page == sourceSlot.page && it.row == sourceSlot.row && it.col == sourceSlot.col }
+                slots.add(existingSlot.copy(row = sourceSlot.row, col = sourceSlot.col, page = sourceSlot.page))
+            } else {
+                slots.removeAll { it.page == pageIndex && it.row == row && it.col == col }
+            }
+        }
+
+        slots.add(HomeSlot(pkg, row, col, pageIndex))
+        PrefsSync.setHomeSlots(this, slots)
+
+        val dockItems = PrefsSync.dockItems(this)
+        if (dockItems.contains(pkg)) {
+            PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
+            dockController.refresh()
+        }
+
+        homeScreenGrid.setGridSize(currentCols, currentRows)
+        homeScreenGrid.setPageCount(currentPageCount)
+        homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+    }
+
+    private fun handleDropOnDrawer(pkg: String) {
+        val slots = PrefsSync.homeSlots(this)
+        PrefsSync.setHomeSlots(this, slots.filter { it.packageName != pkg })
+        val dockItems = PrefsSync.dockItems(this)
+        PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
+        homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+        dockController.refresh()
+    }
+
+    private fun loadHomeApps() {
+        val slots = PrefsSync.homeSlots(this)
+        val maxPage = slots.maxOfOrNull { it.page } ?: 0
+        val effectivePageCount = maxOf(currentPageCount, maxPage + 1)
+        if (effectivePageCount != currentPageCount) {
+            currentPageCount = effectivePageCount
+            PrefsSync.setPageCount(this, currentPageCount)
+            pageIndicator.setPageCount(currentPageCount)
+            homeScreenGrid.setPageCount(currentPageCount)
+        }
+
+        if (AppCache.size() == 0) {
+            AppRepository.loadInstalledAppsWithCustomLabels(this)
+        }
+
+        homeScreenGrid.setGridSize(currentCols, currentRows)
+        homeScreenGrid.setPageCount(currentPageCount)
+        homeScreenGrid.setItems(slots)
+
+        pageIndicator.setPageCount(currentPageCount)
+        pageIndicator.setCurrentPage(homeScreenGrid.getCurrentPage().coerceIn(0, currentPageCount - 1))
+
+        if (!drawerOpen) {
+            emptyMessage.visibility = if (slots.isEmpty()) View.VISIBLE else View.GONE
+        }
+    }
+
+    fun reloadHomeGrid() { loadHomeApps() }
+
+    fun removeAppFromGridOnly(pkg: String) {
+        val allSlots = PrefsSync.homeSlots(this)
+        homeScreenGrid.setItems(allSlots.filter { it.packageName != pkg })
+    }
+
+    private fun loadDrawerApps() {
+        if (drawerAdapter.itemCount > 0) return
+        lifecycleScope.launch {
+            val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+            drawerAdapter.submitList(apps)
+        }
+    }
+
+    private fun openDrawer() {
+        if (drawerOpen) return
+        drawerOpen = true
+        homeScreenGrid.visibility = View.INVISIBLE
+        widgetContainer.visibility = View.INVISIBLE
+        pageIndicator.visibility = View.INVISIBLE
+        dockLayout.visibility = View.INVISIBLE
+        emptyMessage.visibility = View.INVISIBLE
+        resizeOverlay.visibility = View.GONE
+        resizeFrame.visibility = View.GONE
+        applyDrawerBackground()
+        drawerOverlay.alpha = 1f
+        drawerOverlay.visibility = View.VISIBLE
+        drawerOverlay.startAnimation(AnimationUtils.loadAnimation(this, R.anim.slide_in_up))
+    }
+
+    private fun closeDrawer() {
+        if (!drawerOpen) return
+        drawerOpen = false
+        drawerOverlay.visibility = View.GONE
+        homeScreenGrid.visibility = View.VISIBLE
+        widgetContainer.visibility = View.VISIBLE
+        pageIndicator.visibility = View.VISIBLE
+        dockLayout.visibility = View.VISIBLE
+    }
+
+    private fun applyDrawerBackground() {
+        if (drawerBgApplied) return
+        lifecycleScope.launch {
+            currentDrawerColor = Prefs.colorFlow(this@HomeActivity).first()
+            currentDrawerAlpha = Prefs.alphaFlow(this@HomeActivity).first()
+            drawerRecyclerView.setBackgroundColor(
+                Color.argb(
+                    (currentDrawerAlpha * 255).toInt(),
+                    Color.red(currentDrawerColor),
+                    Color.green(currentDrawerColor),
+                    Color.blue(currentDrawerColor)
+                )
+            )
+            drawerBgApplied = true
+        }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
+
+        if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
+            if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+                if (!contextMenuView.isPointInside(ev.rawX, ev.rawY)) {
+                    contextMenuView.dismiss()
+                    currentApp = null
+                    currentAnchor = null
+                }
+            }
+        }
+
+        if (!drawerOpen && ev.actionMasked == MotionEvent.ACTION_DOWN && !isResizing) {
+            val loc = IntArray(2)
+            widgetContainer.getLocationOnScreen(loc)
+            val localX = ev.rawX - loc[0]
+            val localY = ev.rawY - loc[1]
+
+            var targetView: View? = null
+            for (i in 0 until widgetContainer.childCount) {
+                val child = widgetContainer.getChildAt(i)
+                if (child.visibility == View.VISIBLE &&
+                    localX >= child.x && localX <= child.x + child.width &&
+                    localY >= child.y && localY <= child.y + child.height
+                ) {
+                    targetView = child
+                    break
+                }
+            }
+
+            if (targetView != null) {
+                (targetView as? LauncherAppWidgetHostView)?.dispatchTouchEvent(ev)
+                return true
+            }
+        }
+
+        return super.dispatchTouchEvent(ev)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (isResizing) { endResizeMode(); return }
+        if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
+            contextMenuView.dismiss(); currentApp = null; currentAnchor = null; return
+        }
+        if (widgetPopupWindow?.isShowing == true) { widgetPopupWindow?.dismiss(); return }
+        if (::homePopupMenu.isInitialized && homePopupMenu.isShowing()) { homePopupMenu.dismiss(); return }
+        if (drawerOpen) closeDrawer()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (drawerOpen) closeDrawer()
+        drawerBgApplied = false
+
+        currentCols = PrefsSync.cols(this)
+        currentRows = PrefsSync.rows(this)
+        currentPageCount = PrefsSync.pageCount(this)
+
+        homeScreenGrid.setGridSize(currentCols, currentRows)
+        homeScreenGrid.setPageCount(currentPageCount)
+
+        if (AppCache.size() == 0) {
+            lifecycleScope.launch {
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                loadHomeApps()
+                dockController.refresh()
+                loadDrawerApps()
+                renderWidgets()
+            }
+        } else {
+            homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+            dockController.refresh()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try { unregisterReceiver(reloadReceiver) } catch (_: Exception) {}
+    }
+
+    private fun askLauncherIfNeeded() {
+        val homeIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val res = packageManager.resolveActivity(homeIntent, 0)
+        if (res?.activityInfo?.packageName == packageName) return
+        val prefs = getSharedPreferences("launcher_flags", MODE_PRIVATE)
+        if (prefs.getBoolean("asked_launcher", false)) return
+        prefs.edit().putBoolean("asked_launcher", true).apply()
+        try {
+            startActivity(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            try { startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e2: Exception) {}
+        }
     }
 }
