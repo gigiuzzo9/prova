@@ -209,13 +209,13 @@ class HomeActivity : AppCompatActivity() {
         homeScreenGrid.emptyCellLongClickListener = { view ->
             showHomePopup(view)
         }
+        homeScreenGrid.onSwipeOffsetChanged = { offset ->
+            widgetContainer.translationX = offset
+        }
         homeScreenGrid.pageChangeListener = { page ->
             pageIndicator.setCurrentPage(page)
-            // Nascondi widget durante il render per evitare il "buco"
-            widgetContainer.visibility = View.INVISIBLE
             widgetContainer.translationX = 0f
             renderWidgets()
-            widgetContainer.visibility = View.VISIBLE
         }
     }
 
@@ -1002,7 +1002,7 @@ class HomeActivity : AppCompatActivity() {
         homeScreenGrid.visibility = View.VISIBLE
         pageIndicator.visibility = View.VISIBLE
         dockLayout.visibility = View.VISIBLE
-        widgetContainer.postDelayed({ renderWidgets() }, 200)
+        widgetContainer.visibility = View.VISIBLE
     }
 
     fun onDragFromDrawerEnded() {
