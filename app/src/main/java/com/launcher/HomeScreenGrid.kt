@@ -1,5 +1,7 @@
 package com.simplylauncher
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
@@ -15,6 +17,7 @@ import android.text.TextUtils
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import kotlin.math.abs
 import kotlin.math.min
@@ -82,7 +85,11 @@ class HomeScreenGrid @JvmOverloads constructor(
     private var isSwiping = false
     private val swipeThreshold = 20f * resources.displayMetrics.density
 
-    private var swipeReturnAnimator: ValueAnimator? = null
+    private val swipeDamping = 0.85f
+    private val swipeCompleteThresholdRatio = 0.2f
+    private val swipeAnimDuration = 250L
+
+    private var swipeAnimator: ValueAnimator? = null
 
     init {
         setWillNotDraw(false)
@@ -300,7 +307,7 @@ class HomeScreenGrid @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                swipeReturnAnimator?.cancel()
+                swipeAnimator?.cancel()
                 touchDownX = event.x
                 touchDownY = event.y
                 touchDownTime = System.currentTimeMillis()
@@ -329,7 +336,9 @@ class HomeScreenGrid @JvmOverloads constructor(
                     val canSwipeRight = dx > 0 && currentPage > 0
                     if (canSwipeLeft || canSwipeRight) {
                         isSwiping = true
-                        swipeOffset = dx.coerceIn(-width.toFloat(), width.toFloat())
+                        // Smorzamento: la pagina si sposta all'85% del dito
+                        val damped = dx * swipeDamping
+                        swipeOffset = damped.coerceIn(-width.toFloat(), width.toFloat())
                         onSwipeOffsetChanged?.invoke(swipeOffset)
                         invalidateDrawing()
                     }
@@ -345,28 +354,37 @@ class HomeScreenGrid @JvmOverloads constructor(
                 }
 
                 if (isSwiping) {
-                    if (swipeOffset < -swipeThreshold * 3 && currentPage < pageCount - 1) {
-                        currentPage++
-                        swipeOffset = 0f
-                        onSwipeOffsetChanged?.invoke(0f)
-                        pageChangeListener?.invoke(currentPage)
-                    } else if (swipeOffset > swipeThreshold * 3 && currentPage > 0) {
-                        currentPage--
-                        swipeOffset = 0f
-                        onSwipeOffsetChanged?.invoke(0f)
-                        pageChangeListener?.invoke(currentPage)
-                    } else {
-                        swipeReturnAnimator?.cancel()
-                        val animator = ValueAnimator.ofFloat(swipeOffset, 0f)
-                        animator.duration = 200
-                        animator.addUpdateListener {
-                            swipeOffset = it.animatedValue as Float
-                            onSwipeOffsetChanged?.invoke(swipeOffset)
-                            invalidateDrawing()
+                    val threshold = width * swipeCompleteThresholdRatio
+
+                    when {
+                        swipeOffset < -threshold && currentPage < pageCount - 1 -> {
+                            // Completa il cambio alla pagina successiva
+                            animateSwipeTo(-width.toFloat()) {
+                                currentPage++
+                                swipeOffset = 0f
+                                onSwipeOffsetChanged?.invoke(0f)
+                                pageChangeListener?.invoke(currentPage)
+                                invalidateDrawing()
+                            }
                         }
-                        animator.start()
-                        swipeReturnAnimator = animator
+                        swipeOffset > threshold && currentPage > 0 -> {
+                            // Completa il cambio alla pagina precedente
+                            animateSwipeTo(width.toFloat()) {
+                                currentPage--
+                                swipeOffset = 0f
+                                onSwipeOffsetChanged?.invoke(0f)
+                                pageChangeListener?.invoke(currentPage)
+                                invalidateDrawing()
+                            }
+                        }
+                        else -> {
+                            // Torna indietro alla pagina corrente
+                            animateSwipeTo(0f) {
+                                // niente da fare
+                            }
+                        }
                     }
+
                     isSwiping = false
                     invalidateDrawing()
                     return true
@@ -382,6 +400,25 @@ class HomeScreenGrid @JvmOverloads constructor(
             }
         }
         return super.onTouchEvent(event)
+    }
+
+    private fun animateSwipeTo(target: Float, onEnd: () -> Unit) {
+        swipeAnimator?.cancel()
+        val animator = ValueAnimator.ofFloat(swipeOffset, target)
+        animator.duration = swipeAnimDuration
+        animator.interpolator = DecelerateInterpolator()
+        animator.addUpdateListener {
+            swipeOffset = it.animatedValue as Float
+            onSwipeOffsetChanged?.invoke(swipeOffset)
+            invalidateDrawing()
+        }
+        animator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                onEnd()
+            }
+        })
+        animator.start()
+        swipeAnimator = animator
     }
 
     fun isPointInside(x: Float, y: Float): Boolean {
