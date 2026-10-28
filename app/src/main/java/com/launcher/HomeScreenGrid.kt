@@ -157,6 +157,20 @@ class HomeScreenGrid @JvmOverloads constructor(
         invalidateDrawing()
     }
 
+    /**
+     * Imposta l'item in drag tramite packageName. Se pkg è null, resetta.
+     * Usato da HomeActivity per sincronizzare il ghost.
+     */
+    fun setDraggingPackage(pkg: String?, page: Int) {
+        draggingItem = if (pkg == null) {
+            null
+        } else {
+            items.firstOrNull { it.packageName == pkg && it.page == page }
+                ?: HomeSlot(pkg, -1, -1, page) // non trovato, ma vogliamo che il ghost sia attivo
+        }
+        invalidateDrawing()
+    }
+
     fun setDraggingCoords(x: Float, y: Float) {
         draggingCoords = Pair(x, y)
         invalidateDrawing()
@@ -252,6 +266,7 @@ class HomeScreenGrid @JvmOverloads constructor(
 
     private fun drawPage(canvas: Canvas, page: Int) {
         items.filter { it.page == page && it.packageName.isNotEmpty() }.forEach { slot ->
+            // Salta l'item originale se è quello in drag (ghost)
             if (draggingItem?.packageName == slot.packageName && draggingItem?.page == slot.page) {
                 return@forEach
             }
@@ -338,9 +353,13 @@ class HomeScreenGrid @JvmOverloads constructor(
                 }
 
                 if (abs(dx) > abs(dy) && abs(dx) > swipeThreshold) {
-                    isSwiping = true
-                    swipeOffset = dx
-                    invalidateDrawing()
+                    val canSwipeLeft = dx < 0 && currentPage < pageCount - 1
+                    val canSwipeRight = dx > 0 && currentPage > 0
+                    if (canSwipeLeft || canSwipeRight) {
+                        isSwiping = true
+                        swipeOffset = dx
+                        invalidateDrawing()
+                    }
                 }
                 return true
             }
