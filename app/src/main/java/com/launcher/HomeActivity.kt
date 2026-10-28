@@ -919,40 +919,44 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupContextMenu() {
-        contextMenuView = AppContextMenuView(this)
-        contextMenuView.onMove = { contextMenuView.dismiss() }
-        contextMenuView.onUninstall = {
-            currentApp?.let { app ->
+    contextMenuView = AppContextMenuView(this)
+    contextMenuView.onMove = { contextMenuView.dismiss() }
+    contextMenuView.onUninstall = {
+        currentApp?.let { app ->
+            try {
                 val intent = Intent(Intent.ACTION_DELETE).apply {
                     data = android.net.Uri.parse("package:${app.packageName}")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_LONG).show()
             }
-        }
-        contextMenuView.onRename = {
-            currentApp?.let { app ->
-                RenameDialog.show(this, app) {
-                    AppRepository.invalidateCache()
-                    AppRepository.loadInstalledAppsWithCustomLabels(this)
-                    homeScreenGrid.setItems(PrefsSync.homeSlots(this))
-                    val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
-                    drawerAdapter.submitList(apps)
-                }
-            }
-        }
-        contextMenuView.onRemove = {
-            currentApp?.let { app ->
-                val homeSlots = PrefsSync.homeSlots(this)
-                val dockItems = PrefsSync.dockItems(this)
-                PrefsSync.setHomeSlots(this, homeSlots.filter { it.packageName != app.packageName })
-                PrefsSync.setDockItems(this, dockItems.map { if (it == app.packageName) "" else it })
-                loadHomeApps()
-                dockController.refresh()
-            }
-        }
-        contextMenuView.onDismiss = { currentApp = null; currentAnchor = null }
+        } ?: Toast.makeText(this, "currentApp è null", Toast.LENGTH_SHORT).show()
     }
+    contextMenuView.onRename = {
+        currentApp?.let { app ->
+            RenameDialog.show(this, app) {
+                AppRepository.invalidateCache()
+                AppRepository.loadInstalledAppsWithCustomLabels(this)
+                homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+                val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
+                drawerAdapter.submitList(apps)
+            }
+        }
+    }
+    contextMenuView.onRemove = {
+        currentApp?.let { app ->
+            val homeSlots = PrefsSync.homeSlots(this)
+            val dockItems = PrefsSync.dockItems(this)
+            PrefsSync.setHomeSlots(this, homeSlots.filter { it.packageName != app.packageName })
+            PrefsSync.setDockItems(this, dockItems.map { if (it == app.packageName) "" else it })
+            loadHomeApps()
+            dockController.refresh()
+        }
+    }
+    contextMenuView.onDismiss = { currentApp = null; currentAnchor = null }
+}
 
     private fun setupHomePopup() {
         homePopupMenu = HomePopupMenu(this)
