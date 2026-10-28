@@ -303,7 +303,11 @@ class HomeActivity : AppCompatActivity() {
     super.onActivityResult(requestCode, resultCode, data)
     when (requestCode) {
         UNINSTALL_APP_REQUEST_CODE -> {
-            Toast.makeText(this, "onActivityResult UNINSTALL, result=$resultCode", Toast.LENGTH_SHORT).show()
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Debug result")
+                .setMessage("requestCode = $requestCode\n\nresultCode = $resultCode")
+                .setPositiveButton("OK", null)
+                .show()
             AppRepository.invalidateCache()
             lifecycleScope.launch {
                 AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
@@ -932,19 +936,28 @@ class HomeActivity : AppCompatActivity() {
     contextMenuView = AppContextMenuView(this)
     contextMenuView.onMove = { contextMenuView.dismiss() }
     contextMenuView.onUninstall = {
-        Toast.makeText(this, "onUninstall chiamato", Toast.LENGTH_SHORT).show()
-        currentApp?.let { app ->
-            Toast.makeText(this, "Package: ${app.packageName}", Toast.LENGTH_SHORT).show()
+        val app = currentApp
+        val msg = StringBuilder()
+        if (app == null) {
+            msg.append("currentApp = null")
+        } else {
+            msg.append("package = ${app.packageName}\n\n")
             try {
                 val intent = Intent(Intent.ACTION_DELETE).apply {
                     data = android.net.Uri.fromParts("package", app.packageName, null)
                 }
+                msg.append("intent creato\n\n")
                 startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
-                Toast.makeText(this, "startActivityForResult eseguito", Toast.LENGTH_SHORT).show()
+                msg.append("startActivityForResult OK")
             } catch (e: Exception) {
-                Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_LONG).show()
+                msg.append("ECCEZIONE: ${e.message}")
             }
-        } ?: Toast.makeText(this, "currentApp è null", Toast.LENGTH_SHORT).show()
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Debug uninstall")
+            .setMessage(msg.toString())
+            .setPositiveButton("OK", null)
+            .show()
     }
     contextMenuView.onRename = {
         currentApp?.let { app ->
