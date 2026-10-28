@@ -389,7 +389,7 @@ class HomeActivity : AppCompatActivity() {
             else Toast.makeText(this, R.string.widget_config_cancelled, Toast.LENGTH_SHORT).show()
         }
     }
-}
+} 
 
     private fun findFreeCellAndPlaceWidget() {
         if (pendingWidgetId == -1) return
