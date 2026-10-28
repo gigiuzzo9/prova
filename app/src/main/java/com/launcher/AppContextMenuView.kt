@@ -72,10 +72,7 @@ class AppContextMenuView(private val ctx: Context) {
             setTextColor(textColor)
             textSize = 16f
             setPadding(32, 20, 32, 20)
-            setOnClickListener {
-                android.widget.Toast.makeText(ctx, "Click: $text", android.widget.Toast.LENGTH_SHORT).show()
-                onClick()
-            }
+            setOnClickListener { onClick() }
         }
     }
 
