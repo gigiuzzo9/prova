@@ -225,45 +225,34 @@ class HomeScreenGrid @JvmOverloads constructor(
         if (cells.isEmpty()) ensureCells()
         if (cells.isEmpty()) return
 
-        val pageOffset = -(currentPage * width) + swipeOffset.toInt()
-
-        canvas.save()
-        canvas.translate(pageOffset.toFloat(), 0f)
-        drawPage(canvas, currentPage)
-        canvas.restore()
+        drawPage(canvas, currentPage, swipeOffset)
 
         if (swipeOffset > 0 && currentPage > 0) {
-            canvas.save()
-            canvas.translate((pageOffset + width).toFloat(), 0f)
-            drawPage(canvas, currentPage - 1)
-            canvas.restore()
+            drawPage(canvas, currentPage - 1, swipeOffset - width)
         } else if (swipeOffset < 0 && currentPage < pageCount - 1) {
-            canvas.save()
-            canvas.translate((pageOffset - width).toFloat(), 0f)
-            drawPage(canvas, currentPage + 1)
-            canvas.restore()
+            drawPage(canvas, currentPage + 1, swipeOffset + width)
         }
 
         drawingItem(canvas)
     }
 
-    private fun drawPage(canvas: Canvas, page: Int) {
+    private fun drawPage(canvas: Canvas, page: Int, offsetX: Float) {
         items.filter { it.page == page && it.packageName.isNotEmpty() }.forEach { slot ->
             if (draggingItem?.packageName == slot.packageName && draggingItem?.page == slot.page) {
                 return@forEach
             }
             val cell = cells[Pair(slot.row, slot.col)] ?: return@forEach
-            drawIconAt(canvas, slot, cell)
+            drawIconAt(canvas, slot, cell, offsetX)
         }
     }
 
-    private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect) {
+    private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect, offsetX: Float) {
         val app = AppCache.get(slot.packageName) ?: return
         val bitmap = getIconBitmap(slot.packageName) ?: return
 
-        val iconLeft = cell.left + (cell.width() - iconSize) / 2
+        val iconLeft = cell.left + (cell.width() - iconSize) / 2 + offsetX
         val iconTop = cell.top + iconMargin
-        canvas.drawBitmap(bitmap, iconLeft.toFloat(), iconTop.toFloat(), null)
+        canvas.drawBitmap(bitmap, iconLeft, iconTop, null)
 
         if (app.label.isNotEmpty()) {
             val textWidth = cell.width() - 2 * labelSideMargin
@@ -276,7 +265,7 @@ class HomeScreenGrid @JvmOverloads constructor(
 
             val labelTop = iconTop + iconSize + (iconMargin / 2)
             canvas.save()
-            canvas.translate(cell.left.toFloat() + labelSideMargin, labelTop.toFloat())
+            canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop.toFloat())
             layout.draw(canvas)
             canvas.restore()
         }
@@ -340,7 +329,7 @@ class HomeScreenGrid @JvmOverloads constructor(
                     val canSwipeRight = dx > 0 && currentPage > 0
                     if (canSwipeLeft || canSwipeRight) {
                         isSwiping = true
-                        swipeOffset = dx
+                        swipeOffset = dx.coerceIn(-width.toFloat(), width.toFloat())
                         onSwipeOffsetChanged?.invoke(swipeOffset)
                         invalidateDrawing()
                     }
@@ -356,7 +345,6 @@ class HomeScreenGrid @JvmOverloads constructor(
                 }
 
                 if (isSwiping) {
-                    val oldPage = currentPage
                     if (swipeOffset < -swipeThreshold * 3 && currentPage < pageCount - 1) {
                         currentPage++
                         swipeOffset = 0f
@@ -368,7 +356,6 @@ class HomeScreenGrid @JvmOverloads constructor(
                         onSwipeOffsetChanged?.invoke(0f)
                         pageChangeListener?.invoke(currentPage)
                     } else {
-                        // Animazione di ritorno graduale
                         swipeReturnAnimator?.cancel()
                         val animator = ValueAnimator.ofFloat(swipeOffset, 0f)
                         animator.duration = 200
@@ -382,10 +369,6 @@ class HomeScreenGrid @JvmOverloads constructor(
                     }
                     isSwiping = false
                     invalidateDrawing()
-
-                    if (oldPage != currentPage) {
-                        // già notificato sopra
-                    }
                     return true
                 }
 
