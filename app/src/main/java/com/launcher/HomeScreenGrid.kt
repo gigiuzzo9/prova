@@ -202,7 +202,8 @@ class HomeScreenGrid @JvmOverloads constructor(
         cellWidth = width / columnCount
         cellHeight = height / rowCount
         iconMargin = (cellWidth * 0.08f).toInt()
-        iconSize = min(cellWidth, cellHeight) - 2 * iconMargin
+        // Icone della griglia 62dp, come quelle della dock
+        iconSize = (62 * resources.displayMetrics.density).toInt()
         labelSideMargin = (cellWidth * 0.04f).toInt()
         cells.clear()
         for (r in 0 until rowCount) {
@@ -230,9 +231,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         return AppCache.getIconBitmap(pkg, iconSize)
     }
 
-    // --- Smoothing loop ---
-    // Quando il dito si muove, targetSwipeOffset viene aggiornato.
-    // Ad ogni frame, swipeOffset si avvicina a targetSwipeOffset con smoothing.
     private val smoothingRunnable = object : Runnable {
         override fun run() {
             if (isAnimatingSwipe) return
@@ -254,8 +252,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         drawingArea.removeCallbacks(smoothingRunnable)
         drawingArea.postOnAnimation(smoothingRunnable)
     }
-
-    // --- Drawing ---
 
     fun drawInto(canvas: Canvas) {
         if (cells.isEmpty()) ensureCells()
@@ -330,8 +326,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         canvas.drawBitmap(bitmap, cx, cy, null)
     }
 
-    // --- Touch ---
-
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
@@ -362,7 +356,6 @@ class HomeScreenGrid @JvmOverloads constructor(
                     return true
                 }
 
-                // Lo swipe parte dal primo pixel, niente soglia.
                 if (abs(dx) > abs(dy) && abs(dx) > 1f) {
                     val canSwipeLeft = dx < 0 && currentPage < pageCount - 1
                     val canSwipeRight = dx > 0 && currentPage > 0
@@ -386,7 +379,6 @@ class HomeScreenGrid @JvmOverloads constructor(
                 if (isSwiping) {
                     val absDx = abs(targetSwipeOffset / swipeDamping)
 
-                    // tap se il movimento è minimo
                     if (absDx < tapThreshold) {
                         animateSwipeTo(0f) {
                             if (!longPressTriggered) {
