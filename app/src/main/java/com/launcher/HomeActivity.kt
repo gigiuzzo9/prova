@@ -924,7 +924,7 @@ class HomeActivity : AppCompatActivity() {
     contextMenuView.onUninstall = {
         currentApp?.let { app ->
             try {
-                val intent = Intent(Intent.ACTION_DELETE).apply {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                     data = android.net.Uri.parse("package:${app.packageName}")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
@@ -932,7 +932,7 @@ class HomeActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_LONG).show()
             }
-        } ?: Toast.makeText(this, "currentApp è null", Toast.LENGTH_SHORT).show()
+        }
     }
     contextMenuView.onRename = {
         currentApp?.let { app ->
