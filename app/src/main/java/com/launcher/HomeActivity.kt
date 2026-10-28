@@ -214,10 +214,8 @@ class HomeActivity : AppCompatActivity() {
         }
 
         homeScreenGrid.onSwipeOffsetChanged = { offset ->
-            // La pagina corrente è a x = offset
             widgetContainer.translationX = offset
 
-            // La pagina adiacente è a x = offset ± width
             val page = homeScreenGrid.getCurrentPage()
             val adj = when {
                 offset > 0 && page > 0 -> page - 1
@@ -240,7 +238,6 @@ class HomeActivity : AppCompatActivity() {
 
         homeScreenGrid.pageChangeListener = { page ->
             pageIndicator.setCurrentPage(page)
-            // swap: il container2 diventa il container corrente
             val tmp = widgetContainer
             widgetContainer = widgetContainer2
             widgetContainer2 = tmp
@@ -623,6 +620,8 @@ class HomeActivity : AppCompatActivity() {
         resizeOverlay.bringToFront()
         resizeOverlay.elevation = 20f * resources.displayMetrics.density
         resizeFrame.visibility = View.VISIBLE
+        resizeFrame.bringToFront()
+        resizeFrame.elevation = 25f * resources.displayMetrics.density
     }
 
     private fun updateWidgetPositionAndSize(
@@ -899,6 +898,14 @@ class HomeActivity : AppCompatActivity() {
         drawerRecyclerView.setHasFixedSize(true)
         drawerRecyclerView.itemAnimator = null
         drawerRecyclerView.isNestedScrollingEnabled = false
+        // Spaziatura tra le righe del cassetto
+        drawerRecyclerView.addItemDecoration(object : RecyclerView.ItemDecoration() {
+            override fun getItemOffsets(
+                outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
+            ) {
+                outRect.bottom = (16 * resources.displayMetrics.density).toInt()
+            }
+        })
         drawerAdapter = AppAdapter(
             onClick = { app ->
                 AppRepository.launchApp(this, app.packageName)
