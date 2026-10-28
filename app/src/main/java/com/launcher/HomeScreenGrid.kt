@@ -83,7 +83,7 @@ class HomeScreenGrid @JvmOverloads constructor(
 
     private var swipeOffset = 0f
     private var isSwiping = false
-    private val swipeThreshold = 20f * resources.displayMetrics.density
+    private val swipeThreshold = 12f * resources.displayMetrics.density
 
     private val swipeDamping = 0.85f
     private val swipeCompleteThresholdRatio = 0.2f
@@ -336,8 +336,9 @@ class HomeScreenGrid @JvmOverloads constructor(
                     val canSwipeRight = dx > 0 && currentPage > 0
                     if (canSwipeLeft || canSwipeRight) {
                         isSwiping = true
-                        // Smorzamento: la pagina si sposta all'85% del dito
-                        val damped = dx * swipeDamping
+                        // Compensa la soglia: parte da 0 e cresce gradualmente
+                        val effectiveDx = if (dx > 0) dx - swipeThreshold else dx + swipeThreshold
+                        val damped = effectiveDx * swipeDamping
                         swipeOffset = damped.coerceIn(-width.toFloat(), width.toFloat())
                         onSwipeOffsetChanged?.invoke(swipeOffset)
                         invalidateDrawing()
@@ -358,7 +359,6 @@ class HomeScreenGrid @JvmOverloads constructor(
 
                     when {
                         swipeOffset < -threshold && currentPage < pageCount - 1 -> {
-                            // Completa il cambio alla pagina successiva
                             animateSwipeTo(-width.toFloat()) {
                                 currentPage++
                                 swipeOffset = 0f
@@ -368,7 +368,6 @@ class HomeScreenGrid @JvmOverloads constructor(
                             }
                         }
                         swipeOffset > threshold && currentPage > 0 -> {
-                            // Completa il cambio alla pagina precedente
                             animateSwipeTo(width.toFloat()) {
                                 currentPage--
                                 swipeOffset = 0f
@@ -378,7 +377,6 @@ class HomeScreenGrid @JvmOverloads constructor(
                             }
                         }
                         else -> {
-                            // Torna indietro alla pagina corrente
                             animateSwipeTo(0f) {
                                 // niente da fare
                             }
