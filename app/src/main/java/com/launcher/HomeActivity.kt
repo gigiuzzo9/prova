@@ -303,6 +303,7 @@ class HomeActivity : AppCompatActivity() {
     super.onActivityResult(requestCode, resultCode, data)
     when (requestCode) {
         UNINSTALL_APP_REQUEST_CODE -> {
+            Toast.makeText(this, "onActivityResult UNINSTALL, result=$resultCode", Toast.LENGTH_SHORT).show()
             AppRepository.invalidateCache()
             lifecycleScope.launch {
                 AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
@@ -931,12 +932,19 @@ class HomeActivity : AppCompatActivity() {
     contextMenuView = AppContextMenuView(this)
     contextMenuView.onMove = { contextMenuView.dismiss() }
     contextMenuView.onUninstall = {
+        Toast.makeText(this, "onUninstall chiamato", Toast.LENGTH_SHORT).show()
         currentApp?.let { app ->
-            val intent = Intent(Intent.ACTION_DELETE).apply {
-                data = android.net.Uri.fromParts("package", app.packageName, null)
+            Toast.makeText(this, "Package: ${app.packageName}", Toast.LENGTH_SHORT).show()
+            try {
+                val intent = Intent(Intent.ACTION_DELETE).apply {
+                    data = android.net.Uri.fromParts("package", app.packageName, null)
+                }
+                startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
+                Toast.makeText(this, "startActivityForResult eseguito", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_LONG).show()
             }
-            startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
-        }
+        } ?: Toast.makeText(this, "currentApp è null", Toast.LENGTH_SHORT).show()
     }
     contextMenuView.onRename = {
         currentApp?.let { app ->
@@ -961,51 +969,6 @@ class HomeActivity : AppCompatActivity() {
     }
     contextMenuView.onDismiss = { currentApp = null; currentAnchor = null }
 }
-
-    private fun setupHomePopup() {
-        homePopupMenu = HomePopupMenu(this)
-        homePopupMenu.onAddWidget = {
-            homePopupMenu.dismiss()
-            startWidgetPicker()
-        }
-        homePopupMenu.onAddPage = {
-            currentPageCount += 1
-            PrefsSync.setPageCount(this, currentPageCount)
-            pageIndicator.setPageCount(currentPageCount)
-            homeScreenGrid.setPageCount(currentPageCount)
-        }
-        homePopupMenu.onChangeWallpaper = {
-            try { startActivity(Intent(Intent.ACTION_SET_WALLPAPER)) } catch (_: Exception) {}
-        }
-        homePopupMenu.onRemovePage = {
-            if (currentPageCount > 1) {
-                val currentPageIndex = homeScreenGrid.getCurrentPage()
-                val slots = PrefsSync.homeSlots(this)
-                val widgets = PrefsSync.widgetSlots(this)
-                val itemsOnPage = slots.count { it.page == currentPageIndex } +
-                        widgets.count { it.page == currentPageIndex }
-                if (itemsOnPage > 0) {
-                    Toast.makeText(this, "La pagina non è vuota", Toast.LENGTH_SHORT).show()
-                } else {
-                    val newSlots = slots.map {
-                        if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
-                    }
-                    val newWidgets = widgets.map {
-                        if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
-                    }
-                    PrefsSync.setHomeSlots(this, newSlots)
-                    PrefsSync.setWidgetSlots(this, newWidgets)
-                    currentPageCount -= 1
-                    if (currentPageCount < 1) currentPageCount = 1
-                    PrefsSync.setPageCount(this, currentPageCount)
-                    pageIndicator.setPageCount(currentPageCount)
-                    homeScreenGrid.setPageCount(currentPageCount)
-                    loadHomeApps()
-                    renderWidgets()
-                }
-            }
-        }
-    }
 
     private fun setupDrawerButton() {
         dockDrawerButton.removeAllViews()
