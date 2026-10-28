@@ -1,5 +1,6 @@
 package com.simplylauncher
 
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
@@ -56,6 +57,8 @@ class HomeScreenGrid @JvmOverloads constructor(
     var itemClickListener: ((HomeSlot) -> Unit)? = null
     var itemLongClickListener: ((HomeSlot, View) -> Unit)? = null
     var emptyCellLongClickListener: ((View) -> Unit)? = null
+    var pageChangeListener: ((Int) -> Unit)? = null
+    var onSwipeOffsetChanged: ((Float) -> Unit)? = null
 
     private var draggingItem: HomeSlot? = null
     private var draggingCoords = Pair(-1f, -1f)
@@ -78,6 +81,8 @@ class HomeScreenGrid @JvmOverloads constructor(
     private var swipeOffset = 0f
     private var isSwiping = false
     private val swipeThreshold = 20f * resources.displayMetrics.density
+
+    private var swipeReturnAnimator: ValueAnimator? = null
 
     init {
         setWillNotDraw(false)
@@ -117,6 +122,7 @@ class HomeScreenGrid @JvmOverloads constructor(
         if (page in 0 until pageCount && page != currentPage) {
             currentPage = page
             swipeOffset = 0f
+            onSwipeOffsetChanged?.invoke(0f)
             invalidateDrawing()
         }
     }
@@ -305,12 +311,14 @@ class HomeScreenGrid @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                swipeReturnAnimator?.cancel()
                 touchDownX = event.x
                 touchDownY = event.y
                 touchDownTime = System.currentTimeMillis()
                 longPressTriggered = false
                 isSwiping = false
                 swipeOffset = 0f
+                onSwipeOffsetChanged?.invoke(0f)
                 postDelayed(longPressRunnable, longPressTimeout)
                 return true
             }
@@ -333,6 +341,7 @@ class HomeScreenGrid @JvmOverloads constructor(
                     if (canSwipeLeft || canSwipeRight) {
                         isSwiping = true
                         swipeOffset = dx
+                        onSwipeOffsetChanged?.invoke(swipeOffset)
                         invalidateDrawing()
                     }
                 }
@@ -350,15 +359,32 @@ class HomeScreenGrid @JvmOverloads constructor(
                     val oldPage = currentPage
                     if (swipeOffset < -swipeThreshold * 3 && currentPage < pageCount - 1) {
                         currentPage++
+                        swipeOffset = 0f
+                        onSwipeOffsetChanged?.invoke(0f)
+                        pageChangeListener?.invoke(currentPage)
                     } else if (swipeOffset > swipeThreshold * 3 && currentPage > 0) {
                         currentPage--
+                        swipeOffset = 0f
+                        onSwipeOffsetChanged?.invoke(0f)
+                        pageChangeListener?.invoke(currentPage)
+                    } else {
+                        // Animazione di ritorno graduale
+                        swipeReturnAnimator?.cancel()
+                        val animator = ValueAnimator.ofFloat(swipeOffset, 0f)
+                        animator.duration = 200
+                        animator.addUpdateListener {
+                            swipeOffset = it.animatedValue as Float
+                            onSwipeOffsetChanged?.invoke(swipeOffset)
+                            invalidateDrawing()
+                        }
+                        animator.start()
+                        swipeReturnAnimator = animator
                     }
-                    swipeOffset = 0f
                     isSwiping = false
                     invalidateDrawing()
 
                     if (oldPage != currentPage) {
-                        pageChangeListener?.invoke(currentPage)
+                        // già notificato sopra
                     }
                     return true
                 }
@@ -374,8 +400,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         }
         return super.onTouchEvent(event)
     }
-
-    var pageChangeListener: ((Int) -> Unit)? = null
 
     fun isPointInside(x: Float, y: Float): Boolean {
         val loc = IntArray(2)
