@@ -34,6 +34,7 @@ class HomeActivity : AppCompatActivity() {
 
     private lateinit var homeScreenGrid: HomeScreenGrid
     private lateinit var widgetContainer: FrameLayout
+    private lateinit var widgetContainer2: FrameLayout
     private lateinit var pageIndicator: PageIndicatorView
     private lateinit var emptyMessage: TextView
     private lateinit var dockDrawerButton: FrameLayout
@@ -83,6 +84,7 @@ class HomeActivity : AppCompatActivity() {
     private var currentDrawerAlpha: Float = 0.9f
 
     private var drawerBgApplied = false
+    private var adjWidgetPage = -1
 
     private val REQUEST_PICK_WIDGET = 100
     private val REQUEST_BIND_WIDGET = 101
@@ -111,6 +113,7 @@ class HomeActivity : AppCompatActivity() {
 
         homeScreenGrid = findViewById(R.id.homeScreenGrid)
         widgetContainer = findViewById(R.id.widgetContainer)
+        widgetContainer2 = findViewById(R.id.widgetContainer2)
         pageIndicator = findViewById(R.id.pageIndicator)
         emptyMessage = findViewById(R.id.emptyMessage)
         dockDrawerButton = findViewById(R.id.dockDrawerButton)
@@ -209,12 +212,42 @@ class HomeActivity : AppCompatActivity() {
         homeScreenGrid.emptyCellLongClickListener = { view ->
             showHomePopup(view)
         }
+
         homeScreenGrid.onSwipeOffsetChanged = { offset ->
+            // La pagina corrente è a x = offset
             widgetContainer.translationX = offset
+
+            // La pagina adiacente è a x = offset ± width
+            val page = homeScreenGrid.getCurrentPage()
+            val adj = when {
+                offset > 0 && page > 0 -> page - 1
+                offset < 0 && page < currentPageCount - 1 -> page + 1
+                else -> -1
+            }
+            if (adj != -1) {
+                if (adjWidgetPage != adj) {
+                    adjWidgetPage = adj
+                    renderWidgetsForPage(adj, widgetContainer2)
+                }
+                val sign = if (offset > 0) -1 else 1
+                widgetContainer2.translationX = offset + sign * homeScreenGrid.width
+            } else {
+                widgetContainer2.translationX = 0f
+                widgetContainer2.removeAllViews()
+                adjWidgetPage = -1
+            }
         }
+
         homeScreenGrid.pageChangeListener = { page ->
             pageIndicator.setCurrentPage(page)
+            // swap: il container2 diventa il container corrente
+            val tmp = widgetContainer
+            widgetContainer = widgetContainer2
+            widgetContainer2 = tmp
             widgetContainer.translationX = 0f
+            widgetContainer2.translationX = 0f
+            widgetContainer2.removeAllViews()
+            adjWidgetPage = -1
             renderWidgets()
         }
     }
@@ -482,14 +515,17 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun renderWidgets() {
-        val allWidgets = PrefsSync.widgetSlots(this)
-        widgetContainer.removeAllViews()
+        renderWidgetsForPage(homeScreenGrid.getCurrentPage(), widgetContainer)
+    }
 
-        val pageIndex = homeScreenGrid.getCurrentPage()
+    private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
+        val allWidgets = PrefsSync.widgetSlots(this)
+        container.removeAllViews()
+
         val cellW = homeScreenGrid.width / currentCols
         val cellH = homeScreenGrid.height / currentRows
 
-        val pageWidgets = allWidgets.filter { it.page == pageIndex }
+        val pageWidgets = allWidgets.filter { it.page == page }
         for (slot in pageWidgets) {
             try {
                 val info = appWidgetManager.getAppWidgetInfo(slot.appWidgetId) ?: continue
@@ -504,7 +540,7 @@ class HomeActivity : AppCompatActivity() {
                     leftMargin = slot.col * cellW
                     topMargin = slot.row * cellH
                 }
-                widgetContainer.addView(hostView, lp)
+                container.addView(hostView, lp)
 
                 hostView.post {
                     try {
@@ -521,7 +557,7 @@ class HomeActivity : AppCompatActivity() {
 
                 hostView.onLongPress = {
                     dragController.onWidgetLongPress(slot, info, hostView)
-                    showWidgetMenu(slot, info, cellW, cellH, hostView, pageIndex)
+                    showWidgetMenu(slot, info, cellW, cellH, hostView, page)
                 }
                 hostView.onIgnoreIntercepted = {
                     widgetPopupWindow?.dismiss()
@@ -1003,6 +1039,7 @@ class HomeActivity : AppCompatActivity() {
         pageIndicator.visibility = View.VISIBLE
         dockLayout.visibility = View.VISIBLE
         widgetContainer.visibility = View.VISIBLE
+        widgetContainer2.visibility = View.VISIBLE
     }
 
     fun onDragFromDrawerEnded() {
@@ -1192,6 +1229,7 @@ class HomeActivity : AppCompatActivity() {
         drawerOpen = true
         homeScreenGrid.visibility = View.INVISIBLE
         widgetContainer.visibility = View.INVISIBLE
+        widgetContainer2.visibility = View.INVISIBLE
         pageIndicator.visibility = View.INVISIBLE
         dockLayout.visibility = View.INVISIBLE
         emptyMessage.visibility = View.INVISIBLE
@@ -1209,6 +1247,7 @@ class HomeActivity : AppCompatActivity() {
         drawerOverlay.visibility = View.GONE
         homeScreenGrid.visibility = View.VISIBLE
         widgetContainer.visibility = View.VISIBLE
+        widgetContainer2.visibility = View.VISIBLE
         pageIndicator.visibility = View.VISIBLE
         dockLayout.visibility = View.VISIBLE
     }
