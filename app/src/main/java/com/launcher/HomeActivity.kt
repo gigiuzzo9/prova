@@ -1221,7 +1221,6 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun loadDrawerApps() {
-        if (drawerAdapter.itemCount > 0) return
         lifecycleScope.launch {
             val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
             drawerAdapter.submitList(apps)
@@ -1329,6 +1328,9 @@ class HomeActivity : AppCompatActivity() {
         if (drawerOpen) closeDrawer()
         drawerBgApplied = false
 
+        // Invalida la cache: potrebbero essere state installate/rimosse app
+        AppRepository.invalidateCache()
+
         currentCols = PrefsSync.cols(this)
         currentRows = PrefsSync.rows(this)
         currentPageCount = PrefsSync.pageCount(this)
@@ -1336,17 +1338,12 @@ class HomeActivity : AppCompatActivity() {
         homeScreenGrid.setGridSize(currentCols, currentRows)
         homeScreenGrid.setPageCount(currentPageCount)
 
-        if (AppCache.size() == 0) {
-            lifecycleScope.launch {
-                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-                loadHomeApps()
-                dockController.refresh()
-                loadDrawerApps()
-                renderWidgets()
-            }
-        } else {
-            homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+        lifecycleScope.launch {
+            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+            loadHomeApps()
             dockController.refresh()
+            loadDrawerApps()
+            renderWidgets()
         }
     }
 
