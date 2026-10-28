@@ -250,8 +250,8 @@ class HomeScreenGrid @JvmOverloads constructor(
         val app = AppCache.get(slot.packageName) ?: return
         val bitmap = getIconBitmap(slot.packageName) ?: return
 
-        val iconLeft = cell.left + (cell.width() - iconSize) / 2 + offsetX
-        val iconTop = cell.top + iconMargin
+        val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX
+        val iconTop = cell.top.toFloat() + iconMargin.toFloat()
         canvas.drawBitmap(bitmap, iconLeft, iconTop, null)
 
         if (app.label.isNotEmpty()) {
@@ -265,7 +265,7 @@ class HomeScreenGrid @JvmOverloads constructor(
 
             val labelTop = iconTop + iconSize + (iconMargin / 2)
             canvas.save()
-            canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop.toFloat())
+            canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
             layout.draw(canvas)
             canvas.restore()
         }
