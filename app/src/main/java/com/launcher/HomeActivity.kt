@@ -70,7 +70,7 @@ class HomeActivity : AppCompatActivity() {
     private var pendingWidgetCol = 0
     private var pendingWidgetWidthCells = 2
     private var pendingWidgetHeightCells = 1
-
+    private val UNINSTALL_APP_REQUEST_CODE = 200
     private var resizingWidgetSlot: WidgetSlot? = null
     private var resizingWidgetView: LauncherAppWidgetHostView? = null
     private var widgetPopupWindow: android.widget.PopupWindow? = null
@@ -300,87 +300,96 @@ class HomeActivity : AppCompatActivity() {
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        when (requestCode) {
-            REQUEST_PICK_WIDGET -> {
-                if (resultCode == RESULT_OK && data != null) {
-                    val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
-                    val needsBind = data.getBooleanExtra(WidgetPickerActivity.EXTRA_NEEDS_BIND, false)
-                    val provider: android.content.ComponentName? =
-                        if (android.os.Build.VERSION.SDK_INT >= 33) {
-                            data.getParcelableExtra(
-                                WidgetPickerActivity.EXTRA_PROVIDER,
-                                android.content.ComponentName::class.java
-                            )
-                        } else {
-                            @Suppress("DEPRECATION")
-                            data.getParcelableExtra(WidgetPickerActivity.EXTRA_PROVIDER)
-                        }
-
-                    if (widgetId != -1) {
-                        pendingWidgetId = widgetId
-                        if (needsBind && provider != null) {
-                            val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
-                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
-                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, Bundle())
-                            }
-                            startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
-                        } else {
-                            findFreeCellAndPlaceWidget()
-                        }
-                    }
-                } else {
-                    if (pendingWidgetId != -1) {
-                        appWidgetHost.deleteAppWidgetId(pendingWidgetId)
-                        pendingWidgetId = -1
-                    }
-                }
+    super.onActivityResult(requestCode, resultCode, data)
+    when (requestCode) {
+        UNINSTALL_APP_REQUEST_CODE -> {
+            AppRepository.invalidateCache()
+            lifecycleScope.launch {
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                loadHomeApps()
+                dockController.refresh()
+                loadDrawerApps()
             }
-            REQUEST_BIND_WIDGET -> {
-                if (resultCode == RESULT_OK) {
-                    val boundId = data?.getIntExtra(
-                        AppWidgetManager.EXTRA_APPWIDGET_ID,
-                        pendingWidgetId
-                    ) ?: pendingWidgetId
-                    pendingWidgetId = boundId
-
-                    val info = appWidgetManager.getAppWidgetInfo(boundId)
-                    if (info == null) {
-                        Toast.makeText(this, "Widget non disponibile dopo il bind", Toast.LENGTH_SHORT).show()
-                        appWidgetHost.deleteAppWidgetId(boundId)
-                        pendingWidgetId = -1
-                        return
+        }
+        REQUEST_PICK_WIDGET -> {
+            if (resultCode == RESULT_OK && data != null) {
+                val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
+                val needsBind = data.getBooleanExtra(WidgetPickerActivity.EXTRA_NEEDS_BIND, false)
+                val provider: android.content.ComponentName? =
+                    if (android.os.Build.VERSION.SDK_INT >= 33) {
+                        data.getParcelableExtra(
+                            WidgetPickerActivity.EXTRA_PROVIDER,
+                            android.content.ComponentName::class.java
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        data.getParcelableExtra(WidgetPickerActivity.EXTRA_PROVIDER)
                     }
 
-                    if (info.configure != null) {
-                        try {
-                            appWidgetHost.startAppWidgetConfigureActivityForResult(
-                                this@HomeActivity,
-                                pendingWidgetId,
-                                0,
-                                REQUEST_CONFIGURE_WIDGET,
-                                null
-                            )
-                        } catch (e: Exception) {
-                            appWidgetHost.deleteAppWidgetId(pendingWidgetId)
-                            pendingWidgetId = -1
+                if (widgetId != -1) {
+                    pendingWidgetId = widgetId
+                    if (needsBind && provider != null) {
+                        val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, Bundle())
                         }
+                        startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
                     } else {
                         findFreeCellAndPlaceWidget()
                     }
-                } else {
-                    Toast.makeText(this, R.string.widget_bind_denied, Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                if (pendingWidgetId != -1) {
                     appWidgetHost.deleteAppWidgetId(pendingWidgetId)
                     pendingWidgetId = -1
                 }
             }
-            REQUEST_CONFIGURE_WIDGET -> {
-                if (resultCode == RESULT_OK) saveWidgetToHome()
-                else Toast.makeText(this, R.string.widget_config_cancelled, Toast.LENGTH_SHORT).show()
+        }
+        REQUEST_BIND_WIDGET -> {
+            if (resultCode == RESULT_OK) {
+                val boundId = data?.getIntExtra(
+                    AppWidgetManager.EXTRA_APPWIDGET_ID,
+                    pendingWidgetId
+                ) ?: pendingWidgetId
+                pendingWidgetId = boundId
+
+                val info = appWidgetManager.getAppWidgetInfo(boundId)
+                if (info == null) {
+                    Toast.makeText(this, "Widget non disponibile dopo il bind", Toast.LENGTH_SHORT).show()
+                    appWidgetHost.deleteAppWidgetId(boundId)
+                    pendingWidgetId = -1
+                    return
+                }
+
+                if (info.configure != null) {
+                    try {
+                        appWidgetHost.startAppWidgetConfigureActivityForResult(
+                            this@HomeActivity,
+                            pendingWidgetId,
+                            0,
+                            REQUEST_CONFIGURE_WIDGET,
+                            null
+                        )
+                    } catch (e: Exception) {
+                        appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+                        pendingWidgetId = -1
+                    }
+                } else {
+                    findFreeCellAndPlaceWidget()
+                }
+            } else {
+                Toast.makeText(this, R.string.widget_bind_denied, Toast.LENGTH_SHORT).show()
+                appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+                pendingWidgetId = -1
             }
         }
+        REQUEST_CONFIGURE_WIDGET -> {
+            if (resultCode == RESULT_OK) saveWidgetToHome()
+            else Toast.makeText(this, R.string.widget_config_cancelled, Toast.LENGTH_SHORT).show()
+        }
     }
+}
 
     private fun findFreeCellAndPlaceWidget() {
         if (pendingWidgetId == -1) return
@@ -918,20 +927,15 @@ class HomeActivity : AppCompatActivity() {
         drawerOverlay.setOnClickListener { closeDrawer() }
     }
 
-    private fun setupContextMenu() {
+   private fun setupContextMenu() {
     contextMenuView = AppContextMenuView(this)
     contextMenuView.onMove = { contextMenuView.dismiss() }
     contextMenuView.onUninstall = {
         currentApp?.let { app ->
-            try {
-                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = android.net.Uri.parse("package:${app.packageName}")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(intent)
-            } catch (e: Exception) {
-                Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_LONG).show()
+            val intent = Intent(Intent.ACTION_DELETE).apply {
+                data = android.net.Uri.fromParts("package", app.packageName, null)
             }
+            startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
         }
     }
     contextMenuView.onRename = {
