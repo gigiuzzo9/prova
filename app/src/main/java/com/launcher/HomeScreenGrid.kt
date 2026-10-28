@@ -78,7 +78,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         }
     }
 
-    private var swipeStartX = 0f
     private var swipeOffset = 0f
     private var isSwiping = false
     private val swipeThreshold = 20f * resources.displayMetrics.density
@@ -89,7 +88,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         addView(drawingArea)
     }
 
-    /** Invalida SOLO la drawingArea, che è l'unica cosa che disegna. */
     private fun invalidateDrawing() {
         drawingArea.invalidate()
     }
@@ -157,16 +155,12 @@ class HomeScreenGrid @JvmOverloads constructor(
         invalidateDrawing()
     }
 
-    /**
-     * Imposta l'item in drag tramite packageName. Se pkg è null, resetta.
-     * Usato da HomeActivity per sincronizzare il ghost.
-     */
     fun setDraggingPackage(pkg: String?, page: Int) {
         draggingItem = if (pkg == null) {
             null
         } else {
             items.firstOrNull { it.packageName == pkg && it.page == page }
-                ?: HomeSlot(pkg, -1, -1, page) // non trovato, ma vogliamo che il ghost sia attivo
+                ?: HomeSlot(pkg, -1, -1, page)
         }
         invalidateDrawing()
     }
@@ -186,8 +180,7 @@ class HomeScreenGrid @JvmOverloads constructor(
 
     fun getCellCoords(x: Float, y: Float): Pair<Int, Int>? {
         ensureCells()
-        val pageX = x + currentPage * width.toFloat() + swipeOffset
-        val col = (pageX / cellWidth).toInt()
+        val col = (x / cellWidth).toInt()
         val row = (y / cellHeight).toInt()
         if (col in 0 until columnCount && row in 0 until rowCount) return Pair(row, col)
         return null
@@ -237,36 +230,35 @@ class HomeScreenGrid @JvmOverloads constructor(
     // --- Drawing ---
 
     fun drawInto(canvas: Canvas) {
-        if (cells.isEmpty()) {
-            ensureCells()
-        }
+        if (cells.isEmpty()) ensureCells()
         if (cells.isEmpty()) return
 
-        val pageOffset = -(currentPage * width) - swipeOffset.toInt()
+        // swipeOffset > 0 = dito verso destra → pagina corrente esce a destra, precedente entra da sinistra
+        // swipeOffset < 0 = dito verso sinistra → pagina corrente esce a sinistra, successiva entra da destra
+        val pageOffset = -(currentPage * width) + swipeOffset.toInt()
 
         canvas.save()
         canvas.translate(pageOffset.toFloat(), 0f)
         drawPage(canvas, currentPage)
+        canvas.restore()
 
         if (swipeOffset > 0 && currentPage > 0) {
             canvas.save()
-            canvas.translate(width.toFloat(), 0f)
+            canvas.translate((pageOffset + width).toFloat(), 0f)
             drawPage(canvas, currentPage - 1)
             canvas.restore()
         } else if (swipeOffset < 0 && currentPage < pageCount - 1) {
             canvas.save()
-            canvas.translate(-width.toFloat(), 0f)
+            canvas.translate((pageOffset - width).toFloat(), 0f)
             drawPage(canvas, currentPage + 1)
             canvas.restore()
         }
-        canvas.restore()
 
         drawingItem(canvas)
     }
 
     private fun drawPage(canvas: Canvas, page: Int) {
         items.filter { it.page == page && it.packageName.isNotEmpty() }.forEach { slot ->
-            // Salta l'item originale se è quello in drag (ghost)
             if (draggingItem?.packageName == slot.packageName && draggingItem?.page == slot.page) {
                 return@forEach
             }
@@ -334,7 +326,6 @@ class HomeScreenGrid @JvmOverloads constructor(
                 touchDownTime = System.currentTimeMillis()
                 longPressTriggered = false
                 isSwiping = false
-                swipeStartX = event.x
                 swipeOffset = 0f
                 postDelayed(longPressRunnable, longPressTimeout)
                 return true
