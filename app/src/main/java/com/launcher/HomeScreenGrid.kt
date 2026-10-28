@@ -32,7 +32,6 @@ class HomeScreenGrid @JvmOverloads constructor(
     private var currentPage = 0
 
     private var items: List<HomeSlot> = emptyList()
-    private var widgetView: FrameLayout? = null
 
     private var cellWidth = 0
     private var cellHeight = 0
@@ -41,7 +40,6 @@ class HomeScreenGrid @JvmOverloads constructor(
     private var labelSideMargin = 0
 
     private val cells = mutableMapOf<Pair<Int, Int>, Rect>()
-    private val gridCenters = mutableListOf<Pair<Int, Int>>()
 
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
@@ -58,7 +56,6 @@ class HomeScreenGrid @JvmOverloads constructor(
     var itemClickListener: ((HomeSlot) -> Unit)? = null
     var itemLongClickListener: ((HomeSlot, View) -> Unit)? = null
     var emptyCellLongClickListener: ((View) -> Unit)? = null
-    var pageChangeListener: ((Int) -> Unit)? = null
 
     private var draggingItem: HomeSlot? = null
     private var draggingCoords = Pair(-1f, -1f)
@@ -92,16 +89,11 @@ class HomeScreenGrid @JvmOverloads constructor(
         drawingArea.invalidate()
     }
 
-    fun attachWidgetContainer(container: FrameLayout) {
-        widgetView = container
-    }
-
     fun setGridSize(cols: Int, rows: Int) {
         if (columnCount != cols || rows != rowCount) {
             columnCount = cols
             rowCount = rows
             cells.clear()
-            gridCenters.clear()
             requestLayout()
             invalidateDrawing()
         }
@@ -125,7 +117,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         if (page in 0 until pageCount && page != currentPage) {
             currentPage = page
             swipeOffset = 0f
-            pageChangeListener?.invoke(page)
             invalidateDrawing()
         }
     }
@@ -133,7 +124,6 @@ class HomeScreenGrid @JvmOverloads constructor(
     fun nextPage(): Boolean {
         if (currentPage < pageCount - 1) {
             currentPage++
-            pageChangeListener?.invoke(currentPage)
             invalidateDrawing()
             return true
         }
@@ -143,7 +133,6 @@ class HomeScreenGrid @JvmOverloads constructor(
     fun prevPage(): Boolean {
         if (currentPage > 0) {
             currentPage--
-            pageChangeListener?.invoke(currentPage)
             invalidateDrawing()
             return true
         }
@@ -199,17 +188,14 @@ class HomeScreenGrid @JvmOverloads constructor(
         iconSize = min(cellWidth, cellHeight) - 2 * iconMargin
         labelSideMargin = (cellWidth * 0.04f).toInt()
         cells.clear()
-        gridCenters.clear()
         for (r in 0 until rowCount) {
             for (c in 0 until columnCount) {
-                val rect = Rect(
+                cells[Pair(r, c)] = Rect(
                     c * cellWidth,
                     r * cellHeight,
                     (c + 1) * cellWidth,
                     (r + 1) * cellHeight
                 )
-                cells[Pair(r, c)] = rect
-                gridCenters.add(Pair(rect.centerX(), rect.centerY()))
             }
         }
     }
@@ -233,8 +219,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         if (cells.isEmpty()) ensureCells()
         if (cells.isEmpty()) return
 
-        // swipeOffset > 0 = dito verso destra → pagina corrente esce a destra, precedente entra da sinistra
-        // swipeOffset < 0 = dito verso sinistra → pagina corrente esce a sinistra, successiva entra da destra
         val pageOffset = -(currentPage * width) + swipeOffset.toInt()
 
         canvas.save()
@@ -363,16 +347,19 @@ class HomeScreenGrid @JvmOverloads constructor(
                 }
 
                 if (isSwiping) {
+                    val oldPage = currentPage
                     if (swipeOffset < -swipeThreshold * 3 && currentPage < pageCount - 1) {
                         currentPage++
-                        pageChangeListener?.invoke(currentPage)
                     } else if (swipeOffset > swipeThreshold * 3 && currentPage > 0) {
                         currentPage--
-                        pageChangeListener?.invoke(currentPage)
                     }
                     swipeOffset = 0f
                     isSwiping = false
                     invalidateDrawing()
+
+                    if (oldPage != currentPage) {
+                        pageChangeListener?.invoke(currentPage)
+                    }
                     return true
                 }
 
@@ -387,6 +374,8 @@ class HomeScreenGrid @JvmOverloads constructor(
         }
         return super.onTouchEvent(event)
     }
+
+    var pageChangeListener: ((Int) -> Unit)? = null
 
     fun isPointInside(x: Float, y: Float): Boolean {
         val loc = IntArray(2)
