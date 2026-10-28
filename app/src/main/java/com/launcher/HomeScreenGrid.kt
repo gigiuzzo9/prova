@@ -82,13 +82,15 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private var swipeOffset = 0f
+    private var targetSwipeOffset = 0f
     private var isSwiping = false
-    private val microThreshold = 4f * resources.displayMetrics.density
+    private var isAnimatingSwipe = false
     private val tapThreshold = 12f * resources.displayMetrics.density
 
-    private val swipeDamping = 0.85f
+    private val swipeDamping = 1.0f
     private val swipeCompleteThresholdRatio = 0.2f
     private val swipeAnimDuration = 250L
+    private val smoothingFactor = 0.25f
 
     private var swipeAnimator: ValueAnimator? = null
 
@@ -130,6 +132,7 @@ class HomeScreenGrid @JvmOverloads constructor(
         if (page in 0 until pageCount && page != currentPage) {
             currentPage = page
             swipeOffset = 0f
+            targetSwipeOffset = 0f
             onSwipeOffsetChanged?.invoke(0f)
             invalidateDrawing()
         }
@@ -227,6 +230,31 @@ class HomeScreenGrid @JvmOverloads constructor(
         return AppCache.getIconBitmap(pkg, iconSize)
     }
 
+    // --- Smoothing loop ---
+    // Quando il dito si muove, targetSwipeOffset viene aggiornato.
+    // Ad ogni frame, swipeOffset si avvicina a targetSwipeOffset con smoothing.
+    private val smoothingRunnable = object : Runnable {
+        override fun run() {
+            if (isAnimatingSwipe) return
+            val diff = targetSwipeOffset - swipeOffset
+            if (abs(diff) > 0.5f) {
+                swipeOffset += diff * smoothingFactor
+                onSwipeOffsetChanged?.invoke(swipeOffset)
+                invalidateDrawing()
+                drawingArea.postOnAnimation(this)
+            } else {
+                swipeOffset = targetSwipeOffset
+                onSwipeOffsetChanged?.invoke(swipeOffset)
+                invalidateDrawing()
+            }
+        }
+    }
+
+    private fun startSmoothing() {
+        drawingArea.removeCallbacks(smoothingRunnable)
+        drawingArea.postOnAnimation(smoothingRunnable)
+    }
+
     // --- Drawing ---
 
     fun drawInto(canvas: Canvas) {
@@ -309,12 +337,14 @@ class HomeScreenGrid @JvmOverloads constructor(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 swipeAnimator?.cancel()
+                isAnimatingSwipe = false
                 touchDownX = event.x
                 touchDownY = event.y
                 touchDownTime = System.currentTimeMillis()
                 longPressTriggered = false
                 isSwiping = false
                 swipeOffset = 0f
+                targetSwipeOffset = 0f
                 onSwipeOffsetChanged?.invoke(0f)
                 postDelayed(longPressRunnable, longPressTimeout)
                 return true
@@ -332,17 +362,15 @@ class HomeScreenGrid @JvmOverloads constructor(
                     return true
                 }
 
-                // Lo swipe inizia appena il dito si muove di qualche pixel,
-                // senza soglia alta: niente salto iniziale.
-                if (abs(dx) > abs(dy) && abs(dx) > microThreshold) {
+                // Lo swipe parte dal primo pixel, niente soglia.
+                if (abs(dx) > abs(dy) && abs(dx) > 1f) {
                     val canSwipeLeft = dx < 0 && currentPage < pageCount - 1
                     val canSwipeRight = dx > 0 && currentPage > 0
                     if (canSwipeLeft || canSwipeRight) {
                         isSwiping = true
                         val damped = dx * swipeDamping
-                        swipeOffset = damped.coerceIn(-width.toFloat(), width.toFloat())
-                        onSwipeOffsetChanged?.invoke(swipeOffset)
-                        invalidateDrawing()
+                        targetSwipeOffset = damped.coerceIn(-width.toFloat(), width.toFloat())
+                        startSmoothing()
                     }
                 }
                 return true
@@ -356,9 +384,9 @@ class HomeScreenGrid @JvmOverloads constructor(
                 }
 
                 if (isSwiping) {
-                    val absDx = abs(swipeOffset / swipeDamping)
+                    val absDx = abs(targetSwipeOffset / swipeDamping)
 
-                    // Se il movimento è minimo, è un tap
+                    // tap se il movimento è minimo
                     if (absDx < tapThreshold) {
                         animateSwipeTo(0f) {
                             if (!longPressTriggered) {
@@ -375,19 +403,21 @@ class HomeScreenGrid @JvmOverloads constructor(
                     val completeThreshold = width * swipeCompleteThresholdRatio
 
                     when {
-                        swipeOffset < -completeThreshold && currentPage < pageCount - 1 -> {
+                        targetSwipeOffset < -completeThreshold && currentPage < pageCount - 1 -> {
                             animateSwipeTo(-width.toFloat()) {
                                 currentPage++
                                 swipeOffset = 0f
+                                targetSwipeOffset = 0f
                                 onSwipeOffsetChanged?.invoke(0f)
                                 pageChangeListener?.invoke(currentPage)
                                 invalidateDrawing()
                             }
                         }
-                        swipeOffset > completeThreshold && currentPage > 0 -> {
+                        targetSwipeOffset > completeThreshold && currentPage > 0 -> {
                             animateSwipeTo(width.toFloat()) {
                                 currentPage--
                                 swipeOffset = 0f
+                                targetSwipeOffset = 0f
                                 onSwipeOffsetChanged?.invoke(0f)
                                 pageChangeListener?.invoke(currentPage)
                                 invalidateDrawing()
@@ -395,13 +425,12 @@ class HomeScreenGrid @JvmOverloads constructor(
                         }
                         else -> {
                             animateSwipeTo(0f) {
-                                // torna alla pagina corrente
+                                targetSwipeOffset = 0f
                             }
                         }
                     }
 
                     isSwiping = false
-                    invalidateDrawing()
                     return true
                 }
 
@@ -419,6 +448,9 @@ class HomeScreenGrid @JvmOverloads constructor(
 
     private fun animateSwipeTo(target: Float, onEnd: () -> Unit) {
         swipeAnimator?.cancel()
+        drawingArea.removeCallbacks(smoothingRunnable)
+        isAnimatingSwipe = true
+
         val animator = ValueAnimator.ofFloat(swipeOffset, target)
         animator.duration = swipeAnimDuration
         animator.interpolator = DecelerateInterpolator()
@@ -429,6 +461,7 @@ class HomeScreenGrid @JvmOverloads constructor(
         }
         animator.addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationEnd(animation: Animator) {
+                isAnimatingSwipe = false
                 onEnd()
             }
         })
