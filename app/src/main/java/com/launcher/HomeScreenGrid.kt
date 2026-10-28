@@ -83,7 +83,8 @@ class HomeScreenGrid @JvmOverloads constructor(
 
     private var swipeOffset = 0f
     private var isSwiping = false
-    private val swipeThreshold = 12f * resources.displayMetrics.density
+    private val microThreshold = 4f * resources.displayMetrics.density
+    private val tapThreshold = 12f * resources.displayMetrics.density
 
     private val swipeDamping = 0.85f
     private val swipeCompleteThresholdRatio = 0.2f
@@ -322,7 +323,7 @@ class HomeScreenGrid @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.x - touchDownX
                 val dy = event.y - touchDownY
-                if (!longPressTriggered && (abs(dx) > swipeThreshold || abs(dy) > swipeThreshold)) {
+                if (!longPressTriggered && (abs(dx) > tapThreshold || abs(dy) > tapThreshold)) {
                     removeCallbacks(longPressRunnable)
                 }
 
@@ -331,14 +332,14 @@ class HomeScreenGrid @JvmOverloads constructor(
                     return true
                 }
 
-                if (abs(dx) > abs(dy) && abs(dx) > swipeThreshold) {
+                // Lo swipe inizia appena il dito si muove di qualche pixel,
+                // senza soglia alta: niente salto iniziale.
+                if (abs(dx) > abs(dy) && abs(dx) > microThreshold) {
                     val canSwipeLeft = dx < 0 && currentPage < pageCount - 1
                     val canSwipeRight = dx > 0 && currentPage > 0
                     if (canSwipeLeft || canSwipeRight) {
                         isSwiping = true
-                        // Compensa la soglia: parte da 0 e cresce gradualmente
-                        val effectiveDx = if (dx > 0) dx - swipeThreshold else dx + swipeThreshold
-                        val damped = effectiveDx * swipeDamping
+                        val damped = dx * swipeDamping
                         swipeOffset = damped.coerceIn(-width.toFloat(), width.toFloat())
                         onSwipeOffsetChanged?.invoke(swipeOffset)
                         invalidateDrawing()
@@ -355,10 +356,26 @@ class HomeScreenGrid @JvmOverloads constructor(
                 }
 
                 if (isSwiping) {
-                    val threshold = width * swipeCompleteThresholdRatio
+                    val absDx = abs(swipeOffset / swipeDamping)
+
+                    // Se il movimento è minimo, è un tap
+                    if (absDx < tapThreshold) {
+                        animateSwipeTo(0f) {
+                            if (!longPressTriggered) {
+                                val slot = findSlotAt(event.x, event.y)
+                                if (slot != null && slot.packageName.isNotEmpty()) {
+                                    itemClickListener?.invoke(slot)
+                                }
+                            }
+                        }
+                        isSwiping = false
+                        return true
+                    }
+
+                    val completeThreshold = width * swipeCompleteThresholdRatio
 
                     when {
-                        swipeOffset < -threshold && currentPage < pageCount - 1 -> {
+                        swipeOffset < -completeThreshold && currentPage < pageCount - 1 -> {
                             animateSwipeTo(-width.toFloat()) {
                                 currentPage++
                                 swipeOffset = 0f
@@ -367,7 +384,7 @@ class HomeScreenGrid @JvmOverloads constructor(
                                 invalidateDrawing()
                             }
                         }
-                        swipeOffset > threshold && currentPage > 0 -> {
+                        swipeOffset > completeThreshold && currentPage > 0 -> {
                             animateSwipeTo(width.toFloat()) {
                                 currentPage--
                                 swipeOffset = 0f
@@ -378,7 +395,7 @@ class HomeScreenGrid @JvmOverloads constructor(
                         }
                         else -> {
                             animateSwipeTo(0f) {
-                                // niente da fare
+                                // torna alla pagina corrente
                             }
                         }
                     }
