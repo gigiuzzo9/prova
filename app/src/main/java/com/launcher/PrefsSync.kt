@@ -97,4 +97,11 @@ object PrefsSync {
         val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
         prefs(context).edit().putString("custom_icons", raw).apply()
     }
+
+    fun removeCustomIcon(context: Context, packageName: String) {
+        val map = customIcons(context).toMutableMap()
+        map.remove(packageName)
+        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
+        prefs(context).edit().putString("custom_icons", raw).apply()
+    }
 }
