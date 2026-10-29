@@ -1,6 +1,7 @@
 package com.simplylauncher
 
 import android.app.AlertDialog
+import android.app.WallpaperManager
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
@@ -79,6 +80,7 @@ class HomeActivity : AppCompatActivity() {
     private var pendingWidgetHeightCells = 1
     private val UNINSTALL_APP_REQUEST_CODE = 200
     private val REQUEST_PICK_ICON = 201
+    private val REQUEST_PICK_WALLPAPER = 202
     private var resizingWidgetSlot: WidgetSlot? = null
     private var resizingWidgetView: LauncherAppWidgetHostView? = null
     private var widgetPopupWindow: android.widget.PopupWindow? = null
@@ -327,6 +329,18 @@ class HomeActivity : AppCompatActivity() {
                     }
                 }
                 pendingIconPackage = null
+            }
+            REQUEST_PICK_WALLPAPER -> {
+                if (resultCode == RESULT_OK && data?.data != null) {
+                    try {
+                        val wallpaperManager = WallpaperManager.getInstance(this)
+                        contentResolver.openInputStream(data.data!!)?.use { input ->
+                            wallpaperManager.setStream(input)
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
             REQUEST_PICK_WIDGET -> {
                 if (resultCode == RESULT_OK && data != null) {
@@ -739,10 +753,8 @@ class HomeActivity : AppCompatActivity() {
 
         val container = android.widget.LinearLayout(ctx).apply {
             orientation = android.widget.LinearLayout.VERTICAL
-            // Aumentato del 30%: dp(8) -> dp(10), dp(8) -> dp(10), dp(8) -> dp(10), dp(8) -> dp(10)
             setPadding(dp(10), dp(10), dp(10), dp(10))
             val drawable = android.graphics.drawable.GradientDrawable().apply {
-                // Aumentato del 30%: dp(6) -> dp(8)
                 cornerRadius = dp(8).toFloat()
                 setColor(Color.WHITE)
             }
@@ -754,9 +766,7 @@ class HomeActivity : AppCompatActivity() {
             val tv = TextView(ctx).apply {
                 this.text = text
                 setTextColor(Color.BLACK)
-                // Aumentato del 30%: 15f -> 20f (arrotondato)
                 textSize = 20f
-                // Aumentato del 30%: dp(20)->dp(26), dp(14)->dp(18), dp(20)->dp(26), dp(14)->dp(18)
                 setPadding(dp(26), dp(18), dp(26), dp(18))
                 val outValue = android.util.TypedValue()
                 context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
@@ -1070,7 +1080,11 @@ class HomeActivity : AppCompatActivity() {
             homeScreenGrid.setPageCount(currentPageCount)
         }
         homePopupMenu.onChangeWallpaper = {
-            try { startActivity(Intent(Intent.ACTION_SET_WALLPAPER)) } catch (_: Exception) {}
+            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                type = "image/*"
+                addCategory(Intent.CATEGORY_OPENABLE)
+            }
+            startActivityForResult(intent, REQUEST_PICK_WALLPAPER)
         }
         homePopupMenu.onRemovePage = {
             if (currentPageCount > 1) {
@@ -1431,7 +1445,6 @@ class HomeActivity : AppCompatActivity() {
         if (drawerOpen) closeDrawer()
         drawerBgApplied = false
 
-        // Invalida la cache: potrebbero essere state installate/rimosse app
         AppRepository.invalidateCache()
 
         currentCols = PrefsSync.cols(this)
