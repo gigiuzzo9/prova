@@ -11,7 +11,8 @@ object AppCache {
 
     fun putAll(apps: List<AppInfo>) {
         map = apps.associateBy { it.packageName }
-        // Non svuotare iconBitmapCache: i bitmap restano validi
+        // Svuota i bitmap: le icone potrebbero essere cambiate (es. cambio colore Fossify)
+        iconBitmapCache.clear()
     }
 
     fun put(app: AppInfo) {
