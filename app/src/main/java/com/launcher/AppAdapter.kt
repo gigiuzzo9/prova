@@ -69,8 +69,11 @@ class AppAdapter(
         }
 
         override fun areContentsTheSame(oldItem: AppInfo, newItem: AppInfo): Boolean {
+            // Confronta anche l'identità dell'icona: se cambia (es. Fossify Messages blu),
+            // il RecyclerView deve ribindare l'item.
             return oldItem.label == newItem.label &&
-                   oldItem.packageName == newItem.packageName
+                   oldItem.packageName == newItem.packageName &&
+                   oldItem.icon === newItem.icon
         }
     }
 }
