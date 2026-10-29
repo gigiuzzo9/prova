@@ -51,6 +51,15 @@ class AppAdapter(
             } else {
                 icon.setImageDrawable(null)
             }
+
+            val isCustom = PrefsSync.customIcons(itemView.context).containsKey(app.packageName)
+            if (isCustom) {
+                val pad = (iconSizePx * 0.10f).toInt() // 10% per lato = 20% totale
+                icon.setPadding(pad, pad, pad, pad)
+            } else {
+                icon.setPadding(0, 0, 0, 0)
+            }
+
             label.text = app.label
 
             itemView.alpha = if (app.packageName == draggingPackage) 0f else 1f
@@ -69,8 +78,6 @@ class AppAdapter(
         }
 
         override fun areContentsTheSame(oldItem: AppInfo, newItem: AppInfo): Boolean {
-            // Confronta anche l'identità dell'icona: se cambia (es. Fossify Messages blu),
-            // il RecyclerView deve ribindare l'item.
             return oldItem.label == newItem.label &&
                    oldItem.packageName == newItem.packageName &&
                    oldItem.icon === newItem.icon
