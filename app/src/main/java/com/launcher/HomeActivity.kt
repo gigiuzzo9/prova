@@ -61,6 +61,7 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var contextMenuView: AppContextMenuView
     private var currentApp: AppInfo? = null
     private var currentAnchor: View? = null
+    private var pendingIconPackage: String? = null
 
     private lateinit var homePopupMenu: HomePopupMenu
 
@@ -321,10 +322,11 @@ class HomeActivity : AppCompatActivity() {
             }
             REQUEST_PICK_ICON -> {
                 if (resultCode == RESULT_OK && data?.data != null) {
-                    currentApp?.let { app ->
-                        saveCustomIcon(app.packageName, data.data!!)
+                    pendingIconPackage?.let { pkg ->
+                        saveCustomIcon(pkg, data.data!!)
                     }
                 }
+                pendingIconPackage = null
             }
             REQUEST_PICK_WIDGET -> {
                 if (resultCode == RESULT_OK && data != null) {
@@ -407,52 +409,52 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun saveCustomIcon(packageName: String, uri: Uri) {
-    try {
-        val iconsDir = File(filesDir, "custom_icons")
-        if (!iconsDir.exists()) iconsDir.mkdirs()
-        val destFile = File(iconsDir, "$packageName.png")
+        try {
+            val iconsDir = File(filesDir, "custom_icons")
+            if (!iconsDir.exists()) iconsDir.mkdirs()
+            val destFile = File(iconsDir, "$packageName.png")
 
-        contentResolver.openInputStream(uri)?.use { input ->
-            FileOutputStream(destFile).use { output ->
-                input.copyTo(output)
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
             }
-        }
 
-        val sb = StringBuilder()
-        sb.append("File esiste: ${destFile.exists()}\n")
-        sb.append("Percorso: ${destFile.absolutePath}\n")
-        sb.append("Size: ${destFile.length()} bytes\n\n")
+            val sb = StringBuilder()
+            sb.append("File esiste: ${destFile.exists()}\n")
+            sb.append("Percorso: ${destFile.absolutePath}\n")
+            sb.append("Size: ${destFile.length()} bytes\n\n")
 
-        PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
-        val savedPath = PrefsSync.customIcons(this)[packageName]
-        sb.append("PrefsSync path: $savedPath\n\n")
+            PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
+            val savedPath = PrefsSync.customIcons(this)[packageName]
+            sb.append("PrefsSync path: $savedPath\n\n")
 
-        AppRepository.invalidateCache()
+            AppRepository.invalidateCache()
 
-        lifecycleScope.launch {
-            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-            val cachedApp = AppCache.get(packageName)
-            val cacheWidth = cachedApp?.icon?.intrinsicWidth ?: -1
-            sb.append("Icona in cache width: $cacheWidth\n")
+            lifecycleScope.launch {
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                val cachedApp = AppCache.get(packageName)
+                val cacheWidth = cachedApp?.icon?.intrinsicWidth ?: -1
+                sb.append("Icona in cache width: $cacheWidth\n")
 
-            loadHomeApps()
-            dockController.refresh()
-            loadDrawerApps()
+                loadHomeApps()
+                dockController.refresh()
+                loadDrawerApps()
 
-            android.app.AlertDialog.Builder(this@HomeActivity)
-                .setTitle("Debug icona")
-                .setMessage(sb.toString())
+                android.app.AlertDialog.Builder(this@HomeActivity)
+                    .setTitle("Debug icona")
+                    .setMessage(sb.toString())
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        } catch (e: Exception) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Errore salvataggio")
+                .setMessage(e.message ?: "Sconosciuto")
                 .setPositiveButton("OK", null)
                 .show()
         }
-    } catch (e: Exception) {
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Errore salvataggio")
-            .setMessage(e.message ?: "Sconosciuto")
-            .setPositiveButton("OK", null)
-            .show()
     }
-}
 
     private fun findFreeCellAndPlaceWidget() {
         if (pendingWidgetId == -1) return
@@ -1024,6 +1026,7 @@ class HomeActivity : AppCompatActivity() {
         }
         contextMenuView.onChangeIcon = {
             currentApp?.let { app ->
+                pendingIconPackage = app.packageName
                 AlertDialog.Builder(this)
                     .setTitle("Cambia icona")
                     .setMessage("Per un risultato migliore, usa un'immagine PNG con sfondo trasparente, di dimensioni 512x512 pixel.")
