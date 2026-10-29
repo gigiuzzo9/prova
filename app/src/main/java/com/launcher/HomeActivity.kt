@@ -409,52 +409,31 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun saveCustomIcon(packageName: String, uri: Uri) {
-        try {
-            val iconsDir = File(filesDir, "custom_icons")
-            if (!iconsDir.exists()) iconsDir.mkdirs()
-            val destFile = File(iconsDir, "$packageName.png")
+    try {
+        val iconsDir = File(filesDir, "custom_icons")
+        if (!iconsDir.exists()) iconsDir.mkdirs()
+        val destFile = File(iconsDir, "$packageName.png")
 
-            contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(destFile).use { output ->
-                    input.copyTo(output)
-                }
+        contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(destFile).use { output ->
+                input.copyTo(output)
             }
-
-            val sb = StringBuilder()
-            sb.append("File esiste: ${destFile.exists()}\n")
-            sb.append("Percorso: ${destFile.absolutePath}\n")
-            sb.append("Size: ${destFile.length()} bytes\n\n")
-
-            PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
-            val savedPath = PrefsSync.customIcons(this)[packageName]
-            sb.append("PrefsSync path: $savedPath\n\n")
-
-            AppRepository.invalidateCache()
-
-            lifecycleScope.launch {
-                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-                val cachedApp = AppCache.get(packageName)
-                val cacheWidth = cachedApp?.icon?.intrinsicWidth ?: -1
-                sb.append("Icona in cache width: $cacheWidth\n")
-
-                loadHomeApps()
-                dockController.refresh()
-                loadDrawerApps()
-
-                android.app.AlertDialog.Builder(this@HomeActivity)
-                    .setTitle("Debug icona")
-                    .setMessage(sb.toString())
-                    .setPositiveButton("OK", null)
-                    .show()
-            }
-        } catch (e: Exception) {
-            android.app.AlertDialog.Builder(this)
-                .setTitle("Errore salvataggio")
-                .setMessage(e.message ?: "Sconosciuto")
-                .setPositiveButton("OK", null)
-                .show()
         }
+
+        PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
+
+        AppRepository.invalidateCache()
+
+        lifecycleScope.launch {
+            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+            loadHomeApps()
+            dockController.refresh()
+            loadDrawerApps()
+        }
+    } catch (e: Exception) {
+        Toast.makeText(this, "Errore salvataggio: ${e.message}", Toast.LENGTH_SHORT).show()
     }
+}
 
     private fun findFreeCellAndPlaceWidget() {
         if (pendingWidgetId == -1) return
