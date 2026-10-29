@@ -24,6 +24,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import kotlin.concurrent.thread
 
 class WidgetPickerActivity : AppCompatActivity() {
 
@@ -109,34 +110,37 @@ class WidgetPickerActivity : AppCompatActivity() {
             setBackgroundResource(outValue.resourceId)
         }
 
+        // Dimensione 96dp per l'anteprima (come Fossify)
+        val previewSize = dp(96)
+
         val icon = ImageView(ctx).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(120), dp(120)).apply {
+            layoutParams = LinearLayout.LayoutParams(previewSize, previewSize).apply {
                 marginEnd = dp(16)
             }
             scaleType = ImageView.ScaleType.CENTER_INSIDE
+        }
+        row.addView(icon)
 
-            // 1. Icona dell'app come fallback
+        // Caricamento in background, come fa Fossify
+        thread {
             var appIcon: Drawable? = null
             try {
                 val ai = ctx.packageManager.getApplicationInfo(info.provider.packageName, 0)
                 appIcon = ctx.packageManager.getApplicationIcon(ai)
             } catch (_: Exception) {}
 
-            // 2. Caricamento anteprima (replica del flusso Fossify)
             var preview: Drawable? = null
-            
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                // Su Android 12+ prova loadPreviewImage
                 preview = info.loadPreviewImage(ctx, ctx.resources.displayMetrics.densityDpi)
-                
-                // Se null, prova a gonfiare previewLayout manualmente
+
                 if (preview == null && info.previewLayout != 0) {
                     try {
                         val remoteViews = RemoteViews(info.provider.packageName, info.previewLayout)
                         val previewView = remoteViews.apply(ctx, FrameLayout(ctx))
                         previewView.measure(
-                            View.MeasureSpec.makeMeasureSpec(dp(120), View.MeasureSpec.EXACTLY),
-                            View.MeasureSpec.makeMeasureSpec(dp(120), View.MeasureSpec.EXACTLY)
+                            View.MeasureSpec.makeMeasureSpec(previewSize, View.MeasureSpec.EXACTLY),
+                            View.MeasureSpec.makeMeasureSpec(previewSize, View.MeasureSpec.EXACTLY)
                         )
                         previewView.layout(0, 0, previewView.measuredWidth, previewView.measuredHeight)
                         val bmp = Bitmap.createBitmap(
@@ -148,7 +152,6 @@ class WidgetPickerActivity : AppCompatActivity() {
                     } catch (_: Exception) {}
                 }
             } else {
-                // Versioni precedenti: prova previewImage
                 if (info.previewImage != 0) {
                     try {
                         preview = ContextCompat.getDrawable(ctx, info.previewImage)
@@ -156,9 +159,11 @@ class WidgetPickerActivity : AppCompatActivity() {
                 }
             }
 
-            setImageDrawable(preview ?: appIcon)
+            val finalDrawable = preview ?: appIcon
+            runOnUiThread {
+                icon.setImageDrawable(finalDrawable)
+            }
         }
-        row.addView(icon)
 
         val texts = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
