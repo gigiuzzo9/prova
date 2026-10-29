@@ -85,7 +85,6 @@ class HomeActivity : AppCompatActivity() {
     private var resizingWidgetSlot: WidgetSlot? = null
     private var resizingWidgetView: LauncherAppWidgetHostView? = null
     private var widgetPopupWindow: android.widget.PopupWindow? = null
-    private var pickerDialog: android.app.Dialog? = null
 
     private var currentCols = 4
     private var currentRows = 6
@@ -616,142 +615,81 @@ class HomeActivity : AppCompatActivity() {
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).toInt()
 
-        fun themeColor(attr: Int): Int {
-            val tv = android.util.TypedValue()
-            if (theme.resolveAttribute(attr, tv, true)) {
-                return if (tv.resourceId != 0) androidx.core.content.ContextCompat.getColor(ctx, tv.resourceId) else tv.data
-            }
-            return 0xFF000000.toInt()
-        }
-
-        val root = android.widget.LinearLayout(ctx).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setBackgroundColor(themeColor(android.R.attr.colorBackground))
-        }
-
-        val header = android.widget.LinearLayout(ctx).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(20), dp(16), dp(8), dp(16))
-        }
-        header.addView(TextView(ctx).apply {
-            text = "Scegli un widget"
-            textSize = 22f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setTextColor(themeColor(android.R.attr.textColorPrimary))
-            layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        header.addView(TextView(ctx).apply {
-            text = "✕"
-            textSize = 22f
-            setTextColor(themeColor(android.R.attr.textColorPrimary))
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            setOnClickListener { pickerDialog?.dismiss() }
-        })
-        root.addView(header)
-
-        root.addView(View(ctx).apply {
-            layoutParams = android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1))
-            setBackgroundColor(0x22000000)
-        })
-
+        val scrollView = android.widget.ScrollView(ctx)
         val list = android.widget.LinearLayout(ctx).apply {
             orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(dp(4), dp(4), dp(4), dp(16))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
         }
-        val scroll = android.widget.ScrollView(ctx).apply { addView(list) }
-        root.addView(scroll, android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        scrollView.addView(list)
 
-        val providers = try {
-            appWidgetManager.installedProviders.sortedBy { it.loadLabel(packageManager).toString().lowercase() }
-        } catch (e: Exception) { emptyList() }
+        val dialog = android.app.Dialog(ctx, android.R.style.Theme_Material_Light_Dialog_NoActionBar).apply {
+            setContentView(scrollView)
+            window?.setLayout(
+                (resources.displayMetrics.widthPixels * 0.9f).toInt(),
+                (resources.displayMetrics.heightPixels * 0.8f).toInt()
+            )
+            setTitle("Scegli un widget")
+        }
+
+        val providers = appWidgetManager.installedProviders
+            .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
 
         if (providers.isEmpty()) {
             list.addView(TextView(ctx).apply {
                 text = "Nessun widget disponibile"
-                textSize = 16f
-                gravity = Gravity.CENTER
-                setTextColor(themeColor(android.R.attr.textColorSecondary))
-                setPadding(0, dp(48), 0, 0)
+                setPadding(dp(24), dp(24), dp(24), dp(24))
             })
         } else {
             providers.forEach { info ->
                 val row = android.widget.LinearLayout(ctx).apply {
                     orientation = android.widget.LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dp(16), dp(12), dp(16), dp(12))
+                    setPadding(dp(12), dp(12), dp(12), dp(12))
                     isClickable = true
-                    isFocusable = true
                     val outValue = android.util.TypedValue()
                     context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
                     setBackgroundResource(outValue.resourceId)
                 }
 
-                val previewContainer = android.widget.FrameLayout(ctx).apply {
-                    layoutParams = android.widget.LinearLayout.LayoutParams(dp(96), dp(96)).apply { marginEnd = dp(16) }
+                val iconView = ImageView(ctx).apply {
+                    layoutParams = android.widget.LinearLayout.LayoutParams(dp(72), dp(72)).apply {
+                        marginEnd = dp(12)
+                    }
+                    scaleType = ImageView.ScaleType.FIT_CENTER
                 }
 
-                val preview: android.graphics.drawable.Drawable? = (
-                    try {
-                        if (android.os.Build.VERSION.SDK_INT >= 31) {
-                            info.loadPreviewImage(ctx, resources.displayMetrics.densityDpi)
-                        } else null
-                    } catch (e: Exception) { null }
-                ) ?: (if (info.previewImage != 0) {
-                    try { androidx.core.content.ContextCompat.getDrawable(ctx, info.previewImage) } catch (e: Exception) { null }
-                } else null) ?: (try {
-                    val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
-                    packageManager.getApplicationIcon(ai)
-                } catch (e: Exception) { null })
+                val preview = try {
+                    info.loadPreviewImage(ctx, resources.displayMetrics.densityDpi)
+                } catch (e: Exception) { null }
 
                 if (preview != null) {
-                    val iv = ImageView(ctx).apply {
-                        scaleType = ImageView.ScaleType.FIT_CENTER
-                        setImageDrawable(preview)
-                    }
-                    val wR = if (info.minWidth > 0) info.minWidth else preview.intrinsicWidth
-                    val hR = if (info.minHeight > 0) info.minHeight else preview.intrinsicHeight
-                    if (wR > 0 && hR > 0) {
-                        val ratio = wR.toFloat() / hR.toFloat()
-                        val sizePx = dp(96)
-                        val lp = if (ratio >= 1f) {
-                            android.widget.FrameLayout.LayoutParams(sizePx, (sizePx / ratio).toInt().coerceAtLeast(1)).apply { gravity = Gravity.CENTER }
-                        } else {
-                            android.widget.FrameLayout.LayoutParams((sizePx * ratio).toInt().coerceAtLeast(1), sizePx).apply { gravity = Gravity.CENTER }
-                        }
-                        previewContainer.addView(iv, lp)
-                    } else {
-                        previewContainer.addView(iv, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                    }
+                    iconView.setImageDrawable(preview)
                 } else {
-                    previewContainer.addView(ImageView(ctx).apply {
-                        setImageResource(android.R.drawable.sym_def_app_icon)
-                        scaleType = ImageView.ScaleType.FIT_CENTER
-                    }, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                    try {
+                        val appInfo = packageManager.getApplicationInfo(info.provider.packageName, 0)
+                        iconView.setImageDrawable(packageManager.getApplicationIcon(appInfo))
+                    } catch (e: Exception) {
+                        iconView.setImageResource(android.R.drawable.sym_def_app_icon)
+                    }
                 }
-                row.addView(previewContainer)
+                row.addView(iconView)
 
                 val texts = android.widget.LinearLayout(ctx).apply {
                     orientation = android.widget.LinearLayout.VERTICAL
                     layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 }
                 texts.addView(TextView(ctx).apply {
-                    text = try { info.loadLabel(packageManager) } catch (e: Exception) { "Widget" }
+                    text = info.loadLabel(packageManager)
                     textSize = 16f
-                    setTextColor(themeColor(android.R.attr.textColorPrimary))
                 })
-                val appName = try {
-                    val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
-                    packageManager.getApplicationLabel(ai).toString()
-                } catch (e: Exception) { "" }
-                if (appName.isNotEmpty()) {
-                    texts.addView(TextView(ctx).apply {
-                        text = appName
-                        textSize = 13f
-                        setTextColor(themeColor(android.R.attr.textColorSecondary))
-                        setPadding(0, dp(2), 0, 0)
-                    })
-                }
+                texts.addView(TextView(ctx).apply {
+                    text = try {
+                        val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
+                        packageManager.getApplicationLabel(ai).toString()
+                    } catch (e: Exception) { "" }
+                    textSize = 13f
+                    alpha = 0.6f
+                })
                 row.addView(texts)
 
                 row.setOnClickListener {
@@ -761,7 +699,7 @@ class HomeActivity : AppCompatActivity() {
 
                     if (bound) {
                         pendingWidgetId = widgetId
-                        pickerDialog?.dismiss()
+                        dialog.dismiss()
                         findFreeCellAndPlaceWidget()
                     } else {
                         val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
@@ -769,7 +707,7 @@ class HomeActivity : AppCompatActivity() {
                             putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
                         }
                         startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
-                        pickerDialog?.dismiss()
+                        dialog.dismiss()
                     }
                 }
 
@@ -777,12 +715,7 @@ class HomeActivity : AppCompatActivity() {
             }
         }
 
-        pickerDialog = android.app.Dialog(ctx, android.R.style.Theme_DeviceDefault_Light_NoActionBar).apply {
-            setContentView(root)
-            window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            setOnDismissListener { pickerDialog = null }
-            show()
-        }
+        dialog.show()
     }
 
     private fun renderWidgets() {
