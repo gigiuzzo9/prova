@@ -85,6 +85,7 @@ class HomeActivity : AppCompatActivity() {
     private var resizingWidgetSlot: WidgetSlot? = null
     private var resizingWidgetView: LauncherAppWidgetHostView? = null
     private var widgetPopupWindow: android.widget.PopupWindow? = null
+    private var pickerDialog: android.app.Dialog? = null
 
     private var currentCols = 4
     private var currentRows = 6
@@ -97,7 +98,6 @@ class HomeActivity : AppCompatActivity() {
     private var drawerBgApplied = false
     private var adjWidgetPage = -1
 
-    private val REQUEST_PICK_WIDGET = 100
     private val REQUEST_BIND_WIDGET = 101
     private val REQUEST_CONFIGURE_WIDGET = 102
 
@@ -312,165 +312,131 @@ class HomeActivity : AppCompatActivity() {
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-    super.onActivityResult(requestCode, resultCode, data)
-    when (requestCode) {
-        UNINSTALL_APP_REQUEST_CODE -> {
-            AppRepository.invalidateCache()
-            lifecycleScope.launch {
-                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-                loadHomeApps()
-                dockController.refresh()
-                loadDrawerApps()
-            }
-        }
-        REQUEST_PICK_ICON -> {
-            if (resultCode == RESULT_OK && data?.data != null) {
-                pendingIconPackage?.let { pkg ->
-                    saveCustomIcon(pkg, data.data!!)
+        super.onActivityResult(requestCode, resultCode, data)
+        when (requestCode) {
+            UNINSTALL_APP_REQUEST_CODE -> {
+                AppRepository.invalidateCache()
+                lifecycleScope.launch {
+                    AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                    loadHomeApps()
+                    dockController.refresh()
+                    loadDrawerApps()
                 }
             }
-            pendingIconPackage = null
-        }
-        REQUEST_PICK_WALLPAPER -> {
-            if (resultCode == RESULT_OK && data?.data != null) {
-                val uri = data.data!!
-                try {
-                    val wm = WallpaperManager.getInstance(this)
-                    val dm = resources.displayMetrics
-                    val targetW = dm.widthPixels
-                    val targetH = dm.heightPixels
-
-                    val boundsOptions = android.graphics.BitmapFactory.Options().apply {
-                        inJustDecodeBounds = true
+            REQUEST_PICK_ICON -> {
+                if (resultCode == RESULT_OK && data?.data != null) {
+                    pendingIconPackage?.let { pkg ->
+                        saveCustomIcon(pkg, data.data!!)
                     }
-                    contentResolver.openInputStream(uri)?.use {
-                        android.graphics.BitmapFactory.decodeStream(it, null, boundsOptions)
-                    }
-                    val srcW = boundsOptions.outWidth
-                    val srcH = boundsOptions.outHeight
-
-                    var sampleSize = 1
-                    while (srcW / (sampleSize * 2) >= targetW && srcH / (sampleSize * 2) >= targetH) {
-                        sampleSize *= 2
-                    }
-
-                    val decodeOptions = android.graphics.BitmapFactory.Options().apply {
-                        inSampleSize = sampleSize
-                    }
-                    val srcBitmap = contentResolver.openInputStream(uri)?.use {
-                        android.graphics.BitmapFactory.decodeStream(it, null, decodeOptions)
-                    } ?: throw Exception("Impossibile leggere l'immagine")
-
-                    val srcRatio = srcBitmap.width.toFloat() / srcBitmap.height
-                    val targetRatio = targetW.toFloat() / targetH
-
-                    val cropW: Int
-                    val cropH: Int
-                    if (srcRatio > targetRatio) {
-                        cropH = srcBitmap.height
-                        cropW = (cropH * targetRatio).toInt()
-                    } else {
-                        cropW = srcBitmap.width
-                        cropH = (cropW / targetRatio).toInt()
-                    }
-                    val cropX = (srcBitmap.width - cropW) / 2
-                    val cropY = (srcBitmap.height - cropH) / 2
-
-                    val cropped = android.graphics.Bitmap.createBitmap(
-                        srcBitmap, cropX, cropY, cropW, cropH
-                    )
-                    val scaled = android.graphics.Bitmap.createScaledBitmap(
-                        cropped, targetW, targetH, true
-                    )
-
-                    val visibleCrop = android.graphics.Rect(0, 0, scaled.width, scaled.height)
-                    wm.setBitmap(scaled, visibleCrop, true, WallpaperManager.FLAG_SYSTEM)
-
-                    Toast.makeText(this, "Sfondo impostato", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
+                pendingIconPackage = null
             }
-        }
-        REQUEST_PICK_WIDGET -> {
-            if (resultCode == RESULT_OK && data != null) {
-                val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
-                val needsBind = data.getBooleanExtra(WidgetPickerActivity.EXTRA_NEEDS_BIND, false)
-                val provider: android.content.ComponentName? =
-                    if (android.os.Build.VERSION.SDK_INT >= 33) {
-                        data.getParcelableExtra(
-                            WidgetPickerActivity.EXTRA_PROVIDER,
-                            android.content.ComponentName::class.java
-                        )
-                    } else {
-                        @Suppress("DEPRECATION")
-                        data.getParcelableExtra(WidgetPickerActivity.EXTRA_PROVIDER)
-                    }
+            REQUEST_PICK_WALLPAPER -> {
+                if (resultCode == RESULT_OK && data?.data != null) {
+                    val uri = data.data!!
+                    try {
+                        val wm = WallpaperManager.getInstance(this)
+                        val dm = resources.displayMetrics
+                        val targetW = dm.widthPixels
+                        val targetH = dm.heightPixels
 
-                if (widgetId != -1) {
-                    pendingWidgetId = widgetId
-                    if (needsBind && provider != null) {
-                        val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, Bundle())
+                        val boundsOptions = android.graphics.BitmapFactory.Options().apply {
+                            inJustDecodeBounds = true
                         }
-                        startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
+                        contentResolver.openInputStream(uri)?.use {
+                            android.graphics.BitmapFactory.decodeStream(it, null, boundsOptions)
+                        }
+                        val srcW = boundsOptions.outWidth
+                        val srcH = boundsOptions.outHeight
+
+                        var sampleSize = 1
+                        while (srcW / (sampleSize * 2) >= targetW && srcH / (sampleSize * 2) >= targetH) {
+                            sampleSize *= 2
+                        }
+
+                        val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+                            inSampleSize = sampleSize
+                        }
+                        val srcBitmap = contentResolver.openInputStream(uri)?.use {
+                            android.graphics.BitmapFactory.decodeStream(it, null, decodeOptions)
+                        } ?: throw Exception("Impossibile leggere l'immagine")
+
+                        val srcRatio = srcBitmap.width.toFloat() / srcBitmap.height
+                        val targetRatio = targetW.toFloat() / targetH
+
+                        val cropW: Int
+                        val cropH: Int
+                        if (srcRatio > targetRatio) {
+                            cropH = srcBitmap.height
+                            cropW = (cropH * targetRatio).toInt()
+                        } else {
+                            cropW = srcBitmap.width
+                            cropH = (cropW / targetRatio).toInt()
+                        }
+                        val cropX = (srcBitmap.width - cropW) / 2
+                        val cropY = (srcBitmap.height - cropH) / 2
+
+                        val cropped = android.graphics.Bitmap.createBitmap(
+                            srcBitmap, cropX, cropY, cropW, cropH
+                        )
+                        val scaled = android.graphics.Bitmap.createScaledBitmap(
+                            cropped, targetW, targetH, true
+                        )
+
+                        val visibleCrop = android.graphics.Rect(0, 0, scaled.width, scaled.height)
+                        wm.setBitmap(scaled, visibleCrop, true, WallpaperManager.FLAG_SYSTEM)
+
+                        Toast.makeText(this, "Sfondo impostato", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            REQUEST_BIND_WIDGET -> {
+                if (resultCode == RESULT_OK) {
+                    val boundId = data?.getIntExtra(
+                        AppWidgetManager.EXTRA_APPWIDGET_ID,
+                        pendingWidgetId
+                    ) ?: pendingWidgetId
+                    pendingWidgetId = boundId
+
+                    val info = appWidgetManager.getAppWidgetInfo(boundId)
+                    if (info == null) {
+                        Toast.makeText(this, "Widget non disponibile dopo il bind", Toast.LENGTH_SHORT).show()
+                        appWidgetHost.deleteAppWidgetId(boundId)
+                        pendingWidgetId = -1
+                        return
+                    }
+
+                    if (info.configure != null) {
+                        try {
+                            appWidgetHost.startAppWidgetConfigureActivityForResult(
+                                this@HomeActivity,
+                                pendingWidgetId,
+                                0,
+                                REQUEST_CONFIGURE_WIDGET,
+                                null
+                            )
+                        } catch (e: Exception) {
+                            appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+                            pendingWidgetId = -1
+                        }
                     } else {
                         findFreeCellAndPlaceWidget()
                     }
-                }
-            } else {
-                if (pendingWidgetId != -1) {
+                } else {
+                    Toast.makeText(this, R.string.widget_bind_denied, Toast.LENGTH_SHORT).show()
                     appWidgetHost.deleteAppWidgetId(pendingWidgetId)
                     pendingWidgetId = -1
                 }
             }
-        }
-        REQUEST_BIND_WIDGET -> {
-            if (resultCode == RESULT_OK) {
-                val boundId = data?.getIntExtra(
-                    AppWidgetManager.EXTRA_APPWIDGET_ID,
-                    pendingWidgetId
-                ) ?: pendingWidgetId
-                pendingWidgetId = boundId
-
-                val info = appWidgetManager.getAppWidgetInfo(boundId)
-                if (info == null) {
-                    Toast.makeText(this, "Widget non disponibile dopo il bind", Toast.LENGTH_SHORT).show()
-                    appWidgetHost.deleteAppWidgetId(boundId)
-                    pendingWidgetId = -1
-                    return
-                }
-
-                if (info.configure != null) {
-                    try {
-                        appWidgetHost.startAppWidgetConfigureActivityForResult(
-                            this@HomeActivity,
-                            pendingWidgetId,
-                            0,
-                            REQUEST_CONFIGURE_WIDGET,
-                            null
-                        )
-                    } catch (e: Exception) {
-                        appWidgetHost.deleteAppWidgetId(pendingWidgetId)
-                        pendingWidgetId = -1
-                    }
-                } else {
-                    findFreeCellAndPlaceWidget()
-                }
-            } else {
-                Toast.makeText(this, R.string.widget_bind_denied, Toast.LENGTH_SHORT).show()
-                appWidgetHost.deleteAppWidgetId(pendingWidgetId)
-                pendingWidgetId = -1
+            REQUEST_CONFIGURE_WIDGET -> {
+                if (resultCode == RESULT_OK) saveWidgetToHome()
+                else Toast.makeText(this, R.string.widget_config_cancelled, Toast.LENGTH_SHORT).show()
             }
         }
-        REQUEST_CONFIGURE_WIDGET -> {
-            if (resultCode == RESULT_OK) saveWidgetToHome()
-            else Toast.makeText(this, R.string.widget_config_cancelled, Toast.LENGTH_SHORT).show()
-        }
     }
-}
+
     private fun saveCustomIcon(packageName: String, uri: Uri) {
         try {
             val iconsDir = File(filesDir, "custom_icons")
@@ -636,21 +602,189 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun startWidgetPicker() {
-    val appWidgetId = appWidgetHost.allocateAppWidgetId()
-    pendingWidgetId = appWidgetId
-    pendingWidgetPage = homeScreenGrid.getCurrentPage()
-    pendingWidgetWidthCells = 2.coerceAtMost(currentCols)
-    pendingWidgetHeightCells = 1
+        val appWidgetId = appWidgetHost.allocateAppWidgetId()
+        pendingWidgetId = appWidgetId
+        pendingWidgetPage = homeScreenGrid.getCurrentPage()
+        pendingWidgetWidthCells = 2.coerceAtMost(currentCols)
+        pendingWidgetHeightCells = 1
 
-    val intent = Intent(this, WidgetPickerActivity::class.java).apply {
-        putExtra(WidgetPickerActivity.EXTRA_APPWIDGET_ID, appWidgetId)
+        showWidgetPickerDialog(appWidgetId)
     }
-    startActivityForResult(intent, REQUEST_PICK_WIDGET)
-}
 
+    private fun showWidgetPickerDialog(widgetId: Int) {
+        val ctx = this
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
 
+        fun themeColor(attr: Int): Int {
+            val tv = android.util.TypedValue()
+            if (theme.resolveAttribute(attr, tv, true)) {
+                return if (tv.resourceId != 0) androidx.core.content.ContextCompat.getColor(ctx, tv.resourceId) else tv.data
+            }
+            return 0xFF000000.toInt()
+        }
 
-    
+        val root = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setBackgroundColor(themeColor(android.R.attr.colorBackground))
+        }
+
+        val header = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(20), dp(16), dp(8), dp(16))
+        }
+        header.addView(TextView(ctx).apply {
+            text = "Scegli un widget"
+            textSize = 22f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(themeColor(android.R.attr.textColorPrimary))
+            layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        header.addView(TextView(ctx).apply {
+            text = "✕"
+            textSize = 22f
+            setTextColor(themeColor(android.R.attr.textColorPrimary))
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setOnClickListener { pickerDialog?.dismiss() }
+        })
+        root.addView(header)
+
+        root.addView(View(ctx).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1))
+            setBackgroundColor(0x22000000)
+        })
+
+        val list = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(dp(4), dp(4), dp(4), dp(16))
+        }
+        val scroll = android.widget.ScrollView(ctx).apply { addView(list) }
+        root.addView(scroll, android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        val providers = try {
+            appWidgetManager.installedProviders.sortedBy { it.loadLabel(packageManager).toString().lowercase() }
+        } catch (e: Exception) { emptyList() }
+
+        if (providers.isEmpty()) {
+            list.addView(TextView(ctx).apply {
+                text = "Nessun widget disponibile"
+                textSize = 16f
+                gravity = Gravity.CENTER
+                setTextColor(themeColor(android.R.attr.textColorSecondary))
+                setPadding(0, dp(48), 0, 0)
+            })
+        } else {
+            providers.forEach { info ->
+                val row = android.widget.LinearLayout(ctx).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(16), dp(12), dp(16), dp(12))
+                    isClickable = true
+                    isFocusable = true
+                    val outValue = android.util.TypedValue()
+                    context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+                    setBackgroundResource(outValue.resourceId)
+                }
+
+                val previewContainer = android.widget.FrameLayout(ctx).apply {
+                    layoutParams = android.widget.LinearLayout.LayoutParams(dp(96), dp(96)).apply { marginEnd = dp(16) }
+                }
+
+                val preview: android.graphics.drawable.Drawable? = (
+                    try {
+                        if (android.os.Build.VERSION.SDK_INT >= 31) {
+                            info.loadPreviewImage(ctx, resources.displayMetrics.densityDpi)
+                        } else null
+                    } catch (e: Exception) { null }
+                ) ?: (if (info.previewImage != 0) {
+                    try { androidx.core.content.ContextCompat.getDrawable(ctx, info.previewImage) } catch (e: Exception) { null }
+                } else null) ?: (try {
+                    val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
+                    packageManager.getApplicationIcon(ai)
+                } catch (e: Exception) { null })
+
+                if (preview != null) {
+                    val iv = ImageView(ctx).apply {
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                        setImageDrawable(preview)
+                    }
+                    val wR = if (info.minWidth > 0) info.minWidth else preview.intrinsicWidth
+                    val hR = if (info.minHeight > 0) info.minHeight else preview.intrinsicHeight
+                    if (wR > 0 && hR > 0) {
+                        val ratio = wR.toFloat() / hR.toFloat()
+                        val sizePx = dp(96)
+                        val lp = if (ratio >= 1f) {
+                            android.widget.FrameLayout.LayoutParams(sizePx, (sizePx / ratio).toInt().coerceAtLeast(1)).apply { gravity = Gravity.CENTER }
+                        } else {
+                            android.widget.FrameLayout.LayoutParams((sizePx * ratio).toInt().coerceAtLeast(1), sizePx).apply { gravity = Gravity.CENTER }
+                        }
+                        previewContainer.addView(iv, lp)
+                    } else {
+                        previewContainer.addView(iv, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                    }
+                } else {
+                    previewContainer.addView(ImageView(ctx).apply {
+                        setImageResource(android.R.drawable.sym_def_app_icon)
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                    }, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                }
+                row.addView(previewContainer)
+
+                val texts = android.widget.LinearLayout(ctx).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                    layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                texts.addView(TextView(ctx).apply {
+                    text = try { info.loadLabel(packageManager) } catch (e: Exception) { "Widget" }
+                    textSize = 16f
+                    setTextColor(themeColor(android.R.attr.textColorPrimary))
+                })
+                val appName = try {
+                    val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
+                    packageManager.getApplicationLabel(ai).toString()
+                } catch (e: Exception) { "" }
+                if (appName.isNotEmpty()) {
+                    texts.addView(TextView(ctx).apply {
+                        text = appName
+                        textSize = 13f
+                        setTextColor(themeColor(android.R.attr.textColorSecondary))
+                        setPadding(0, dp(2), 0, 0)
+                    })
+                }
+                row.addView(texts)
+
+                row.setOnClickListener {
+                    val bound = try {
+                        appWidgetManager.bindAppWidgetIdIfAllowed(widgetId, info.provider)
+                    } catch (e: Exception) { false }
+
+                    if (bound) {
+                        pendingWidgetId = widgetId
+                        pickerDialog?.dismiss()
+                        findFreeCellAndPlaceWidget()
+                    } else {
+                        val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
+                        }
+                        startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
+                        pickerDialog?.dismiss()
+                    }
+                }
+
+                list.addView(row)
+            }
+        }
+
+        pickerDialog = android.app.Dialog(ctx, android.R.style.Theme_DeviceDefault_Light_NoActionBar).apply {
+            setContentView(root)
+            window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            setOnDismissListener { pickerDialog = null }
+            show()
+        }
+    }
+
     private fun renderWidgets() {
         renderWidgetsForPage(homeScreenGrid.getCurrentPage(), widgetContainer)
     }
@@ -1120,54 +1254,54 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupHomePopup() {
-    homePopupMenu = HomePopupMenu(this)
-    homePopupMenu.onAddWidget = {
-        homePopupMenu.dismiss()
-        startWidgetPicker()
-    }
-    homePopupMenu.onAddPage = {
-        currentPageCount += 1
-        PrefsSync.setPageCount(this, currentPageCount)
-        pageIndicator.setPageCount(currentPageCount)
-        homeScreenGrid.setPageCount(currentPageCount)
-    }
-    homePopupMenu.onChangeWallpaper = {
-        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-            type = "image/*"
-            addCategory(Intent.CATEGORY_OPENABLE)
+        homePopupMenu = HomePopupMenu(this)
+        homePopupMenu.onAddWidget = {
+            homePopupMenu.dismiss()
+            startWidgetPicker()
         }
-        startActivityForResult(intent, REQUEST_PICK_WALLPAPER)
-    }
-    homePopupMenu.onRemovePage = {
-        if (currentPageCount > 1) {
-            val currentPageIndex = homeScreenGrid.getCurrentPage()
-            val slots = PrefsSync.homeSlots(this)
-            val widgets = PrefsSync.widgetSlots(this)
-            val itemsOnPage = slots.count { it.page == currentPageIndex } +
-                    widgets.count { it.page == currentPageIndex }
-            if (itemsOnPage > 0) {
-                Toast.makeText(this, "La pagina non è vuota", Toast.LENGTH_SHORT).show()
-            } else {
-                val newSlots = slots.map {
-                    if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
+        homePopupMenu.onAddPage = {
+            currentPageCount += 1
+            PrefsSync.setPageCount(this, currentPageCount)
+            pageIndicator.setPageCount(currentPageCount)
+            homeScreenGrid.setPageCount(currentPageCount)
+        }
+        homePopupMenu.onChangeWallpaper = {
+            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                type = "image/*"
+                addCategory(Intent.CATEGORY_OPENABLE)
+            }
+            startActivityForResult(intent, REQUEST_PICK_WALLPAPER)
+        }
+        homePopupMenu.onRemovePage = {
+            if (currentPageCount > 1) {
+                val currentPageIndex = homeScreenGrid.getCurrentPage()
+                val slots = PrefsSync.homeSlots(this)
+                val widgets = PrefsSync.widgetSlots(this)
+                val itemsOnPage = slots.count { it.page == currentPageIndex } +
+                        widgets.count { it.page == currentPageIndex }
+                if (itemsOnPage > 0) {
+                    Toast.makeText(this, "La pagina non è vuota", Toast.LENGTH_SHORT).show()
+                } else {
+                    val newSlots = slots.map {
+                        if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
+                    }
+                    val newWidgets = widgets.map {
+                        if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
+                    }
+                    PrefsSync.setHomeSlots(this, newSlots)
+                    PrefsSync.setWidgetSlots(this, newWidgets)
+                    currentPageCount -= 1
+                    if (currentPageCount < 1) currentPageCount = 1
+                    PrefsSync.setPageCount(this, currentPageCount)
+                    pageIndicator.setPageCount(currentPageCount)
+                    homeScreenGrid.setPageCount(currentPageCount)
+                    loadHomeApps()
+                    renderWidgets()
                 }
-                val newWidgets = widgets.map {
-                    if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
-                }
-                PrefsSync.setHomeSlots(this, newSlots)
-                PrefsSync.setWidgetSlots(this, newWidgets)
-                currentPageCount -= 1
-                if (currentPageCount < 1) currentPageCount = 1
-                PrefsSync.setPageCount(this, currentPageCount)
-                pageIndicator.setPageCount(currentPageCount)
-                homeScreenGrid.setPageCount(currentPageCount)
-                loadHomeApps()
-                renderWidgets()
             }
         }
     }
-}
-    
+
     private fun setupDrawerButton() {
         dockDrawerButton.removeAllViews()
         val imageView = ImageView(this).apply {
