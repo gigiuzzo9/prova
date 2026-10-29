@@ -17,6 +17,10 @@ object RenameDialog {
             hint = context.getString(R.string.rename_hint)
             setText(app.label)
             setSelection(text.length)
+            // Aumentato del 30%: 16 -> 21
+            textSize = 21f
+            // Aumentato del 30%: 32,16 -> 42,21
+            setPadding(42, 21, 42, 21)
         }
 
         AlertDialog.Builder(context)
