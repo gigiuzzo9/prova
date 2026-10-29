@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
+import android.graphics.drawable.Drawable
 import android.os.Process
+import java.io.File
 
 object AppRepository {
 
@@ -31,6 +33,7 @@ object AppRepository {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val resolved = pm.queryIntentActivities(intent, 0)
         val customLabels = PrefsSync.customLabels(context)
+        val customIcons = PrefsSync.customIcons(context)
 
         val result = resolved
             .map { it.activityInfo.applicationInfo }
@@ -39,14 +42,25 @@ object AppRepository {
                 val pkg = appInfo.packageName
                 val label = customLabels[pkg] ?: pm.getApplicationLabel(appInfo).toString()
 
-                // Usa LauncherApps per ottenere l'icona dell'alias attivo (es. Fossify Messages)
-                val launcherIcon = try {
-                    launcherApps?.getActivityList(pkg, userHandle)?.firstOrNull()?.getBadgedIcon(0)
-                } catch (_: Exception) {
-                    null
+                // 1. Controlla se c'è un'icona personalizzata salvata
+                val customIconPath = customIcons[pkg]
+                var icon: Drawable? = null
+                if (customIconPath != null) {
+                    val file = File(customIconPath)
+                    if (file.exists()) {
+                        icon = Drawable.createFromPath(customIconPath)
+                    }
                 }
 
-                val icon = launcherIcon ?: pm.getApplicationIcon(appInfo)
+                // 2. Se non c'è un'icona personalizzata, usa LauncherApps (per gli alias)
+                if (icon == null) {
+                    val launcherIcon = try {
+                        launcherApps?.getActivityList(pkg, userHandle)?.firstOrNull()?.getBadgedIcon(0)
+                    } catch (_: Exception) {
+                        null
+                    }
+                    icon = launcherIcon ?: pm.getApplicationIcon(appInfo)
+                }
 
                 AppInfo(label = label, packageName = pkg, icon = icon)
             }
