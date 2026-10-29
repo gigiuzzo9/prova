@@ -1,5 +1,6 @@
 package com.simplylauncher
 
+import android.app.AlertDialog
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
@@ -11,6 +12,7 @@ import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.util.SizeF
@@ -28,6 +30,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 import kotlin.math.ceil
 import kotlin.math.max
 
@@ -73,6 +77,7 @@ class HomeActivity : AppCompatActivity() {
     private var pendingWidgetWidthCells = 2
     private var pendingWidgetHeightCells = 1
     private val UNINSTALL_APP_REQUEST_CODE = 200
+    private val REQUEST_PICK_ICON = 201
     private var resizingWidgetSlot: WidgetSlot? = null
     private var resizingWidgetView: LauncherAppWidgetHostView? = null
     private var widgetPopupWindow: android.widget.PopupWindow? = null
@@ -314,6 +319,13 @@ class HomeActivity : AppCompatActivity() {
                     loadDrawerApps()
                 }
             }
+            REQUEST_PICK_ICON -> {
+                if (resultCode == RESULT_OK && data?.data != null) {
+                    currentApp?.let { app ->
+                        saveCustomIcon(app.packageName, data.data!!)
+                    }
+                }
+            }
             REQUEST_PICK_WIDGET -> {
                 if (resultCode == RESULT_OK && data != null) {
                     val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
@@ -391,6 +403,32 @@ class HomeActivity : AppCompatActivity() {
                 if (resultCode == RESULT_OK) saveWidgetToHome()
                 else Toast.makeText(this, R.string.widget_config_cancelled, Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun saveCustomIcon(packageName: String, uri: Uri) {
+        try {
+            val iconsDir = File(filesDir, "custom_icons")
+            if (!iconsDir.exists()) iconsDir.mkdirs()
+            val destFile = File(iconsDir, "$packageName.png")
+            
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
+            AppRepository.invalidateCache()
+            
+            lifecycleScope.launch {
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                loadHomeApps()
+                dockController.refresh()
+                loadDrawerApps()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Errore salvataggio: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -960,6 +998,22 @@ class HomeActivity : AppCompatActivity() {
                 PrefsSync.setDockItems(this, dockItems.map { if (it == app.packageName) "" else it })
                 loadHomeApps()
                 dockController.refresh()
+            }
+        }
+        contextMenuView.onChangeIcon = {
+            currentApp?.let { app ->
+                AlertDialog.Builder(this)
+                    .setTitle("Cambia icona")
+                    .setMessage("Per un risultato migliore, usa un'immagine PNG con sfondo trasparente, di dimensioni 512x512 pixel.")
+                    .setPositiveButton("Scegli immagine") { _, _ ->
+                        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                            type = "image/*"
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                        }
+                        startActivityForResult(intent, REQUEST_PICK_ICON)
+                    }
+                    .setNegativeButton("Annulla", null)
+                    .show()
             }
         }
         contextMenuView.onDismiss = { currentApp = null; currentAnchor = null }
