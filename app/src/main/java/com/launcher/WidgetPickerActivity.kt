@@ -5,24 +5,18 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Typeface
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.RemoteViews
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 
 class WidgetPickerActivity : AppCompatActivity() {
 
@@ -114,38 +108,15 @@ class WidgetPickerActivity : AppCompatActivity() {
             }
             scaleType = ImageView.ScaleType.CENTER_INSIDE
 
+            // 1. Prova a caricare previewImage (il metodo ufficiale per l'anteprima)
             var preview: Drawable? = null
-
-            // 1. Anteprima reale (Android 12+)
-            if (Build.VERSION.SDK_INT >= 31 && info.previewLayout != 0) {
+            if (info.previewImage != 0) {
                 try {
-                    val remoteViews = RemoteViews(info.provider.packageName, info.previewLayout)
-                    val previewView = remoteViews.apply(ctx, FrameLayout(ctx))
-                    previewView.measure(
-                        View.MeasureSpec.makeMeasureSpec(dp(64), View.MeasureSpec.EXACTLY),
-                        View.MeasureSpec.makeMeasureSpec(dp(64), View.MeasureSpec.EXACTLY)
-                    )
-                    previewView.layout(0, 0, previewView.measuredWidth, previewView.measuredHeight)
-
-                    val bmp = Bitmap.createBitmap(
-                        previewView.measuredWidth,
-                        previewView.measuredHeight,
-                        Bitmap.Config.ARGB_8888
-                    )
-                    val canvas = Canvas(bmp)
-                    previewView.draw(canvas)
-                    preview = BitmapDrawable(ctx.resources, bmp)
+                    preview = ContextCompat.getDrawable(ctx, info.previewImage)
                 } catch (_: Exception) {}
             }
 
-            // 2. Fallback: previewImage
-            if (preview == null && info.previewImage != 0) {
-                try {
-                    preview = androidx.core.content.ContextCompat.getDrawable(ctx, info.previewImage)
-                } catch (_: Exception) {}
-            }
-
-            // 3. Fallback: icona app
+            // 2. Fallback: icona dell'app
             if (preview == null) {
                 try {
                     preview = info.loadIcon(ctx, 0)
