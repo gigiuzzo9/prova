@@ -409,55 +409,52 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun saveCustomIcon(packageName: String, uri: Uri) {
-    try {
-        val iconsDir = File(filesDir, "custom_icons")
-        if (!iconsDir.exists()) iconsDir.mkdirs()
-        val destFile = File(iconsDir, "$packageName.png")
+        try {
+            val iconsDir = File(filesDir, "custom_icons")
+            if (!iconsDir.exists()) iconsDir.mkdirs()
+            val destFile = File(iconsDir, "$packageName.png")
 
-        contentResolver.openInputStream(uri)?.use { input ->
-            FileOutputStream(destFile).use { output ->
-                input.copyTo(output)
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
             }
+
+            PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
+
+            AppRepository.invalidateCache()
+
+            lifecycleScope.launch {
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                loadHomeApps()
+                dockController.refresh()
+                loadDrawerApps()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Errore salvataggio: ${e.message}", Toast.LENGTH_SHORT).show()
         }
-
-        PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
-
-        AppRepository.invalidateCache()
-
-        lifecycleScope.launch {
-            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-            loadHomeApps()
-            dockController.refresh()
-            loadDrawerApps()
-        }
-    } catch (e: Exception) {
-        Toast.makeText(this, "Errore salvataggio: ${e.message}", Toast.LENGTH_SHORT).show()
     }
-}
 
-private fun restoreCustomIcon(packageName: String) {
-    try {
-        // Cancella il file
-        val iconsDir = File(filesDir, "custom_icons")
-        val destFile = File(iconsDir, "$packageName.png")
-        if (destFile.exists()) destFile.delete()
+    private fun restoreCustomIcon(packageName: String) {
+        try {
+            val iconsDir = File(filesDir, "custom_icons")
+            val destFile = File(iconsDir, "$packageName.png")
+            if (destFile.exists()) destFile.delete()
 
-        // Rimuovi il percorso da PrefsSync
-        PrefsSync.removeCustomIcon(this, packageName)
+            PrefsSync.removeCustomIcon(this, packageName)
 
-        AppRepository.invalidateCache()
+            AppRepository.invalidateCache()
 
-        lifecycleScope.launch {
-            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-            loadHomeApps()
-            dockController.refresh()
-            loadDrawerApps()
+            lifecycleScope.launch {
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                loadHomeApps()
+                dockController.refresh()
+                loadDrawerApps()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Errore ripristino: ${e.message}", Toast.LENGTH_SHORT).show()
         }
-    } catch (e: Exception) {
-        Toast.makeText(this, "Errore ripristino: ${e.message}", Toast.LENGTH_SHORT).show()
     }
-}
-    
 
     private fun findFreeCellAndPlaceWidget() {
         if (pendingWidgetId == -1) return
@@ -742,9 +739,11 @@ private fun restoreCustomIcon(packageName: String) {
 
         val container = android.widget.LinearLayout(ctx).apply {
             orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            // Aumentato del 30%: dp(8) -> dp(10), dp(8) -> dp(10), dp(8) -> dp(10), dp(8) -> dp(10)
+            setPadding(dp(10), dp(10), dp(10), dp(10))
             val drawable = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = dp(6).toFloat()
+                // Aumentato del 30%: dp(6) -> dp(8)
+                cornerRadius = dp(8).toFloat()
                 setColor(Color.WHITE)
             }
             background = drawable
@@ -755,8 +754,10 @@ private fun restoreCustomIcon(packageName: String) {
             val tv = TextView(ctx).apply {
                 this.text = text
                 setTextColor(Color.BLACK)
-                textSize = 15f
-                setPadding(dp(20), dp(14), dp(20), dp(14))
+                // Aumentato del 30%: 15f -> 20f (arrotondato)
+                textSize = 20f
+                // Aumentato del 30%: dp(20)->dp(26), dp(14)->dp(18), dp(20)->dp(26), dp(14)->dp(18)
+                setPadding(dp(26), dp(18), dp(26), dp(18))
                 val outValue = android.util.TypedValue()
                 context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
                 setBackgroundResource(outValue.resourceId)
@@ -996,65 +997,65 @@ private fun restoreCustomIcon(packageName: String) {
     }
 
     private fun setupContextMenu() {
-    contextMenuView = AppContextMenuView(this)
-    contextMenuView.onMove = { contextMenuView.dismiss() }
-    contextMenuView.onUninstall = {
-        currentApp?.let { app ->
-            val intent = Intent(Intent.ACTION_DELETE).apply {
-                data = android.net.Uri.fromParts("package", app.packageName, null)
-            }
-            startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
-        }
-    }
-    contextMenuView.onRename = {
-        currentApp?.let { app ->
-            RenameDialog.show(this, app) {
-                AppRepository.invalidateCache()
-                AppRepository.loadInstalledAppsWithCustomLabels(this)
-                homeScreenGrid.setItems(PrefsSync.homeSlots(this))
-                val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
-                drawerAdapter.submitList(apps)
+        contextMenuView = AppContextMenuView(this)
+        contextMenuView.onMove = { contextMenuView.dismiss() }
+        contextMenuView.onUninstall = {
+            currentApp?.let { app ->
+                val intent = Intent(Intent.ACTION_DELETE).apply {
+                    data = android.net.Uri.fromParts("package", app.packageName, null)
+                }
+                startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
             }
         }
-    }
-    contextMenuView.onRemove = {
-        currentApp?.let { app ->
-            val homeSlots = PrefsSync.homeSlots(this)
-            val dockItems = PrefsSync.dockItems(this)
-            PrefsSync.setHomeSlots(this, homeSlots.filter { it.packageName != app.packageName })
-            PrefsSync.setDockItems(this, dockItems.map { if (it == app.packageName) "" else it })
-            loadHomeApps()
-            dockController.refresh()
+        contextMenuView.onRename = {
+            currentApp?.let { app ->
+                RenameDialog.show(this, app) {
+                    AppRepository.invalidateCache()
+                    AppRepository.loadInstalledAppsWithCustomLabels(this)
+                    homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+                    val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
+                    drawerAdapter.submitList(apps)
+                }
+            }
         }
-    }
-    contextMenuView.onChangeIcon = {
-        currentApp?.let { app ->
-            pendingIconPackage = app.packageName
-            val hasCustomIcon = PrefsSync.customIcons(this).containsKey(app.packageName)
+        contextMenuView.onRemove = {
+            currentApp?.let { app ->
+                val homeSlots = PrefsSync.homeSlots(this)
+                val dockItems = PrefsSync.dockItems(this)
+                PrefsSync.setHomeSlots(this, homeSlots.filter { it.packageName != app.packageName })
+                PrefsSync.setDockItems(this, dockItems.map { if (it == app.packageName) "" else it })
+                loadHomeApps()
+                dockController.refresh()
+            }
+        }
+        contextMenuView.onChangeIcon = {
+            currentApp?.let { app ->
+                pendingIconPackage = app.packageName
+                val hasCustomIcon = PrefsSync.customIcons(this).containsKey(app.packageName)
 
-            val builder = AlertDialog.Builder(this)
-                .setTitle("Cambia icona")
-                .setMessage("Per un risultato migliore, usa un'immagine PNG con sfondo trasparente, di dimensioni 512x512 pixel.")
-                .setPositiveButton("Scegli immagine") { _, _ ->
-                    val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                        type = "image/*"
-                        addCategory(Intent.CATEGORY_OPENABLE)
+                val builder = AlertDialog.Builder(this)
+                    .setTitle("Cambia icona")
+                    .setMessage("Per un risultato migliore, usa un'immagine PNG con sfondo trasparente, di dimensioni 512x512 pixel.")
+                    .setPositiveButton("Scegli immagine") { _, _ ->
+                        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                            type = "image/*"
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                        }
+                        startActivityForResult(intent, REQUEST_PICK_ICON)
                     }
-                    startActivityForResult(intent, REQUEST_PICK_ICON)
-                }
-                .setNegativeButton("Annulla", null)
+                    .setNegativeButton("Annulla", null)
 
-            if (hasCustomIcon) {
-                builder.setNeutralButton("Ripristina") { _, _ ->
-                    restoreCustomIcon(app.packageName)
+                if (hasCustomIcon) {
+                    builder.setNeutralButton("Ripristina") { _, _ ->
+                        restoreCustomIcon(app.packageName)
+                    }
                 }
+
+                builder.show()
             }
-
-            builder.show()
         }
+        contextMenuView.onDismiss = { currentApp = null; currentAnchor = null }
     }
-    contextMenuView.onDismiss = { currentApp = null; currentAnchor = null }
-}
 
     private fun setupHomePopup() {
         homePopupMenu = HomePopupMenu(this)
