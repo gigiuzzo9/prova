@@ -330,82 +330,6 @@ class HomeActivity : AppCompatActivity() {
             }
             pendingIconPackage = null
         }
-        REQUEST_PICK_WALLPAPER -> {
-            if (resultCode == RESULT_OK && data?.data != null) {
-                val uri = data.data!!
-                try {
-                    // Prepara il bitmap già ritagliato/scalato una volta sola
-                    val wm = WallpaperManager.getInstance(this)
-                    val dm = resources.displayMetrics
-                    val targetW = dm.widthPixels
-                    val targetH = dm.heightPixels
-
-                    val boundsOptions = android.graphics.BitmapFactory.Options().apply {
-                        inJustDecodeBounds = true
-                    }
-                    contentResolver.openInputStream(uri)?.use {
-                        android.graphics.BitmapFactory.decodeStream(it, null, boundsOptions)
-                    }
-                    val srcW = boundsOptions.outWidth
-                    val srcH = boundsOptions.outHeight
-
-                    var sampleSize = 1
-                    while (srcW / (sampleSize * 2) >= targetW && srcH / (sampleSize * 2) >= targetH) {
-                        sampleSize *= 2
-                    }
-
-                    val decodeOptions = android.graphics.BitmapFactory.Options().apply {
-                        inSampleSize = sampleSize
-                    }
-                    val srcBitmap = contentResolver.openInputStream(uri)?.use {
-                        android.graphics.BitmapFactory.decodeStream(it, null, decodeOptions)
-                    } ?: throw Exception("Impossibile leggere l'immagine")
-
-                    val srcRatio = srcBitmap.width.toFloat() / srcBitmap.height
-                    val targetRatio = targetW.toFloat() / targetH
-
-                    val cropW: Int
-                    val cropH: Int
-                    if (srcRatio > targetRatio) {
-                        cropH = srcBitmap.height
-                        cropW = (cropH * targetRatio).toInt()
-                    } else {
-                        cropW = srcBitmap.width
-                        cropH = (cropW / targetRatio).toInt()
-                    }
-                    val cropX = (srcBitmap.width - cropW) / 2
-                    val cropY = (srcBitmap.height - cropH) / 2
-
-                    val cropped = android.graphics.Bitmap.createBitmap(
-                        srcBitmap, cropX, cropY, cropW, cropH
-                    )
-                    val scaled = android.graphics.Bitmap.createScaledBitmap(
-                        cropped, targetW, targetH, true
-                    )
-
-                    // Chiedi dove applicarlo
-                    AlertDialog.Builder(this)
-                        .setTitle("Applica sfondo a")
-                        .setItems(arrayOf("Home screen", "Lockscreen", "Entrambe")) { _, which ->
-                            try {
-                                val flags = when (which) {
-                                    0 -> WallpaperManager.FLAG_SYSTEM
-                                    1 -> WallpaperManager.FLAG_LOCK
-                                    else -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
-                                }
-                                wm.setBitmap(scaled, null, true, flags)
-                                Toast.makeText(this, "Sfondo applicato", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                        .setNegativeButton("Annulla", null)
-                        .show()
-                } catch (e: Exception) {
-                    Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
         REQUEST_PICK_WIDGET -> {
             if (resultCode == RESULT_OK && data != null) {
                 val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
@@ -484,6 +408,7 @@ class HomeActivity : AppCompatActivity() {
             else Toast.makeText(this, R.string.widget_config_cancelled, Toast.LENGTH_SHORT).show()
         }
     }
+}
 }
 
     private fun saveCustomIcon(packageName: String, uri: Uri) {
@@ -1144,11 +1069,12 @@ class HomeActivity : AppCompatActivity() {
         homeScreenGrid.setPageCount(currentPageCount)
     }
     homePopupMenu.onChangeWallpaper = {
-        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-            type = "image/*"
-            addCategory(Intent.CATEGORY_OPENABLE)
+        try {
+            val intent = Intent(Intent.ACTION_SET_WALLPAPER)
+            startActivity(Intent.createChooser(intent, "Scegli sfondo"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Impossibile aprire le impostazioni dello sfondo", Toast.LENGTH_SHORT).show()
         }
-        startActivityForResult(intent, REQUEST_PICK_WALLPAPER)
     }
     homePopupMenu.onRemovePage = {
         if (currentPageCount > 1) {
@@ -1179,6 +1105,8 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 }
+
+    
     private fun setupDrawerButton() {
         dockDrawerButton.removeAllViews()
         val imageView = ImageView(this).apply {
