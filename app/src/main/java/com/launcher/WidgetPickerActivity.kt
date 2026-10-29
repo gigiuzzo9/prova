@@ -34,8 +34,7 @@ class WidgetPickerActivity : AppCompatActivity() {
         const val EXTRA_NEEDS_BIND = "picker_needs_bind"
         const val EXTRA_PROVIDER = "picker_provider"
 
-        // Deve essere DIVERSO dall'ID usato dal launcher vero (HomeActivity).
-        // Se usi lo stesso, i widget del launcher si rompono o il bind fallisce.
+        // Deve essere DIVERSO dall'ID usato dall'host del launcher vero (HomeActivity).
         private const val PREVIEW_HOST_ID = 0xABCD
     }
 
@@ -58,7 +57,6 @@ class WidgetPickerActivity : AppCompatActivity() {
             return
         }
 
-        // Host separato per le preview
         try {
             previewHost = AppWidgetHost(this, PREVIEW_HOST_ID).also { it.startListening() }
         } catch (_: Exception) {
@@ -96,19 +94,26 @@ class WidgetPickerActivity : AppCompatActivity() {
 
         setContentView(root)
 
-        // Popoliamo DOPO che il layout è attached
         root.post { populateList(list) }
     }
 
     override fun onDestroy() {
+        // 1) Cancella TUTTI i runnable pendenti (processing incrementale + tryCapture)
+        try { mainHandler.removeCallbacksAndMessages(null) } catch (_: Exception) {}
+
+        // 2) Ferma l'host di preview
         try { previewHost?.stopListening() } catch (_: Exception) {}
         previewHost = null
+
+        // 3) Stacca tutte le view dal container
+        try { previewContainer.removeAllViews() } catch (_: Exception) {}
+
         super.onDestroy()
     }
 
     /**
-     * Costruisce la lista in modo incrementale: una row ogni 30ms.
-     * Evita OOM / freeze quando ci sono 50+ widget con AppWidgetHostView.
+     * Costruisce la lista una row ogni 30ms per non affogare l'AppWidgetHost
+     * e per non andare in OOM con 50+ widget.
      */
     private fun populateList(list: LinearLayout) {
         if (isFinishing || isDestroyed) return
@@ -175,7 +180,7 @@ class WidgetPickerActivity : AppCompatActivity() {
         }
         row.addView(icon)
 
-        // 1) Anteprima "veloce" tramite API ufficiali
+        // 1) API veloci (previewImage / loadPreviewImage)
         val fastPreview = tryLoadQuickPreview(ctx, info)
         if (fastPreview != null) {
             icon.setImageDrawable(fastPreview)
@@ -245,10 +250,11 @@ class WidgetPickerActivity : AppCompatActivity() {
     }
 
     /**
-     * Renderizza il widget in un AppWidgetHostView "usa e getta",
-     * cattura una Bitmap e pulisce tutto.
+     * Renderizza il widget in un AppWidgetHostView usa-e-getta,
+     * cattura una Bitmap e pulisce tutto in modo sicuro.
      */
     private fun renderWidgetPreview(info: AppWidgetProviderInfo, target: ImageView) {
+        if (isFinishing || isDestroyed) return
         val host = previewHost ?: return
 
         val tempId = try { host.allocateAppWidgetId() } catch (_: Exception) { return }
@@ -275,6 +281,11 @@ class WidgetPickerActivity : AppCompatActivity() {
             return
         }
 
+        // Rendering software: evita crash nativi di widget con GL/WebView
+        try {
+            hostView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+        } catch (_: Exception) {}
+
         val widthPx = maxOf(info.minWidth, dp(200))
         val heightPx = maxOf(info.minHeight, dp(200))
 
@@ -285,55 +296,68 @@ class WidgetPickerActivity : AppCompatActivity() {
             try { host.deleteAppWidgetId(tempId) } catch (_: Exception) {}
             return
         }
-
         // Non 0f: alcuni widget non disegnano se totalmente invisibili
         container.alpha = 0.01f
 
-        val cleanup: () -> Unit = {
-            try { previewContainer.removeView(container) } catch (_: Exception) {}
+        var done = false
+
+        fun cleanup() {
+            if (done) return
+            done = true
+            // 1) stacca la view dal container PRIMA di eliminare l'id
+            try { (container.parent as? ViewGroup)?.removeView(container) } catch (_: Exception) {}
+            try { container.removeAllViews() } catch (_: Exception) {}
+            // 2) ora è sicuro eliminare l'id
             try { host.deleteAppWidgetId(tempId) } catch (_: Exception) {}
         }
 
         try {
-            previewContainer.addView(
-                container,
-                ViewGroup.LayoutParams(widthPx, heightPx)
-            )
+            previewContainer.addView(container, ViewGroup.LayoutParams(widthPx, heightPx))
         } catch (_: Exception) {
             cleanup()
             return
         }
 
         var attempts = 0
-        val maxAttempts = 12
+        val maxAttempts = 8
 
         fun tryCapture() {
+            if (done) return
             if (isFinishing || isDestroyed) {
                 cleanup()
                 return
             }
+            if (hostView.parent == null) {
+                cleanup()
+                return
+            }
+
             attempts++
             val bmp = captureView(hostView)
             if (bmp != null) {
-                target.setImageBitmap(bmp)
+                try { target.setImageBitmap(bmp) } catch (_: Exception) {}
                 cleanup()
                 return
             }
             if (attempts < maxAttempts) {
-                mainHandler.postDelayed({ tryCapture() }, 80L)
+                mainHandler.postDelayed({ tryCapture() }, 100L)
             } else {
                 cleanup()
             }
         }
 
-        mainHandler.postDelayed({ tryCapture() }, 150L)
+        mainHandler.postDelayed({ tryCapture() }, 200L)
     }
 
     private fun captureView(view: View): Bitmap? {
-        if (view.width <= 0 || view.height <= 0) return null
+        val w = view.width
+        val h = view.height
+        if (w <= 0 || h <= 0) return null
+        if (!view.isAttachedToWindow) return null
         return try {
-            val bmp = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-            view.draw(Canvas(bmp))
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            view.draw(canvas)
             bmp
         } catch (_: Throwable) {
             null
