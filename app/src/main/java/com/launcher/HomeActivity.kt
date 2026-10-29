@@ -615,7 +615,17 @@ class HomeActivity : AppCompatActivity() {
     val density = resources.displayMetrics.density
     fun dp(v: Int) = (v * density).toInt()
 
-    val scrollView = android.widget.ScrollView(ctx)
+    fun themeColor(attr: Int): Int {
+        val tv = android.util.TypedValue()
+        if (theme.resolveAttribute(attr, tv, true)) {
+            return if (tv.resourceId != 0) androidx.core.content.ContextCompat.getColor(ctx, tv.resourceId) else tv.data
+        }
+        return 0xFF000000.toInt()
+    }
+
+    val scrollView = android.widget.ScrollView(ctx).apply {
+        setBackgroundColor(themeColor(android.R.attr.colorBackground))
+    }
     val list = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
         setPadding(dp(8), dp(8), dp(8), dp(8))
@@ -628,6 +638,9 @@ class HomeActivity : AppCompatActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
+        window?.setBackgroundDrawable(
+            android.graphics.drawable.ColorDrawable(themeColor(android.R.attr.colorBackground))
+        )
     }
 
     val providers = appWidgetManager.installedProviders
@@ -636,6 +649,7 @@ class HomeActivity : AppCompatActivity() {
     if (providers.isEmpty()) {
         list.addView(TextView(ctx).apply {
             text = "Nessun widget disponibile"
+            setTextColor(themeColor(android.R.attr.textColorSecondary))
             setPadding(dp(24), dp(24), dp(24), dp(24))
         })
     } else {
@@ -643,52 +657,80 @@ class HomeActivity : AppCompatActivity() {
             val row = android.widget.LinearLayout(ctx).apply {
                 orientation = android.widget.LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(12), dp(12), dp(12), dp(12))
+                setPadding(dp(12), dp(16), dp(12), dp(16))
                 isClickable = true
                 val outValue = android.util.TypedValue()
                 context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
                 setBackgroundResource(outValue.resourceId)
             }
 
-            val iconView = ImageView(ctx).apply {
-                layoutParams = android.widget.LinearLayout.LayoutParams(dp(72), dp(72)).apply {
-                    marginEnd = dp(12)
+            // Preview grande 160dp con aspect ratio del widget
+            val previewContainer = android.widget.FrameLayout(ctx).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(dp(160), dp(160)).apply {
+                    marginEnd = dp(16)
                 }
-                scaleType = ImageView.ScaleType.FIT_CENTER
             }
 
-            val preview = try {
-                info.loadPreviewImage(ctx, resources.displayMetrics.densityDpi)
-            } catch (e: Exception) { null }
+            val preview: android.graphics.drawable.Drawable? = (
+                try {
+                    info.loadPreviewImage(ctx, resources.displayMetrics.densityDpi)
+                } catch (e: Exception) { null }
+            ) ?: (if (info.previewImage != 0) {
+                try { androidx.core.content.ContextCompat.getDrawable(ctx, info.previewImage) } catch (e: Exception) { null }
+            } else null) ?: (try {
+                val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
+                packageManager.getApplicationIcon(ai)
+            } catch (e: Exception) { null })
 
             if (preview != null) {
-                iconView.setImageDrawable(preview)
-            } else {
-                try {
-                    val appInfo = packageManager.getApplicationInfo(info.provider.packageName, 0)
-                    iconView.setImageDrawable(packageManager.getApplicationIcon(appInfo))
-                } catch (e: Exception) {
-                    iconView.setImageResource(android.R.drawable.sym_def_app_icon)
+                val iv = ImageView(ctx).apply {
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    setImageDrawable(preview)
                 }
+                val wR = if (info.minWidth > 0) info.minWidth else preview.intrinsicWidth
+                val hR = if (info.minHeight > 0) info.minHeight else preview.intrinsicHeight
+                if (wR > 0 && hR > 0) {
+                    val ratio = wR.toFloat() / hR.toFloat()
+                    val sizePx = dp(160)
+                    val lp = if (ratio >= 1f) {
+                        android.widget.FrameLayout.LayoutParams(sizePx, (sizePx / ratio).toInt().coerceAtLeast(1)).apply { gravity = Gravity.CENTER }
+                    } else {
+                        android.widget.FrameLayout.LayoutParams((sizePx * ratio).toInt().coerceAtLeast(1), sizePx).apply { gravity = Gravity.CENTER }
+                    }
+                    previewContainer.addView(iv, lp)
+                } else {
+                    previewContainer.addView(iv, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                }
+            } else {
+                previewContainer.addView(ImageView(ctx).apply {
+                    setImageResource(android.R.drawable.sym_def_app_icon)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                }, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             }
-            row.addView(iconView)
+            row.addView(previewContainer)
 
+            // Testi: nome widget + nome app, entrambi visibili col tema
             val texts = android.widget.LinearLayout(ctx).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
                 layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
             texts.addView(TextView(ctx).apply {
-                text = info.loadLabel(packageManager)
+                text = try { info.loadLabel(packageManager) } catch (e: Exception) { "Widget" }
                 textSize = 16f
+                setTextColor(themeColor(android.R.attr.textColorPrimary))
             })
-            texts.addView(TextView(ctx).apply {
-                text = try {
-                    val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
-                    packageManager.getApplicationLabel(ai).toString()
-                } catch (e: Exception) { "" }
-                textSize = 13f
-                alpha = 0.6f
-            })
+            val appName = try {
+                val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
+                packageManager.getApplicationLabel(ai).toString()
+            } catch (e: Exception) { "" }
+            if (appName.isNotEmpty()) {
+                texts.addView(TextView(ctx).apply {
+                    text = appName
+                    textSize = 13f
+                    setTextColor(themeColor(android.R.attr.textColorSecondary))
+                    setPadding(0, dp(2), 0, 0)
+                })
+            }
             row.addView(texts)
 
             row.setOnClickListener {
