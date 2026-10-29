@@ -70,10 +70,8 @@ class WidgetPickerActivity : AppCompatActivity() {
 
         setContentView(root)
 
+        // Nessun filtro: prendiamo tutti i widget, come fa Fossify
         val providers = appWidgetManager.installedProviders
-            .filter {
-                it.widgetCategory and AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN != 0
-            }
             .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
 
         if (providers.isEmpty()) {
