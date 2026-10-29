@@ -330,6 +330,67 @@ class HomeActivity : AppCompatActivity() {
             }
             pendingIconPackage = null
         }
+        REQUEST_PICK_WALLPAPER -> {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                val uri = data.data!!
+                try {
+                    val wm = WallpaperManager.getInstance(this)
+                    val dm = resources.displayMetrics
+                    val targetW = dm.widthPixels
+                    val targetH = dm.heightPixels
+
+                    val boundsOptions = android.graphics.BitmapFactory.Options().apply {
+                        inJustDecodeBounds = true
+                    }
+                    contentResolver.openInputStream(uri)?.use {
+                        android.graphics.BitmapFactory.decodeStream(it, null, boundsOptions)
+                    }
+                    val srcW = boundsOptions.outWidth
+                    val srcH = boundsOptions.outHeight
+
+                    var sampleSize = 1
+                    while (srcW / (sampleSize * 2) >= targetW && srcH / (sampleSize * 2) >= targetH) {
+                        sampleSize *= 2
+                    }
+
+                    val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+                        inSampleSize = sampleSize
+                    }
+                    val srcBitmap = contentResolver.openInputStream(uri)?.use {
+                        android.graphics.BitmapFactory.decodeStream(it, null, decodeOptions)
+                    } ?: throw Exception("Impossibile leggere l'immagine")
+
+                    val srcRatio = srcBitmap.width.toFloat() / srcBitmap.height
+                    val targetRatio = targetW.toFloat() / targetH
+
+                    val cropW: Int
+                    val cropH: Int
+                    if (srcRatio > targetRatio) {
+                        cropH = srcBitmap.height
+                        cropW = (cropH * targetRatio).toInt()
+                    } else {
+                        cropW = srcBitmap.width
+                        cropH = (cropW / targetRatio).toInt()
+                    }
+                    val cropX = (srcBitmap.width - cropW) / 2
+                    val cropY = (srcBitmap.height - cropH) / 2
+
+                    val cropped = android.graphics.Bitmap.createBitmap(
+                        srcBitmap, cropX, cropY, cropW, cropH
+                    )
+                    val scaled = android.graphics.Bitmap.createScaledBitmap(
+                        cropped, targetW, targetH, true
+                    )
+
+                    val visibleCrop = android.graphics.Rect(0, 0, scaled.width, scaled.height)
+                    wm.setBitmap(scaled, visibleCrop, true, WallpaperManager.FLAG_SYSTEM)
+
+                    Toast.makeText(this, "Sfondo impostato", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
         REQUEST_PICK_WIDGET -> {
             if (resultCode == RESULT_OK && data != null) {
                 val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
@@ -1068,12 +1129,11 @@ class HomeActivity : AppCompatActivity() {
         homeScreenGrid.setPageCount(currentPageCount)
     }
     homePopupMenu.onChangeWallpaper = {
-        try {
-            val intent = Intent(Intent.ACTION_SET_WALLPAPER)
-            startActivity(Intent.createChooser(intent, "Scegli sfondo"))
-        } catch (e: Exception) {
-            Toast.makeText(this, "Impossibile aprire le impostazioni dello sfondo", Toast.LENGTH_SHORT).show()
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "image/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
         }
+        startActivityForResult(intent, REQUEST_PICK_WALLPAPER)
     }
     homePopupMenu.onRemovePage = {
         if (currentPageCount > 1) {
@@ -1104,7 +1164,6 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 }
-
     
     private fun setupDrawerButton() {
         dockDrawerButton.removeAllViews()
