@@ -34,6 +34,8 @@ class WidgetPickerActivity : AppCompatActivity() {
         const val EXTRA_NEEDS_BIND = "picker_needs_bind"
         const val EXTRA_PROVIDER = "picker_provider"
 
+        // Deve essere DIVERSO dall'ID usato dal launcher vero (HomeActivity).
+        // Se usi lo stesso, i widget del launcher si rompono o il bind fallisce.
         private const val PREVIEW_HOST_ID = 0xABCD
     }
 
@@ -41,6 +43,8 @@ class WidgetPickerActivity : AppCompatActivity() {
     private var appWidgetId = -1
     private var previewHost: AppWidgetHost? = null
     private lateinit var previewContainer: FrameLayout
+
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,7 +58,12 @@ class WidgetPickerActivity : AppCompatActivity() {
             return
         }
 
-        previewHost = AppWidgetHost(this, PREVIEW_HOST_ID).also { it.startListening() }
+        // Host separato per le preview
+        try {
+            previewHost = AppWidgetHost(this, PREVIEW_HOST_ID).also { it.startListening() }
+        } catch (_: Exception) {
+            previewHost = null
+        }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -79,7 +88,7 @@ class WidgetPickerActivity : AppCompatActivity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
         )
 
-        // Container invisibile per renderizzare le preview widget
+        // Container invisibile (ma attached) per renderizzare le preview
         previewContainer = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(0, 0)
         }
@@ -87,39 +96,60 @@ class WidgetPickerActivity : AppCompatActivity() {
 
         setContentView(root)
 
-        // Popoliamo DOPO che il root è attached: nessun accesso a decorView
-        root.post {
-            if (isFinishing || isDestroyed) return@post
-            try {
-                val providers = appWidgetManager.installedProviders
-                    .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
-
-                if (providers.isEmpty()) {
-                    list.addView(TextView(this).apply {
-                        text = "Nessun widget disponibile"
-                        textSize = 16f
-                        gravity = Gravity.CENTER
-                        setPadding(0, dp(48), 0, 0)
-                    })
-                } else {
-                    providers.forEach { info ->
-                        try {
-                            list.addView(createWidgetRow(info))
-                        } catch (_: Exception) {
-                            // un widget rotto non deve uccidere la lista
-                        }
-                    }
-                }
-            } catch (_: Exception) {
-                // non crashare mai per la lista
-            }
-        }
+        // Popoliamo DOPO che il layout è attached
+        root.post { populateList(list) }
     }
 
     override fun onDestroy() {
         try { previewHost?.stopListening() } catch (_: Exception) {}
         previewHost = null
         super.onDestroy()
+    }
+
+    /**
+     * Costruisce la lista in modo incrementale: una row ogni 30ms.
+     * Evita OOM / freeze quando ci sono 50+ widget con AppWidgetHostView.
+     */
+    private fun populateList(list: LinearLayout) {
+        if (isFinishing || isDestroyed) return
+
+        val providers: List<AppWidgetProviderInfo> = try {
+            appWidgetManager.installedProviders
+                .sortedBy { info ->
+                    try {
+                        info.loadLabel(packageManager).toString().lowercase()
+                    } catch (_: Exception) {
+                        ""
+                    }
+                }
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        if (providers.isEmpty()) {
+            list.addView(TextView(this).apply {
+                text = "Nessun widget disponibile"
+                textSize = 16f
+                gravity = Gravity.CENTER
+                setPadding(0, dp(48), 0, 0)
+            })
+            return
+        }
+
+        val queue = ArrayDeque(providers)
+
+        fun processNext() {
+            if (isFinishing || isDestroyed) return
+            val info = queue.removeFirstOrNull() ?: return
+            try {
+                list.addView(createWidgetRow(info))
+            } catch (_: Exception) {
+                // un widget rotto non deve uccidere la lista
+            }
+            mainHandler.postDelayed({ processNext() }, 30L)
+        }
+
+        processNext()
     }
 
     private fun createWidgetRow(info: AppWidgetProviderInfo): LinearLayout {
@@ -145,12 +175,12 @@ class WidgetPickerActivity : AppCompatActivity() {
         }
         row.addView(icon)
 
-        // 1) API veloci (previewImage / loadPreviewImage)
+        // 1) Anteprima "veloce" tramite API ufficiali
         val fastPreview = tryLoadQuickPreview(ctx, info)
         if (fastPreview != null) {
             icon.setImageDrawable(fastPreview)
         } else {
-            // 2) Fallback: renderizza davvero il widget
+            // 2) Fallback: renderizza il widget vero
             renderWidgetPreview(info, icon)
         }
 
@@ -160,14 +190,16 @@ class WidgetPickerActivity : AppCompatActivity() {
         }
 
         texts.addView(TextView(ctx).apply {
-            text = info.loadLabel(ctx.packageManager)
+            text = try { info.loadLabel(ctx.packageManager) } catch (_: Exception) { "" }
             textSize = 16f
         })
 
         val appName = try {
             val ai = ctx.packageManager.getApplicationInfo(info.provider.packageName, 0)
             ctx.packageManager.getApplicationLabel(ai).toString()
-        } catch (_: Exception) { "" }
+        } catch (_: Exception) {
+            ""
+        }
 
         texts.addView(TextView(ctx).apply {
             text = appName
@@ -180,7 +212,9 @@ class WidgetPickerActivity : AppCompatActivity() {
         row.setOnClickListener {
             val bound = try {
                 appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, info.provider)
-            } catch (_: Exception) { false }
+            } catch (_: Exception) {
+                false
+            }
 
             val result = Intent().apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -195,11 +229,13 @@ class WidgetPickerActivity : AppCompatActivity() {
     }
 
     private fun tryLoadQuickPreview(ctx: Context, info: AppWidgetProviderInfo): Drawable? {
+        // 1) previewImage (resource ID) — funziona su tutte le API
         if (info.previewImage != 0) {
             try {
                 ContextCompat.getDrawable(ctx, info.previewImage)?.let { return it }
             } catch (_: Exception) {}
         }
+        // 2) loadPreviewImage (API 31+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
                 info.loadPreviewImage(ctx, 0)?.let { return it }
@@ -208,6 +244,10 @@ class WidgetPickerActivity : AppCompatActivity() {
         return null
     }
 
+    /**
+     * Renderizza il widget in un AppWidgetHostView "usa e getta",
+     * cattura una Bitmap e pulisce tutto.
+     */
     private fun renderWidgetPreview(info: AppWidgetProviderInfo, target: ImageView) {
         val host = previewHost ?: return
 
@@ -215,7 +255,9 @@ class WidgetPickerActivity : AppCompatActivity() {
 
         val bound = try {
             appWidgetManager.bindAppWidgetIdIfAllowed(tempId, info.provider)
-        } catch (_: Exception) { false }
+        } catch (_: Exception) {
+            false
+        }
 
         if (!bound) {
             try { host.deleteAppWidgetId(tempId) } catch (_: Exception) {}
@@ -243,7 +285,8 @@ class WidgetPickerActivity : AppCompatActivity() {
             try { host.deleteAppWidgetId(tempId) } catch (_: Exception) {}
             return
         }
-        // Non alpha=0: alcuni widget non disegnano se invisibili
+
+        // Non 0f: alcuni widget non disegnano se totalmente invisibili
         container.alpha = 0.01f
 
         val cleanup: () -> Unit = {
@@ -261,16 +304,15 @@ class WidgetPickerActivity : AppCompatActivity() {
             return
         }
 
-        val handler = Handler(Looper.getMainLooper())
         var attempts = 0
         val maxAttempts = 12
 
         fun tryCapture() {
-            attempts++
             if (isFinishing || isDestroyed) {
                 cleanup()
                 return
             }
+            attempts++
             val bmp = captureView(hostView)
             if (bmp != null) {
                 target.setImageBitmap(bmp)
@@ -278,13 +320,13 @@ class WidgetPickerActivity : AppCompatActivity() {
                 return
             }
             if (attempts < maxAttempts) {
-                handler.postDelayed({ tryCapture() }, 80L)
+                mainHandler.postDelayed({ tryCapture() }, 80L)
             } else {
                 cleanup()
             }
         }
 
-        handler.postDelayed({ tryCapture() }, 150L)
+        mainHandler.postDelayed({ tryCapture() }, 150L)
     }
 
     private fun captureView(view: View): Bitmap? {
@@ -293,7 +335,7 @@ class WidgetPickerActivity : AppCompatActivity() {
             val bmp = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
             view.draw(Canvas(bmp))
             bmp
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             null
         }
     }
