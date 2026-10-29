@@ -34,7 +34,6 @@ class WidgetPickerActivity : AppCompatActivity() {
         const val EXTRA_NEEDS_BIND = "picker_needs_bind"
         const val EXTRA_PROVIDER = "picker_provider"
 
-        // Deve essere DIVERSO dall'ID usato dall'host del launcher vero (HomeActivity).
         private const val PREVIEW_HOST_ID = 0xABCD
     }
 
@@ -44,6 +43,15 @@ class WidgetPickerActivity : AppCompatActivity() {
     private lateinit var previewContainer: FrameLayout
 
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // Coda per il rendering sequenziale delle preview
+    private data class PreviewJob(
+        val info: AppWidgetProviderInfo,
+        val target: ImageView
+    )
+
+    private val previewQueue = ArrayDeque<PreviewJob>()
+    private var isRendering = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -86,7 +94,6 @@ class WidgetPickerActivity : AppCompatActivity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
         )
 
-        // Container invisibile (ma attached) per renderizzare le preview
         previewContainer = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(0, 0)
         }
@@ -98,23 +105,15 @@ class WidgetPickerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        // 1) Cancella TUTTI i runnable pendenti (processing incrementale + tryCapture)
         try { mainHandler.removeCallbacksAndMessages(null) } catch (_: Exception) {}
-
-        // 2) Ferma l'host di preview
+        previewQueue.clear()
+        isRendering = false
         try { previewHost?.stopListening() } catch (_: Exception) {}
         previewHost = null
-
-        // 3) Stacca tutte le view dal container
         try { previewContainer.removeAllViews() } catch (_: Exception) {}
-
         super.onDestroy()
     }
 
-    /**
-     * Costruisce la lista una row ogni 30ms per non affogare l'AppWidgetHost
-     * e per non andare in OOM con 50+ widget.
-     */
     private fun populateList(list: LinearLayout) {
         if (isFinishing || isDestroyed) return
 
@@ -149,9 +148,9 @@ class WidgetPickerActivity : AppCompatActivity() {
             try {
                 list.addView(createWidgetRow(info))
             } catch (_: Exception) {
-                // un widget rotto non deve uccidere la lista
+                // ignora widget rotto
             }
-            mainHandler.postDelayed({ processNext() }, 30L)
+            mainHandler.postDelayed({ processNext() }, 20L)
         }
 
         processNext()
@@ -180,13 +179,13 @@ class WidgetPickerActivity : AppCompatActivity() {
         }
         row.addView(icon)
 
-        // 1) API veloci (previewImage / loadPreviewImage)
+        // 1) API veloci
         val fastPreview = tryLoadQuickPreview(ctx, info)
         if (fastPreview != null) {
             icon.setImageDrawable(fastPreview)
         } else {
-            // 2) Fallback: renderizza il widget vero
-            renderWidgetPreview(info, icon)
+            // 2) Metti in coda per rendering sequenziale
+            enqueuePreview(info, icon)
         }
 
         val texts = LinearLayout(ctx).apply {
@@ -234,13 +233,11 @@ class WidgetPickerActivity : AppCompatActivity() {
     }
 
     private fun tryLoadQuickPreview(ctx: Context, info: AppWidgetProviderInfo): Drawable? {
-        // 1) previewImage (resource ID) — funziona su tutte le API
         if (info.previewImage != 0) {
             try {
                 ContextCompat.getDrawable(ctx, info.previewImage)?.let { return it }
             } catch (_: Exception) {}
         }
-        // 2) loadPreviewImage (API 31+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
                 info.loadPreviewImage(ctx, 0)?.let { return it }
@@ -249,72 +246,91 @@ class WidgetPickerActivity : AppCompatActivity() {
         return null
     }
 
-    /**
-     * Renderizza il widget in un AppWidgetHostView usa-e-getta,
-     * cattura una Bitmap e pulisce tutto in modo sicuro.
-     */
-    private fun renderWidgetPreview(info: AppWidgetProviderInfo, target: ImageView) {
-        if (isFinishing || isDestroyed) return
-        val host = previewHost ?: return
+    // ===== CODA SEQUENZIALE =====
 
-        val tempId = try { host.allocateAppWidgetId() } catch (_: Exception) { return }
+    private fun enqueuePreview(info: AppWidgetProviderInfo, target: ImageView) {
+        previewQueue.addLast(PreviewJob(info, target))
+        if (!isRendering) {
+            isRendering = true
+            renderNext()
+        }
+    }
+
+    private fun renderNext() {
+        if (isFinishing || isDestroyed) {
+            isRendering = false
+            previewQueue.clear()
+            return
+        }
+
+        val job = previewQueue.removeFirstOrNull()
+        if (job == null) {
+            isRendering = false
+            return
+        }
+
+        renderSinglePreview(job) {
+            // Callback quando la preview corrente è finita (successo o fallimento)
+            mainHandler.postDelayed({ renderNext() }, 30L)
+        }
+    }
+
+    private fun renderSinglePreview(job: PreviewJob, onDone: () -> Unit) {
+        val host = previewHost
+        if (host == null) { onDone(); return }
+
+        val tempId = try { host.allocateAppWidgetId() } catch (_: Exception) { onDone(); return }
 
         val bound = try {
-            appWidgetManager.bindAppWidgetIdIfAllowed(tempId, info.provider)
-        } catch (_: Exception) {
-            false
-        }
+            appWidgetManager.bindAppWidgetIdIfAllowed(tempId, job.info.provider)
+        } catch (_: Exception) { false }
 
         if (!bound) {
             try { host.deleteAppWidgetId(tempId) } catch (_: Exception) {}
+            onDone()
             return
         }
 
         val hostView: AppWidgetHostView? = try {
-            host.createView(this, tempId, info)
-        } catch (_: Exception) {
-            null
-        }
+            host.createView(this, tempId, job.info)
+        } catch (_: Exception) { null }
 
         if (hostView == null) {
             try { host.deleteAppWidgetId(tempId) } catch (_: Exception) {}
+            onDone()
             return
         }
 
-        // Rendering software: evita crash nativi di widget con GL/WebView
-        try {
-            hostView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-        } catch (_: Exception) {}
+        try { hostView.setLayerType(View.LAYER_TYPE_SOFTWARE, null) } catch (_: Exception) {}
 
-        val widthPx = maxOf(info.minWidth, dp(200))
-        val heightPx = maxOf(info.minHeight, dp(200))
+        val widthPx = maxOf(job.info.minWidth, dp(200))
+        val heightPx = maxOf(job.info.minHeight, dp(200))
 
         val container = FrameLayout(this)
         try {
             container.addView(hostView, FrameLayout.LayoutParams(widthPx, heightPx))
         } catch (_: Exception) {
             try { host.deleteAppWidgetId(tempId) } catch (_: Exception) {}
+            onDone()
             return
         }
-        // Non 0f: alcuni widget non disegnano se totalmente invisibili
         container.alpha = 0.01f
 
         var done = false
 
-        fun cleanup() {
+        fun cleanupAndDone() {
             if (done) return
             done = true
-            // 1) stacca la view dal container PRIMA di eliminare l'id
             try { (container.parent as? ViewGroup)?.removeView(container) } catch (_: Exception) {}
             try { container.removeAllViews() } catch (_: Exception) {}
-            // 2) ora è sicuro eliminare l'id
             try { host.deleteAppWidgetId(tempId) } catch (_: Exception) {}
+            onDone()
         }
 
         try {
             previewContainer.addView(container, ViewGroup.LayoutParams(widthPx, heightPx))
         } catch (_: Exception) {
-            cleanup()
+            cleanupAndDone()
             return
         }
 
@@ -323,26 +339,20 @@ class WidgetPickerActivity : AppCompatActivity() {
 
         fun tryCapture() {
             if (done) return
-            if (isFinishing || isDestroyed) {
-                cleanup()
-                return
-            }
-            if (hostView.parent == null) {
-                cleanup()
-                return
-            }
+            if (isFinishing || isDestroyed) { cleanupAndDone(); return }
+            if (hostView.parent == null) { cleanupAndDone(); return }
 
             attempts++
             val bmp = captureView(hostView)
             if (bmp != null) {
-                try { target.setImageBitmap(bmp) } catch (_: Exception) {}
-                cleanup()
+                try { job.target.setImageBitmap(bmp) } catch (_: Exception) {}
+                cleanupAndDone()
                 return
             }
             if (attempts < maxAttempts) {
                 mainHandler.postDelayed({ tryCapture() }, 100L)
             } else {
-                cleanup()
+                cleanupAndDone()
             }
         }
 
@@ -356,8 +366,7 @@ class WidgetPickerActivity : AppCompatActivity() {
         if (!view.isAttachedToWindow) return null
         return try {
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bmp)
-            view.draw(canvas)
+            view.draw(Canvas(bmp))
             bmp
         } catch (_: Throwable) {
             null
