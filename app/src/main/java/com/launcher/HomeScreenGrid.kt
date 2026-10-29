@@ -278,33 +278,35 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect, offsetX: Float) {
-        val app = AppCache.get(slot.packageName) ?: return
-        val bitmap = getIconBitmap(slot.packageName) ?: return
+    val app = AppCache.get(slot.packageName) ?: return
+    val bitmap = getIconBitmap(slot.packageName) ?: return
 
-        val isCustom = PrefsSync.customIcons(context).containsKey(slot.packageName)
-        val drawSize = if (isCustom) (iconSize * 0.85f).toInt() else iconSize
-        val drawOffset = (iconSize - drawSize) / 2f
+    val isCustom = PrefsSync.customIcons(context).containsKey(slot.packageName)
+    // Riduciamo solo l'icona custom, non il nome
+    val drawSize = if (isCustom) (iconSize * 0.90f).toInt() else iconSize
+    val drawOffset = (iconSize - drawSize) / 2f
 
-        val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + drawOffset
-        val iconTop = cell.top.toFloat() + iconMargin.toFloat() + drawOffset
-        canvas.drawBitmap(bitmap, iconLeft, iconTop, null)
+    val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + drawOffset
+    val iconTop = cell.top.toFloat() + iconMargin.toFloat() + drawOffset
+    canvas.drawBitmap(bitmap, iconLeft, iconTop, null)
 
-        if (app.label.isNotEmpty()) {
-            val textWidth = cell.width() - 2 * labelSideMargin
-            val layout = StaticLayout.Builder
-                .obtain(app.label, 0, app.label.length, textPaint, textWidth)
-                .setMaxLines(1)
-                .setEllipsize(TextUtils.TruncateAt.END)
-                .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                .build()
+    if (app.label.isNotEmpty()) {
+        val textWidth = cell.width() - 2 * labelSideMargin
+        val layout = StaticLayout.Builder
+            .obtain(app.label, 0, app.label.length, textPaint, textWidth)
+            .setMaxLines(1)
+            .setEllipsize(TextUtils.TruncateAt.END)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .build()
 
-            val labelTop = iconTop + drawSize + (iconMargin / 2)
-            canvas.save()
-            canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
-            layout.draw(canvas)
-            canvas.restore()
-        }
+        // Il nome parte SEMPRE sotto l'icona standard (iconSize), non sotto quella ridotta
+        val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
+        canvas.save()
+        canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
+        layout.draw(canvas)
+        canvas.restore()
     }
+}
 
     private fun drawingItem(canvas: Canvas) {
         val dragged = draggingItem ?: return
