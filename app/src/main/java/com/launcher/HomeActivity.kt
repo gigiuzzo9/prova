@@ -972,56 +972,65 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupContextMenu() {
-        contextMenuView = AppContextMenuView(this)
-        contextMenuView.onMove = { contextMenuView.dismiss() }
-        contextMenuView.onUninstall = {
-            currentApp?.let { app ->
-                val intent = Intent(Intent.ACTION_DELETE).apply {
-                    data = android.net.Uri.fromParts("package", app.packageName, null)
-                }
-                startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
+    contextMenuView = AppContextMenuView(this)
+    contextMenuView.onMove = { contextMenuView.dismiss() }
+    contextMenuView.onUninstall = {
+        currentApp?.let { app ->
+            val intent = Intent(Intent.ACTION_DELETE).apply {
+                data = android.net.Uri.fromParts("package", app.packageName, null)
             }
+            startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
         }
-        contextMenuView.onRename = {
-            currentApp?.let { app ->
-                RenameDialog.show(this, app) {
-                    AppRepository.invalidateCache()
-                    AppRepository.loadInstalledAppsWithCustomLabels(this)
-                    homeScreenGrid.setItems(PrefsSync.homeSlots(this))
-                    val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
-                    drawerAdapter.submitList(apps)
-                }
-            }
-        }
-        contextMenuView.onRemove = {
-            currentApp?.let { app ->
-                val homeSlots = PrefsSync.homeSlots(this)
-                val dockItems = PrefsSync.dockItems(this)
-                PrefsSync.setHomeSlots(this, homeSlots.filter { it.packageName != app.packageName })
-                PrefsSync.setDockItems(this, dockItems.map { if (it == app.packageName) "" else it })
-                loadHomeApps()
-                dockController.refresh()
-            }
-        }
-        contextMenuView.onChangeIcon = {
-            currentApp?.let { app ->
-                pendingIconPackage = app.packageName
-                AlertDialog.Builder(this)
-                    .setTitle("Cambia icona")
-                    .setMessage("Per un risultato migliore, usa un'immagine PNG con sfondo trasparente, di dimensioni 512x512 pixel.")
-                    .setPositiveButton("Scegli immagine") { _, _ ->
-                        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                            type = "image/*"
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                        }
-                        startActivityForResult(intent, REQUEST_PICK_ICON)
-                    }
-                    .setNegativeButton("Annulla", null)
-                    .show()
-            }
-        }
-        contextMenuView.onDismiss = { currentApp = null; currentAnchor = null }
     }
+    contextMenuView.onRename = {
+        currentApp?.let { app ->
+            RenameDialog.show(this, app) {
+                AppRepository.invalidateCache()
+                AppRepository.loadInstalledAppsWithCustomLabels(this)
+                homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+                val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
+                drawerAdapter.submitList(apps)
+            }
+        }
+    }
+    contextMenuView.onRemove = {
+        currentApp?.let { app ->
+            val homeSlots = PrefsSync.homeSlots(this)
+            val dockItems = PrefsSync.dockItems(this)
+            PrefsSync.setHomeSlots(this, homeSlots.filter { it.packageName != app.packageName })
+            PrefsSync.setDockItems(this, dockItems.map { if (it == app.packageName) "" else it })
+            loadHomeApps()
+            dockController.refresh()
+        }
+    }
+    contextMenuView.onChangeIcon = {
+        currentApp?.let { app ->
+            pendingIconPackage = app.packageName
+            val hasCustomIcon = PrefsSync.customIcons(this).containsKey(app.packageName)
+
+            val builder = AlertDialog.Builder(this)
+                .setTitle("Cambia icona")
+                .setMessage("Per un risultato migliore, usa un'immagine PNG con sfondo trasparente, di dimensioni 512x512 pixel.")
+                .setPositiveButton("Scegli immagine") { _, _ ->
+                    val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "image/*"
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                    }
+                    startActivityForResult(intent, REQUEST_PICK_ICON)
+                }
+                .setNegativeButton("Annulla", null)
+
+            if (hasCustomIcon) {
+                builder.setNeutralButton("Ripristina") { _, _ ->
+                    restoreCustomIcon(app.packageName)
+                }
+            }
+
+            builder.show()
+        }
+    }
+    contextMenuView.onDismiss = { currentApp = null; currentAnchor = null }
+}
 
     private fun setupHomePopup() {
         homePopupMenu = HomePopupMenu(this)
