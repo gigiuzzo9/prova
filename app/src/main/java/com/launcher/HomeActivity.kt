@@ -391,41 +391,6 @@ class HomeActivity : AppCompatActivity() {
                 }
             }
         }
-        REQUEST_PICK_WIDGET -> {
-            if (resultCode == RESULT_OK && data != null) {
-                val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
-                val needsBind = data.getBooleanExtra(WidgetPickerActivity.EXTRA_NEEDS_BIND, false)
-                val provider: android.content.ComponentName? =
-                    if (android.os.Build.VERSION.SDK_INT >= 33) {
-                        data.getParcelableExtra(
-                            WidgetPickerActivity.EXTRA_PROVIDER,
-                            android.content.ComponentName::class.java
-                        )
-                    } else {
-                        @Suppress("DEPRECATION")
-                        data.getParcelableExtra(WidgetPickerActivity.EXTRA_PROVIDER)
-                    }
-
-                if (widgetId != -1) {
-                    pendingWidgetId = widgetId
-                    if (needsBind && provider != null) {
-                        val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, Bundle())
-                        }
-                        startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
-                    } else {
-                        findFreeCellAndPlaceWidget()
-                    }
-                }
-            } else {
-                if (pendingWidgetId != -1) {
-                    appWidgetHost.deleteAppWidgetId(pendingWidgetId)
-                    pendingWidgetId = -1
-                }
-            }
-        }
         REQUEST_BIND_WIDGET -> {
             if (resultCode == RESULT_OK) {
                 val boundId = data?.getIntExtra(
@@ -636,18 +601,125 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun startWidgetPicker() {
-        val appWidgetId = appWidgetHost.allocateAppWidgetId()
-        pendingWidgetId = appWidgetId
-        pendingWidgetPage = homeScreenGrid.getCurrentPage()
-        pendingWidgetWidthCells = 2.coerceAtMost(currentCols)
-        pendingWidgetHeightCells = 1
+    val appWidgetId = appWidgetHost.allocateAppWidgetId()
+    pendingWidgetId = appWidgetId
+    pendingWidgetPage = homeScreenGrid.getCurrentPage()
+    pendingWidgetWidthCells = 2.coerceAtMost(currentCols)
+    pendingWidgetHeightCells = 1
 
-        val intent = Intent(this, WidgetPickerActivity::class.java).apply {
-            putExtra(WidgetPickerActivity.EXTRA_APPWIDGET_ID, appWidgetId)
-        }
-        startActivityForResult(intent, REQUEST_PICK_WIDGET)
+    showWidgetPickerDialog(appWidgetId)
+}
+
+private fun showWidgetPickerDialog(widgetId: Int) {
+    val ctx = this
+    val density = resources.displayMetrics.density
+    fun dp(v: Int) = (v * density).toInt()
+
+    val scrollView = android.widget.ScrollView(ctx)
+    val list = android.widget.LinearLayout(ctx).apply {
+        orientation = android.widget.LinearLayout.VERTICAL
+        setPadding(dp(8), dp(8), dp(8), dp(8))
+    }
+    scrollView.addView(list)
+
+    val dialog = android.app.Dialog(ctx, android.R.style.Theme_Material_Light_Dialog_NoActionBar).apply {
+        setContentView(scrollView)
+        window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.9f).toInt(),
+            (resources.displayMetrics.heightPixels * 0.8f).toInt()
+        )
+        setTitle("Scegli un widget")
     }
 
+    val providers = appWidgetManager.installedProviders
+        .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
+
+    if (providers.isEmpty()) {
+        list.addView(TextView(ctx).apply {
+            text = "Nessun widget disponibile"
+            setPadding(dp(24), dp(24), dp(24), dp(24))
+        })
+    } else {
+        providers.forEach { info ->
+            val row = android.widget.LinearLayout(ctx).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+                isClickable = true
+                val outValue = android.util.TypedValue()
+                context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+                setBackgroundResource(outValue.resourceId)
+            }
+
+            val iconView = ImageView(ctx).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(dp(72), dp(72)).apply {
+                    marginEnd = dp(12)
+                }
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }
+
+            // ESATTAMENTE come Fossify: loadPreviewImage ?: appIcon
+            val preview = try {
+                info.loadPreviewImage(ctx, resources.displayMetrics.densityDpi)
+            } catch (e: Exception) { null }
+
+            if (preview != null) {
+                iconView.setImageDrawable(preview)
+            } else {
+                try {
+                    val appInfo = packageManager.getApplicationInfo(info.provider.packageName, 0)
+                    iconView.setImageDrawable(packageManager.getApplicationIcon(appInfo))
+                } catch (e: Exception) {
+                    iconView.setImageResource(android.R.drawable.sym_def_app_icon)
+                }
+            }
+            row.addView(iconView)
+
+            val texts = android.widget.LinearLayout(ctx).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            texts.addView(TextView(ctx).apply {
+                text = info.loadLabel(packageManager)
+                textSize = 16f
+            })
+            texts.addView(TextView(ctx).apply {
+                text = try {
+                    val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
+                    packageManager.getApplicationLabel(ai).toString()
+                } catch (e: Exception) { "" }
+                textSize = 13f
+                alpha = 0.6f
+            })
+            row.addView(texts)
+
+            row.setOnClickListener {
+                val bound = try {
+                    appWidgetManager.bindAppWidgetIdIfAllowed(widgetId, info.provider)
+                } catch (e: Exception) { false }
+
+                if (bound) {
+                    pendingWidgetId = widgetId
+                    dialog.dismiss()
+                    findFreeCellAndPlaceWidget()
+                } else {
+                    val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
+                    }
+                    startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
+                    dialog.dismiss()
+                }
+            }
+
+            list.addView(row)
+        }
+    }
+
+    dialog.show()
+}
+
+    
     private fun renderWidgets() {
         renderWidgetsForPage(homeScreenGrid.getCurrentPage(), widgetContainer)
     }
