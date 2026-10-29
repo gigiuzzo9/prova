@@ -623,8 +623,12 @@ class HomeActivity : AppCompatActivity() {
         return 0xFF000000.toInt()
     }
 
+    // Calcola se il tema è scuro o chiaro, per le icone delle barre
+    val bgColor = themeColor(android.R.attr.colorBackground)
+    val isDarkBg = isColorDark(bgColor)
+
     val scrollView = android.widget.ScrollView(ctx).apply {
-        setBackgroundColor(themeColor(android.R.attr.colorBackground))
+        setBackgroundColor(bgColor)
     }
     val list = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
@@ -639,8 +643,22 @@ class HomeActivity : AppCompatActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT
         )
         window?.setBackgroundDrawable(
-            android.graphics.drawable.ColorDrawable(themeColor(android.R.attr.colorBackground))
+            android.graphics.drawable.ColorDrawable(bgColor)
         )
+        // Barre di sistema che seguono il tema
+        window?.statusBarColor = bgColor
+        window?.navigationBarColor = bgColor
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            window?.insetsController?.setSystemBarsAppearance(
+                if (isDarkBg) 0 else android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            window?.decorView?.systemUiVisibility =
+                if (isDarkBg) 0
+                else android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        }
     }
 
     val providers = appWidgetManager.installedProviders
@@ -664,7 +682,6 @@ class HomeActivity : AppCompatActivity() {
                 setBackgroundResource(outValue.resourceId)
             }
 
-            // Preview grande 160dp con aspect ratio del widget
             val previewContainer = android.widget.FrameLayout(ctx).apply {
                 layoutParams = android.widget.LinearLayout.LayoutParams(dp(160), dp(160)).apply {
                     marginEnd = dp(16)
@@ -687,8 +704,11 @@ class HomeActivity : AppCompatActivity() {
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     setImageDrawable(preview)
                 }
-                val wR = if (info.minWidth > 0) info.minWidth else preview.intrinsicWidth
-                val hR = if (info.minHeight > 0) info.minHeight else preview.intrinsicHeight
+                val intrinsicW = preview.intrinsicWidth
+                val intrinsicH = preview.intrinsicHeight
+                val wR = if (intrinsicW > 1 && intrinsicH > 1) intrinsicW else info.minWidth
+                val hR = if (intrinsicW > 1 && intrinsicH > 1) intrinsicH else info.minHeight
+
                 if (wR > 0 && hR > 0) {
                     val ratio = wR.toFloat() / hR.toFloat()
                     val sizePx = dp(160)
@@ -709,7 +729,6 @@ class HomeActivity : AppCompatActivity() {
             }
             row.addView(previewContainer)
 
-            // Testi: nome widget + nome app, entrambi visibili col tema
             val texts = android.widget.LinearLayout(ctx).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
                 layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -757,6 +776,14 @@ class HomeActivity : AppCompatActivity() {
     }
 
     dialog.show()
+}
+
+private fun isColorDark(color: Int): Boolean {
+    val r = android.graphics.Color.red(color)
+    val g = android.graphics.Color.green(color)
+    val b = android.graphics.Color.blue(color)
+    val luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+    return luminance < 0.5
 }
 
     private fun renderWidgets() {
