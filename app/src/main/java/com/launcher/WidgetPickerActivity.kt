@@ -24,7 +24,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 
@@ -35,13 +34,13 @@ class WidgetPickerActivity : AppCompatActivity() {
         const val EXTRA_NEEDS_BIND = "picker_needs_bind"
         const val EXTRA_PROVIDER = "picker_provider"
 
-        // ID diverso da quello usato in HomeActivity per i widget reali
         private const val PREVIEW_HOST_ID = 0xABCD
     }
 
     private lateinit var appWidgetManager: AppWidgetManager
     private var appWidgetId = -1
     private var previewHost: AppWidgetHost? = null
+    private lateinit var previewContainer: FrameLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,27 +79,45 @@ class WidgetPickerActivity : AppCompatActivity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
         )
 
+        // Container invisibile per renderizzare le preview widget
+        previewContainer = FrameLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(0, 0)
+        }
+        root.addView(previewContainer)
+
         setContentView(root)
 
-        val providers = appWidgetManager.installedProviders
-            .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
+        // Popoliamo DOPO che il root è attached: nessun accesso a decorView
+        root.post {
+            if (isFinishing || isDestroyed) return@post
+            try {
+                val providers = appWidgetManager.installedProviders
+                    .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
 
-        if (providers.isEmpty()) {
-            list.addView(TextView(this).apply {
-                text = "Nessun widget disponibile"
-                textSize = 16f
-                gravity = Gravity.CENTER
-                setPadding(0, dp(48), 0, 0)
-            })
-        } else {
-            providers.forEach { info ->
-                list.addView(createWidgetRow(info))
+                if (providers.isEmpty()) {
+                    list.addView(TextView(this).apply {
+                        text = "Nessun widget disponibile"
+                        textSize = 16f
+                        gravity = Gravity.CENTER
+                        setPadding(0, dp(48), 0, 0)
+                    })
+                } else {
+                    providers.forEach { info ->
+                        try {
+                            list.addView(createWidgetRow(info))
+                        } catch (_: Exception) {
+                            // un widget rotto non deve uccidere la lista
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // non crashare mai per la lista
             }
         }
     }
 
     override fun onDestroy() {
-        previewHost?.stopListening()
+        try { previewHost?.stopListening() } catch (_: Exception) {}
         previewHost = null
         super.onDestroy()
     }
@@ -128,12 +145,12 @@ class WidgetPickerActivity : AppCompatActivity() {
         }
         row.addView(icon)
 
-        // 1) Prova prima le API veloci
+        // 1) API veloci (previewImage / loadPreviewImage)
         val fastPreview = tryLoadQuickPreview(ctx, info)
         if (fastPreview != null) {
             icon.setImageDrawable(fastPreview)
         } else {
-            // 2) Fallback: renderizza il widget vero
+            // 2) Fallback: renderizza davvero il widget
             renderWidgetPreview(info, icon)
         }
 
@@ -194,51 +211,55 @@ class WidgetPickerActivity : AppCompatActivity() {
     private fun renderWidgetPreview(info: AppWidgetProviderInfo, target: ImageView) {
         val host = previewHost ?: return
 
-        val tempId = host.allocateAppWidgetId()
+        val tempId = try { host.allocateAppWidgetId() } catch (_: Exception) { return }
 
         val bound = try {
             appWidgetManager.bindAppWidgetIdIfAllowed(tempId, info.provider)
         } catch (_: Exception) { false }
 
         if (!bound) {
-            Toast.makeText(
-                this,
-                "Bind fallito: ${info.provider.flattenToShortString()}",
-                Toast.LENGTH_SHORT
-            ).show()
             try { host.deleteAppWidgetId(tempId) } catch (_: Exception) {}
             return
         }
 
-        val hostView: AppWidgetHostView = host.createView(this, tempId, info)
+        val hostView: AppWidgetHostView? = try {
+            host.createView(this, tempId, info)
+        } catch (_: Exception) {
+            null
+        }
+
+        if (hostView == null) {
+            try { host.deleteAppWidgetId(tempId) } catch (_: Exception) {}
+            return
+        }
 
         val widthPx = maxOf(info.minWidth, dp(200))
         val heightPx = maxOf(info.minHeight, dp(200))
 
         val container = FrameLayout(this)
-        container.addView(hostView, FrameLayout.LayoutParams(widthPx, heightPx))
-        container.alpha = 0f
-
-        val decor = window.decorView
-        val rootView: ViewGroup? = when (decor) {
-            is ViewGroup -> decor
-            else -> null
+        try {
+            container.addView(hostView, FrameLayout.LayoutParams(widthPx, heightPx))
+        } catch (_: Exception) {
+            try { host.deleteAppWidgetId(tempId) } catch (_: Exception) {}
+            return
         }
+        // Non alpha=0: alcuni widget non disegnano se invisibili
+        container.alpha = 0.01f
 
         val cleanup: () -> Unit = {
-            try { rootView?.removeView(container) } catch (_: Exception) {}
+            try { previewContainer.removeView(container) } catch (_: Exception) {}
             try { host.deleteAppWidgetId(tempId) } catch (_: Exception) {}
         }
 
-        if (rootView == null) {
+        try {
+            previewContainer.addView(
+                container,
+                ViewGroup.LayoutParams(widthPx, heightPx)
+            )
+        } catch (_: Exception) {
             cleanup()
             return
         }
-
-        rootView.addView(
-            container,
-            ViewGroup.LayoutParams(widthPx, heightPx)
-        )
 
         val handler = Handler(Looper.getMainLooper())
         var attempts = 0
