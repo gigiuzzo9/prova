@@ -9,6 +9,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.ViewGroup
@@ -18,8 +19,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.bumptech.glide.Glide
-import com.bumptech.glide.load.engine.DiskCacheStrategy
 
 class WidgetPickerActivity : AppCompatActivity() {
 
@@ -27,6 +26,7 @@ class WidgetPickerActivity : AppCompatActivity() {
         const val EXTRA_APPWIDGET_ID = "picker_appwidget_id"
         const val EXTRA_NEEDS_BIND = "picker_needs_bind"
         const val EXTRA_PROVIDER = "picker_provider"
+        private const val TAG = "WidgetPicker"
     }
 
     private lateinit var appWidgetManager: AppWidgetManager
@@ -70,7 +70,6 @@ class WidgetPickerActivity : AppCompatActivity() {
 
         setContentView(root)
 
-        // Nessun filtro: prendiamo tutti i widget, come fa Fossify
         val providers = appWidgetManager.installedProviders
             .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
 
@@ -111,29 +110,8 @@ class WidgetPickerActivity : AppCompatActivity() {
         }
         row.addView(icon)
 
-        // --- ANTEPRIMA CON GLIDE (come Fossify) ---
-        var appIcon: Drawable? = null
-        try {
-            val ai = ctx.packageManager.getApplicationInfo(info.provider.packageName, 0)
-            appIcon = ctx.packageManager.getApplicationIcon(ai)
-        } catch (_: Exception) {}
-
-        var preview: Drawable? = null
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            preview = info.loadPreviewImage(ctx, ctx.resources.displayMetrics.densityDpi)
-        } else {
-            if (info.previewImage != 0) {
-                try {
-                    preview = ContextCompat.getDrawable(ctx, info.previewImage)
-                } catch (_: Exception) {}
-            }
-        }
-
-        Glide.with(ctx)
-            .load(preview ?: appIcon)
-            .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
-            .into(icon)
-        // -------------------------------------------
+        // Caricamento anteprima (sincrono, veloce — niente thread)
+        loadPreview(info, icon)
 
         val texts = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -178,6 +156,64 @@ class WidgetPickerActivity : AppCompatActivity() {
         }
 
         return row
+    }
+
+    /**
+     * Carica l'anteprima del widget con fallback a cascata:
+     *  1) loadPreviewImage (API 31+)
+     *  2) previewImage resource ID (tutte le API)
+     *  3) icona dell'app
+     *  4) icona di sistema di default
+     */
+    private fun loadPreview(info: AppWidgetProviderInfo, icon: ImageView) {
+        val ctx: Context = this
+
+        val appIcon: Drawable? = try {
+            val ai = ctx.packageManager.getApplicationInfo(info.provider.packageName, 0)
+            ctx.packageManager.getApplicationIcon(ai)
+        } catch (_: Exception) {
+            null
+        }
+
+        var preview: Drawable? = null
+
+        // 1) previewLayout (API 31+) — densità 0 = naturale del device
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                preview = info.loadPreviewImage(ctx, 0)
+            } catch (e: Exception) {
+                Log.w(TAG, "loadPreviewImage failed for ${info.provider}", e)
+                preview = null
+            }
+        }
+
+        // 2) previewImage classico (resource ID) — funziona anche su API 31+
+        if (preview == null && info.previewImage != 0) {
+            try {
+                preview = ContextCompat.getDrawable(ctx, info.previewImage)
+            } catch (e: Exception) {
+                Log.w(TAG, "previewImage load failed for ${info.provider}", e)
+                preview = null
+            }
+        }
+
+        // 3) fallback icona app
+        val final = preview ?: appIcon
+
+        if (final != null) {
+            icon.setImageDrawable(final)
+        } else {
+            // 4) ultima spiaggia
+            icon.setImageResource(android.R.drawable.sym_def_app_icon)
+        }
+
+        Log.d(
+            TAG,
+            "provider=${info.provider} " +
+                "previewImage=${info.previewImage} " +
+                "previewLayout=${if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) info.previewLayout else -1} " +
+                "preview=${preview != null} appIcon=${appIcon != null}"
+        )
     }
 
     private fun dp(value: Int): Int =
