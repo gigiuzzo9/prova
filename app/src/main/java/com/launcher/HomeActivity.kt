@@ -435,6 +435,30 @@ class HomeActivity : AppCompatActivity() {
     }
 }
 
+private fun restoreCustomIcon(packageName: String) {
+    try {
+        // Cancella il file
+        val iconsDir = File(filesDir, "custom_icons")
+        val destFile = File(iconsDir, "$packageName.png")
+        if (destFile.exists()) destFile.delete()
+
+        // Rimuovi il percorso da PrefsSync
+        PrefsSync.removeCustomIcon(this, packageName)
+
+        AppRepository.invalidateCache()
+
+        lifecycleScope.launch {
+            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+            loadHomeApps()
+            dockController.refresh()
+            loadDrawerApps()
+        }
+    } catch (e: Exception) {
+        Toast.makeText(this, "Errore ripristino: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+    
+
     private fun findFreeCellAndPlaceWidget() {
         if (pendingWidgetId == -1) return
         if (currentCols <= 0 || currentRows <= 0) {
