@@ -2,7 +2,9 @@ package com.simplylauncher
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
+import android.os.Process
 
 object AppRepository {
 
@@ -23,6 +25,9 @@ object AppRepository {
         }
 
         val pm = context.packageManager
+        val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as? LauncherApps
+        val userHandle = Process.myUserHandle()
+
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val resolved = pm.queryIntentActivities(intent, 0)
         val customLabels = PrefsSync.customLabels(context)
@@ -33,7 +38,17 @@ object AppRepository {
             .map { appInfo ->
                 val pkg = appInfo.packageName
                 val label = customLabels[pkg] ?: pm.getApplicationLabel(appInfo).toString()
-                AppInfo(label = label, packageName = pkg, icon = pm.getApplicationIcon(appInfo))
+
+                // Usa LauncherApps per ottenere l'icona dell'alias attivo (es. Fossify Messages)
+                val launcherIcon = try {
+                    launcherApps?.getActivityList(pkg, userHandle)?.firstOrNull()?.getBadgedIcon(0)
+                } catch (_: Exception) {
+                    null
+                }
+
+                val icon = launcherIcon ?: pm.getApplicationIcon(appInfo)
+
+                AppInfo(label = label, packageName = pkg, icon = icon)
             }
             .sortedBy { it.label.lowercase() }
 
