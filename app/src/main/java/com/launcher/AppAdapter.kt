@@ -54,7 +54,7 @@ class AppAdapter(
 
             val isCustom = PrefsSync.customIcons(itemView.context).containsKey(app.packageName)
             if (isCustom) {
-                val pad = (iconSizePx * 0.10f).toInt() // 10% per lato = 20% totale
+                val pad = (iconSizePx * 0.05f).toInt() // 10% per lato = 20% totale
                 icon.setPadding(pad, pad, pad, pad)
             } else {
                 icon.setPadding(0, 0, 0, 0)
