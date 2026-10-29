@@ -60,13 +60,6 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
-        <activity
-            android:name=".WidgetPickerActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.Launcher" />
-
-        
         <receiver
             android:name=".PackageChangeReceiver"
             android:exported="false">
