@@ -119,7 +119,7 @@ class WidgetPickerActivity : AppCompatActivity() {
             // 1. Anteprima reale (Android 12+)
             if (Build.VERSION.SDK_INT >= 31 && info.previewLayout != 0) {
                 try {
-                    val remoteViews = RemoteViews(info.packageName, info.previewLayout)
+                    val remoteViews = RemoteViews(info.provider.packageName, info.previewLayout)
                     val previewView = remoteViews.apply(ctx, FrameLayout(ctx))
                     previewView.measure(
                         View.MeasureSpec.makeMeasureSpec(dp(64), View.MeasureSpec.EXACTLY),
