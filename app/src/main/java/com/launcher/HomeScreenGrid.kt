@@ -282,8 +282,7 @@ class HomeScreenGrid @JvmOverloads constructor(
     val bitmap = getIconBitmap(slot.packageName) ?: return
 
     val isCustom = PrefsSync.customIcons(context).containsKey(slot.packageName)
-    // Riduciamo solo l'icona custom, non il nome
-    val drawSize = if (isCustom) (iconSize * 0.90f).toInt() else iconSize
+    val drawSize = if (isCustom) (iconSize * 0.80f).toInt() else iconSize
     val drawOffset = (iconSize - drawSize) / 2f
 
     val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + drawOffset
@@ -299,7 +298,6 @@ class HomeScreenGrid @JvmOverloads constructor(
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .build()
 
-        // Il nome parte SEMPRE sotto l'icona standard (iconSize), non sotto quella ridotta
         val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
         canvas.save()
         canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
