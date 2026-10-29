@@ -24,9 +24,11 @@ class HomePopupMenu(private val ctx: Context) {
 
         val container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(32, 16, 32, 16)
+            // Aumentato del 30%: 32 -> 42, 16 -> 21
+            setPadding(42, 21, 42, 21)
             val drawable = GradientDrawable().apply {
-                cornerRadius = 16f
+                // Aumentato del 30%: 16 -> 21
+                cornerRadius = 21f
                 setColor(Color.WHITE)
             }
             background = drawable
@@ -72,8 +74,10 @@ class HomePopupMenu(private val ctx: Context) {
         return TextView(ctx).apply {
             this.text = text
             setTextColor(Color.BLACK)
-            textSize = 16f
-            setPadding(32, 20, 32, 20)
+            // Aumentato del 30%: 16 -> 21
+            textSize = 21f
+            // Aumentato del 30%: 32 -> 42, 20 -> 26
+            setPadding(42, 26, 42, 26)
             setOnClickListener { onClick() }
         }
     }
