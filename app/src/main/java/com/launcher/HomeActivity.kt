@@ -1068,54 +1068,54 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupHomePopup() {
-        homePopupMenu = HomePopupMenu(this)
-        homePopupMenu.onAddWidget = {
-            homePopupMenu.dismiss()
-            startWidgetPicker()
+    homePopupMenu = HomePopupMenu(this)
+    homePopupMenu.onAddWidget = {
+        homePopupMenu.dismiss()
+        startWidgetPicker()
+    }
+    homePopupMenu.onAddPage = {
+        currentPageCount += 1
+        PrefsSync.setPageCount(this, currentPageCount)
+        pageIndicator.setPageCount(currentPageCount)
+        homeScreenGrid.setPageCount(currentPageCount)
+    }
+    homePopupMenu.onChangeWallpaper = {
+        try {
+            val intent = Intent(Intent.ACTION_SET_WALLPAPER)
+            startActivity(Intent.createChooser(intent, "Scegli sfondo"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Nessuna app per cambiare sfondo trovata", Toast.LENGTH_SHORT).show()
         }
-        homePopupMenu.onAddPage = {
-            currentPageCount += 1
-            PrefsSync.setPageCount(this, currentPageCount)
-            pageIndicator.setPageCount(currentPageCount)
-            homeScreenGrid.setPageCount(currentPageCount)
-        }
-        homePopupMenu.onChangeWallpaper = {
-            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                type = "image/*"
-                addCategory(Intent.CATEGORY_OPENABLE)
-            }
-            startActivityForResult(intent, REQUEST_PICK_WALLPAPER)
-        }
-        homePopupMenu.onRemovePage = {
-            if (currentPageCount > 1) {
-                val currentPageIndex = homeScreenGrid.getCurrentPage()
-                val slots = PrefsSync.homeSlots(this)
-                val widgets = PrefsSync.widgetSlots(this)
-                val itemsOnPage = slots.count { it.page == currentPageIndex } +
-                        widgets.count { it.page == currentPageIndex }
-                if (itemsOnPage > 0) {
-                    Toast.makeText(this, "La pagina non è vuota", Toast.LENGTH_SHORT).show()
-                } else {
-                    val newSlots = slots.map {
-                        if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
-                    }
-                    val newWidgets = widgets.map {
-                        if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
-                    }
-                    PrefsSync.setHomeSlots(this, newSlots)
-                    PrefsSync.setWidgetSlots(this, newWidgets)
-                    currentPageCount -= 1
-                    if (currentPageCount < 1) currentPageCount = 1
-                    PrefsSync.setPageCount(this, currentPageCount)
-                    pageIndicator.setPageCount(currentPageCount)
-                    homeScreenGrid.setPageCount(currentPageCount)
-                    loadHomeApps()
-                    renderWidgets()
+    }
+    homePopupMenu.onRemovePage = {
+        if (currentPageCount > 1) {
+            val currentPageIndex = homeScreenGrid.getCurrentPage()
+            val slots = PrefsSync.homeSlots(this)
+            val widgets = PrefsSync.widgetSlots(this)
+            val itemsOnPage = slots.count { it.page == currentPageIndex } +
+                    widgets.count { it.page == currentPageIndex }
+            if (itemsOnPage > 0) {
+                Toast.makeText(this, "La pagina non è vuota", Toast.LENGTH_SHORT).show()
+            } else {
+                val newSlots = slots.map {
+                    if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
                 }
+                val newWidgets = widgets.map {
+                    if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
+                }
+                PrefsSync.setHomeSlots(this, newSlots)
+                PrefsSync.setWidgetSlots(this, newWidgets)
+                currentPageCount -= 1
+                if (currentPageCount < 1) currentPageCount = 1
+                PrefsSync.setPageCount(this, currentPageCount)
+                pageIndicator.setPageCount(currentPageCount)
+                homeScreenGrid.setPageCount(currentPageCount)
+                loadHomeApps()
+                renderWidgets()
             }
         }
     }
-
+}
     private fun setupDrawerButton() {
         dockDrawerButton.removeAllViews()
         val imageView = ImageView(this).apply {
