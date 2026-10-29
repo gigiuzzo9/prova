@@ -23,6 +23,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.cardview.widget.CardView
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.flow.first
@@ -48,6 +49,7 @@ class HomeActivity : AppCompatActivity() {
     private var dragOverlayLastY = 0f
 
     private lateinit var drawerOverlay: FrameLayout
+    private lateinit var drawerCard: CardView
     private lateinit var drawerRecyclerView: RecyclerView
     private lateinit var drawerAdapter: AppAdapter
     private var drawerOpen = false
@@ -139,6 +141,7 @@ class HomeActivity : AppCompatActivity() {
         )
 
         drawerOverlay = findViewById(R.id.drawerOverlay)
+        drawerCard = findViewById(R.id.drawerCard)
         drawerRecyclerView = findViewById(R.id.drawerRecyclerView)
 
         appWidgetManager = AppWidgetManager.getInstance(this)
@@ -300,96 +303,96 @@ class HomeActivity : AppCompatActivity() {
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-    super.onActivityResult(requestCode, resultCode, data)
-    when (requestCode) {
-        UNINSTALL_APP_REQUEST_CODE -> {
-            AppRepository.invalidateCache()
-            lifecycleScope.launch {
-                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-                loadHomeApps()
-                dockController.refresh()
-                loadDrawerApps()
+        super.onActivityResult(requestCode, resultCode, data)
+        when (requestCode) {
+            UNINSTALL_APP_REQUEST_CODE -> {
+                AppRepository.invalidateCache()
+                lifecycleScope.launch {
+                    AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                    loadHomeApps()
+                    dockController.refresh()
+                    loadDrawerApps()
+                }
             }
-        }
-        REQUEST_PICK_WIDGET -> {
-            if (resultCode == RESULT_OK && data != null) {
-                val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
-                val needsBind = data.getBooleanExtra(WidgetPickerActivity.EXTRA_NEEDS_BIND, false)
-                val provider: android.content.ComponentName? =
-                    if (android.os.Build.VERSION.SDK_INT >= 33) {
-                        data.getParcelableExtra(
-                            WidgetPickerActivity.EXTRA_PROVIDER,
-                            android.content.ComponentName::class.java
-                        )
-                    } else {
-                        @Suppress("DEPRECATION")
-                        data.getParcelableExtra(WidgetPickerActivity.EXTRA_PROVIDER)
+            REQUEST_PICK_WIDGET -> {
+                if (resultCode == RESULT_OK && data != null) {
+                    val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
+                    val needsBind = data.getBooleanExtra(WidgetPickerActivity.EXTRA_NEEDS_BIND, false)
+                    val provider: android.content.ComponentName? =
+                        if (android.os.Build.VERSION.SDK_INT >= 33) {
+                            data.getParcelableExtra(
+                                WidgetPickerActivity.EXTRA_PROVIDER,
+                                android.content.ComponentName::class.java
+                            )
+                        } else {
+                            @Suppress("DEPRECATION")
+                            data.getParcelableExtra(WidgetPickerActivity.EXTRA_PROVIDER)
+                        }
+
+                    if (widgetId != -1) {
+                        pendingWidgetId = widgetId
+                        if (needsBind && provider != null) {
+                            val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
+                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, Bundle())
+                            }
+                            startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
+                        } else {
+                            findFreeCellAndPlaceWidget()
+                        }
+                    }
+                } else {
+                    if (pendingWidgetId != -1) {
+                        appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+                        pendingWidgetId = -1
+                    }
+                }
+            }
+            REQUEST_BIND_WIDGET -> {
+                if (resultCode == RESULT_OK) {
+                    val boundId = data?.getIntExtra(
+                        AppWidgetManager.EXTRA_APPWIDGET_ID,
+                        pendingWidgetId
+                    ) ?: pendingWidgetId
+                    pendingWidgetId = boundId
+
+                    val info = appWidgetManager.getAppWidgetInfo(boundId)
+                    if (info == null) {
+                        Toast.makeText(this, "Widget non disponibile dopo il bind", Toast.LENGTH_SHORT).show()
+                        appWidgetHost.deleteAppWidgetId(boundId)
+                        pendingWidgetId = -1
+                        return
                     }
 
-                if (widgetId != -1) {
-                    pendingWidgetId = widgetId
-                    if (needsBind && provider != null) {
-                        val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, Bundle())
+                    if (info.configure != null) {
+                        try {
+                            appWidgetHost.startAppWidgetConfigureActivityForResult(
+                                this@HomeActivity,
+                                pendingWidgetId,
+                                0,
+                                REQUEST_CONFIGURE_WIDGET,
+                                null
+                            )
+                        } catch (e: Exception) {
+                            appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+                            pendingWidgetId = -1
                         }
-                        startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
                     } else {
                         findFreeCellAndPlaceWidget()
                     }
-                }
-            } else {
-                if (pendingWidgetId != -1) {
+                } else {
+                    Toast.makeText(this, R.string.widget_bind_denied, Toast.LENGTH_SHORT).show()
                     appWidgetHost.deleteAppWidgetId(pendingWidgetId)
                     pendingWidgetId = -1
                 }
             }
-        }
-        REQUEST_BIND_WIDGET -> {
-            if (resultCode == RESULT_OK) {
-                val boundId = data?.getIntExtra(
-                    AppWidgetManager.EXTRA_APPWIDGET_ID,
-                    pendingWidgetId
-                ) ?: pendingWidgetId
-                pendingWidgetId = boundId
-
-                val info = appWidgetManager.getAppWidgetInfo(boundId)
-                if (info == null) {
-                    Toast.makeText(this, "Widget non disponibile dopo il bind", Toast.LENGTH_SHORT).show()
-                    appWidgetHost.deleteAppWidgetId(boundId)
-                    pendingWidgetId = -1
-                    return
-                }
-
-                if (info.configure != null) {
-                    try {
-                        appWidgetHost.startAppWidgetConfigureActivityForResult(
-                            this@HomeActivity,
-                            pendingWidgetId,
-                            0,
-                            REQUEST_CONFIGURE_WIDGET,
-                            null
-                        )
-                    } catch (e: Exception) {
-                        appWidgetHost.deleteAppWidgetId(pendingWidgetId)
-                        pendingWidgetId = -1
-                    }
-                } else {
-                    findFreeCellAndPlaceWidget()
-                }
-            } else {
-                Toast.makeText(this, R.string.widget_bind_denied, Toast.LENGTH_SHORT).show()
-                appWidgetHost.deleteAppWidgetId(pendingWidgetId)
-                pendingWidgetId = -1
+            REQUEST_CONFIGURE_WIDGET -> {
+                if (resultCode == RESULT_OK) saveWidgetToHome()
+                else Toast.makeText(this, R.string.widget_config_cancelled, Toast.LENGTH_SHORT).show()
             }
         }
-        REQUEST_CONFIGURE_WIDGET -> {
-            if (resultCode == RESULT_OK) saveWidgetToHome()
-            else Toast.makeText(this, R.string.widget_config_cancelled, Toast.LENGTH_SHORT).show()
-        }
     }
-} 
 
     private fun findFreeCellAndPlaceWidget() {
         if (pendingWidgetId == -1) return
@@ -927,87 +930,86 @@ class HomeActivity : AppCompatActivity() {
         drawerOverlay.setOnClickListener { closeDrawer() }
     }
 
-   private fun setupContextMenu() {
-    contextMenuView = AppContextMenuView(this)
-    contextMenuView.onMove = { contextMenuView.dismiss() }
-    contextMenuView.onUninstall = {
-        currentApp?.let { app ->
-            val intent = Intent(Intent.ACTION_DELETE).apply {
-                data = android.net.Uri.fromParts("package", app.packageName, null)
-            }
-            startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
-        }
-    }
-    contextMenuView.onRename = {
-        currentApp?.let { app ->
-            RenameDialog.show(this, app) {
-                AppRepository.invalidateCache()
-                AppRepository.loadInstalledAppsWithCustomLabels(this)
-                homeScreenGrid.setItems(PrefsSync.homeSlots(this))
-                val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
-                drawerAdapter.submitList(apps)
+    private fun setupContextMenu() {
+        contextMenuView = AppContextMenuView(this)
+        contextMenuView.onMove = { contextMenuView.dismiss() }
+        contextMenuView.onUninstall = {
+            currentApp?.let { app ->
+                val intent = Intent(Intent.ACTION_DELETE).apply {
+                    data = android.net.Uri.fromParts("package", app.packageName, null)
+                }
+                startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
             }
         }
-    }
-    contextMenuView.onRemove = {
-        currentApp?.let { app ->
-            val homeSlots = PrefsSync.homeSlots(this)
-            val dockItems = PrefsSync.dockItems(this)
-            PrefsSync.setHomeSlots(this, homeSlots.filter { it.packageName != app.packageName })
-            PrefsSync.setDockItems(this, dockItems.map { if (it == app.packageName) "" else it })
-            loadHomeApps()
-            dockController.refresh()
+        contextMenuView.onRename = {
+            currentApp?.let { app ->
+                RenameDialog.show(this, app) {
+                    AppRepository.invalidateCache()
+                    AppRepository.loadInstalledAppsWithCustomLabels(this)
+                    homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+                    val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
+                    drawerAdapter.submitList(apps)
+                }
+            }
         }
-    }
-    contextMenuView.onDismiss = { currentApp = null; currentAnchor = null }
-}
-
-private fun setupHomePopup() {
-    homePopupMenu = HomePopupMenu(this)
-    homePopupMenu.onAddWidget = {
-        homePopupMenu.dismiss()
-        startWidgetPicker()
-    }
-    homePopupMenu.onAddPage = {
-        currentPageCount += 1
-        PrefsSync.setPageCount(this, currentPageCount)
-        pageIndicator.setPageCount(currentPageCount)
-        homeScreenGrid.setPageCount(currentPageCount)
-    }
-    homePopupMenu.onChangeWallpaper = {
-        try { startActivity(Intent(Intent.ACTION_SET_WALLPAPER)) } catch (_: Exception) {}
-    }
-    homePopupMenu.onRemovePage = {
-        if (currentPageCount > 1) {
-            val currentPageIndex = homeScreenGrid.getCurrentPage()
-            val slots = PrefsSync.homeSlots(this)
-            val widgets = PrefsSync.widgetSlots(this)
-            val itemsOnPage = slots.count { it.page == currentPageIndex } +
-                    widgets.count { it.page == currentPageIndex }
-            if (itemsOnPage > 0) {
-                Toast.makeText(this, "La pagina non è vuota", Toast.LENGTH_SHORT).show()
-            } else {
-                val newSlots = slots.map {
-                    if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
-                }
-                val newWidgets = widgets.map {
-                    if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
-                }
-                PrefsSync.setHomeSlots(this, newSlots)
-                PrefsSync.setWidgetSlots(this, newWidgets)
-                currentPageCount -= 1
-                if (currentPageCount < 1) currentPageCount = 1
-                PrefsSync.setPageCount(this, currentPageCount)
-                pageIndicator.setPageCount(currentPageCount)
-                homeScreenGrid.setPageCount(currentPageCount)
+        contextMenuView.onRemove = {
+            currentApp?.let { app ->
+                val homeSlots = PrefsSync.homeSlots(this)
+                val dockItems = PrefsSync.dockItems(this)
+                PrefsSync.setHomeSlots(this, homeSlots.filter { it.packageName != app.packageName })
+                PrefsSync.setDockItems(this, dockItems.map { if (it == app.packageName) "" else it })
                 loadHomeApps()
-                renderWidgets()
+                dockController.refresh()
+            }
+        }
+        contextMenuView.onDismiss = { currentApp = null; currentAnchor = null }
+    }
+
+    private fun setupHomePopup() {
+        homePopupMenu = HomePopupMenu(this)
+        homePopupMenu.onAddWidget = {
+            homePopupMenu.dismiss()
+            startWidgetPicker()
+        }
+        homePopupMenu.onAddPage = {
+            currentPageCount += 1
+            PrefsSync.setPageCount(this, currentPageCount)
+            pageIndicator.setPageCount(currentPageCount)
+            homeScreenGrid.setPageCount(currentPageCount)
+        }
+        homePopupMenu.onChangeWallpaper = {
+            try { startActivity(Intent(Intent.ACTION_SET_WALLPAPER)) } catch (_: Exception) {}
+        }
+        homePopupMenu.onRemovePage = {
+            if (currentPageCount > 1) {
+                val currentPageIndex = homeScreenGrid.getCurrentPage()
+                val slots = PrefsSync.homeSlots(this)
+                val widgets = PrefsSync.widgetSlots(this)
+                val itemsOnPage = slots.count { it.page == currentPageIndex } +
+                        widgets.count { it.page == currentPageIndex }
+                if (itemsOnPage > 0) {
+                    Toast.makeText(this, "La pagina non è vuota", Toast.LENGTH_SHORT).show()
+                } else {
+                    val newSlots = slots.map {
+                        if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
+                    }
+                    val newWidgets = widgets.map {
+                        if (it.page > currentPageIndex) it.copy(page = it.page - 1) else it
+                    }
+                    PrefsSync.setHomeSlots(this, newSlots)
+                    PrefsSync.setWidgetSlots(this, newWidgets)
+                    currentPageCount -= 1
+                    if (currentPageCount < 1) currentPageCount = 1
+                    PrefsSync.setPageCount(this, currentPageCount)
+                    pageIndicator.setPageCount(currentPageCount)
+                    homeScreenGrid.setPageCount(currentPageCount)
+                    loadHomeApps()
+                    renderWidgets()
+                }
             }
         }
     }
-}
 
-   
     private fun setupDrawerButton() {
         dockDrawerButton.removeAllViews()
         val imageView = ImageView(this).apply {
@@ -1269,7 +1271,7 @@ private fun setupHomePopup() {
         lifecycleScope.launch {
             currentDrawerColor = Prefs.colorFlow(this@HomeActivity).first()
             currentDrawerAlpha = Prefs.alphaFlow(this@HomeActivity).first()
-            drawerRecyclerView.setBackgroundColor(
+            drawerCard.setCardBackgroundColor(
                 Color.argb(
                     (currentDrawerAlpha * 255).toInt(),
                     Color.red(currentDrawerColor),
