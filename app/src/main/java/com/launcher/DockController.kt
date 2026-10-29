@@ -49,7 +49,7 @@ class DockController(
 
                     // Padding per le icone personalizzate
                     if (customIcons.containsKey(app.packageName)) {
-                        val pad = (size * 0.05f).toInt() // 7.5% per lato = 15% totale
+                        val pad = (size * 0.035f).toInt() // 7.5% per lato = 15% totale
                         imageView.setPadding(pad, pad, pad, pad)
                     }
 
