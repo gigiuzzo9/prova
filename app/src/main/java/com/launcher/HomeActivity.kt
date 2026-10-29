@@ -409,7 +409,6 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 }
-}
 
     private fun saveCustomIcon(packageName: String, uri: Uri) {
         try {
