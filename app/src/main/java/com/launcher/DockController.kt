@@ -33,6 +33,7 @@ class DockController(
 
             val density = activity.resources.displayMetrics.density
             val size = (62 * density).toInt()
+            val customIcons = PrefsSync.customIcons(activity)
 
             slots.forEachIndexed { index, slot ->
                 slot.removeAllViews()
@@ -45,6 +46,13 @@ class DockController(
                     if (bitmap != null) {
                         imageView.setImageBitmap(bitmap)
                     }
+
+                    // Padding per le icone personalizzate
+                    if (customIcons.containsKey(app.packageName)) {
+                        val pad = (size * 0.075f).toInt() // 7.5% per lato = 15% totale
+                        imageView.setPadding(pad, pad, pad, pad)
+                    }
+
                     imageView.layoutParams = FrameLayout.LayoutParams(size, size).apply {
                         gravity = Gravity.CENTER
                     }
