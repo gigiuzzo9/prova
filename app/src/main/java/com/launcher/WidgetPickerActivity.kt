@@ -5,9 +5,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.Typeface
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
@@ -20,7 +18,8 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.toBitmap
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 
 class WidgetPickerActivity : AppCompatActivity() {
 
@@ -111,39 +110,32 @@ class WidgetPickerActivity : AppCompatActivity() {
                 marginEnd = dp(16)
             }
             scaleType = ImageView.ScaleType.CENTER_INSIDE
-
-            var appIcon: Drawable? = null
-            try {
-                val ai = ctx.packageManager.getApplicationInfo(info.provider.packageName, 0)
-                appIcon = ctx.packageManager.getApplicationIcon(ai)
-            } catch (_: Exception) {}
-
-            var preview: Drawable? = null
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                preview = info.loadPreviewImage(ctx, ctx.resources.displayMetrics.densityDpi)
-            } else {
-                if (info.previewImage != 0) {
-                    try {
-                        preview = ContextCompat.getDrawable(ctx, info.previewImage)
-                    } catch (_: Exception) {}
-                }
-            }
-
-            // FORZA il rendering del Drawable in un Bitmap (come fa Glide)
-            val finalDrawable: Drawable? = if (preview != null) {
-                try {
-                    val bmp = preview.toBitmap()
-                    BitmapDrawable(ctx.resources, bmp)
-                } catch (_: Exception) {
-                    preview
-                }
-            } else {
-                appIcon
-            }
-
-            setImageDrawable(finalDrawable)
         }
         row.addView(icon)
+
+        // --- ANTEPRIMA CON GLIDE (come Fossify) ---
+        var appIcon: Drawable? = null
+        try {
+            val ai = ctx.packageManager.getApplicationInfo(info.provider.packageName, 0)
+            appIcon = ctx.packageManager.getApplicationIcon(ai)
+        } catch (_: Exception) {}
+
+        var preview: Drawable? = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            preview = info.loadPreviewImage(ctx, ctx.resources.displayMetrics.densityDpi)
+        } else {
+            if (info.previewImage != 0) {
+                try {
+                    preview = ContextCompat.getDrawable(ctx, info.previewImage)
+                } catch (_: Exception) {}
+            }
+        }
+
+        Glide.with(ctx)
+            .load(preview ?: appIcon)
+            .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
+            .into(icon)
+        // -------------------------------------------
 
         val texts = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
