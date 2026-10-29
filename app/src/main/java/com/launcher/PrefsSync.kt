@@ -80,6 +80,21 @@ object PrefsSync {
         prefs(context).edit().putString("custom_labels", raw).apply()
     }
 
-    // --- Colore/alpha drawer (manteniamo il DataStore per queste, sono non critiche) ---
-    // Se vuoi sincronizzare anche queste, aggiungi qui.
+    // --- Custom Icons ---
+
+    fun customIcons(context: Context): Map<String, String> {
+        val raw = prefs(context).getString("custom_icons", "") ?: ""
+        if (raw.isEmpty()) return emptyMap()
+        return raw.split("|").filter { it.isNotBlank() }.associate {
+            val parts = it.split(":", limit = 2)
+            parts[0] to (parts.getOrNull(1) ?: "")
+        }
+    }
+
+    fun setCustomIcon(context: Context, packageName: String, path: String) {
+        val map = customIcons(context).toMutableMap()
+        map[packageName] = path
+        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
+        prefs(context).edit().putString("custom_icons", raw).apply()
+    }
 }
