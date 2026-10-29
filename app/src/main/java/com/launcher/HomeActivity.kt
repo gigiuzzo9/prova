@@ -1080,12 +1080,11 @@ class HomeActivity : AppCompatActivity() {
         homeScreenGrid.setPageCount(currentPageCount)
     }
     homePopupMenu.onChangeWallpaper = {
-        try {
-            val intent = Intent(Intent.ACTION_SET_WALLPAPER)
-            startActivity(Intent.createChooser(intent, "Scegli sfondo"))
-        } catch (e: Exception) {
-            Toast.makeText(this, "Nessuna app per cambiare sfondo trovata", Toast.LENGTH_SHORT).show()
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "image/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
         }
+        startActivityForResult(intent, REQUEST_PICK_WALLPAPER)
     }
     homePopupMenu.onRemovePage = {
         if (currentPageCount > 1) {
