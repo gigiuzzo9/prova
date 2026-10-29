@@ -5,15 +5,21 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.RemoteViews
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -104,7 +110,7 @@ class WidgetPickerActivity : AppCompatActivity() {
         }
 
         val icon = ImageView(ctx).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(64), dp(64)).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(120), dp(120)).apply {
                 marginEnd = dp(16)
             }
             scaleType = ImageView.ScaleType.CENTER_INSIDE
@@ -116,13 +122,33 @@ class WidgetPickerActivity : AppCompatActivity() {
                 appIcon = ctx.packageManager.getApplicationIcon(ai)
             } catch (_: Exception) {}
 
-            // 2. Anteprima del widget (metodo Fossify)
+            // 2. Caricamento anteprima (replica del flusso Fossify)
             var preview: Drawable? = null
+            
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                // Su Android 12+ loadPreviewImage gestisce anche previewLayout
+                // Su Android 12+ prova loadPreviewImage
                 preview = info.loadPreviewImage(ctx, ctx.resources.displayMetrics.densityDpi)
+                
+                // Se null, prova a gonfiare previewLayout manualmente
+                if (preview == null && info.previewLayout != 0) {
+                    try {
+                        val remoteViews = RemoteViews(info.provider.packageName, info.previewLayout)
+                        val previewView = remoteViews.apply(ctx, FrameLayout(ctx))
+                        previewView.measure(
+                            View.MeasureSpec.makeMeasureSpec(dp(120), View.MeasureSpec.EXACTLY),
+                            View.MeasureSpec.makeMeasureSpec(dp(120), View.MeasureSpec.EXACTLY)
+                        )
+                        previewView.layout(0, 0, previewView.measuredWidth, previewView.measuredHeight)
+                        val bmp = Bitmap.createBitmap(
+                            previewView.measuredWidth, previewView.measuredHeight,
+                            Bitmap.Config.ARGB_8888
+                        )
+                        previewView.draw(Canvas(bmp))
+                        preview = BitmapDrawable(ctx.resources, bmp)
+                    } catch (_: Exception) {}
+                }
             } else {
-                // Su versioni precedenti, prova previewImage
+                // Versioni precedenti: prova previewImage
                 if (info.previewImage != 0) {
                     try {
                         preview = ContextCompat.getDrawable(ctx, info.previewImage)
