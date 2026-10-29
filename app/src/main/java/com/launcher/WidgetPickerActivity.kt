@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
@@ -103,14 +104,28 @@ class WidgetPickerActivity : AppCompatActivity() {
         }
 
         val icon = ImageView(ctx).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+            // Dimensione aumentata per mostrare l'anteprima
+            layoutParams = LinearLayout.LayoutParams(dp(64), dp(64)).apply {
                 marginEnd = dp(16)
             }
-            try {
-                setImageDrawable(info.loadIcon(ctx, 0))
-            } catch (_: Exception) {
-                // icona mancante: lascia vuoto
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+
+            // 1. Prova a caricare l'anteprima vera del widget
+            var preview: Drawable? = null
+            if (info.previewImage != 0) {
+                try {
+                    preview = androidx.core.content.ContextCompat.getDrawable(ctx, info.previewImage)
+                } catch (_: Exception) {}
             }
+
+            // 2. Se non c'è l'anteprima, usa l'icona dell'app come fallback
+            if (preview == null) {
+                try {
+                    preview = info.loadIcon(ctx, 0)
+                } catch (_: Exception) {}
+            }
+
+            setImageDrawable(preview)
         }
         row.addView(icon)
 
@@ -141,8 +156,6 @@ class WidgetPickerActivity : AppCompatActivity() {
         row.addView(texts)
 
         row.setOnClickListener {
-            // Prova il bind diretto. Se non è permesso, chiedi alla Home
-            // di lanciare ACTION_APPWIDGET_BIND.
             val bound = try {
                 appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, info.provider)
             } catch (e: Exception) {
