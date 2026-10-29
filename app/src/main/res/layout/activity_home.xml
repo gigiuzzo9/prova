@@ -124,6 +124,7 @@
         app:layout_constraintEnd_toEndOf="parent">
 
         <androidx.cardview.widget.CardView
+            android:id="@+id/drawerCard"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_marginStart="8dp"
