@@ -282,12 +282,25 @@ class HomeScreenGrid @JvmOverloads constructor(
     val bitmap = getIconBitmap(slot.packageName) ?: return
 
     val isCustom = PrefsSync.customIcons(context).containsKey(slot.packageName)
-    val drawSize = if (isCustom) (iconSize * 0.80f).toInt() else iconSize
-    val drawOffset = (iconSize - drawSize) / 2f
+    // Padding visivo del 10% per lato (20% totale) per le icone custom
+    val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
+    
+    // Dimensione effettiva dell'icona disegnata
+    val drawSize = iconSize - pad * 2
 
-    val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + drawOffset
-    val iconTop = cell.top.toFloat() + iconMargin.toFloat() + drawOffset
-    canvas.drawBitmap(bitmap, iconLeft, iconTop, null)
+    // Coordinate per centrare l'icona nella cella
+    val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
+    val iconTop = cell.top.toFloat() + iconMargin.toFloat() + pad
+
+    val dstRect = Rect(
+        iconLeft.toInt(),
+        iconTop.toInt(),
+        (iconLeft + drawSize).toInt(),
+        (iconTop + drawSize).toInt()
+    )
+
+    // Disegna il bitmap scalato al rettangolo di destinazione
+    canvas.drawBitmap(bitmap, null, dstRect, null)
 
     if (app.label.isNotEmpty()) {
         val textWidth = cell.width() - 2 * labelSideMargin
@@ -298,6 +311,7 @@ class HomeScreenGrid @JvmOverloads constructor(
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .build()
 
+        // Il nome parte sotto l'icona standard (iconSize), centrato
         val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
         canvas.save()
         canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
@@ -305,7 +319,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         canvas.restore()
     }
 }
-
     private fun drawingItem(canvas: Canvas) {
         val dragged = draggingItem ?: return
         if (draggingCoords.first < 0f) return
