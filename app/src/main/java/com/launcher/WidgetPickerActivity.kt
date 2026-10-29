@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
@@ -108,22 +109,28 @@ class WidgetPickerActivity : AppCompatActivity() {
             }
             scaleType = ImageView.ScaleType.CENTER_INSIDE
 
-            // 1. Prova a caricare previewImage (il metodo ufficiale per l'anteprima)
+            // 1. Icona dell'app come fallback
+            var appIcon: Drawable? = null
+            try {
+                val ai = ctx.packageManager.getApplicationInfo(info.provider.packageName, 0)
+                appIcon = ctx.packageManager.getApplicationIcon(ai)
+            } catch (_: Exception) {}
+
+            // 2. Anteprima del widget (metodo Fossify)
             var preview: Drawable? = null
-            if (info.previewImage != 0) {
-                try {
-                    preview = ContextCompat.getDrawable(ctx, info.previewImage)
-                } catch (_: Exception) {}
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Su Android 12+ loadPreviewImage gestisce anche previewLayout
+                preview = info.loadPreviewImage(ctx, ctx.resources.displayMetrics.densityDpi)
+            } else {
+                // Su versioni precedenti, prova previewImage
+                if (info.previewImage != 0) {
+                    try {
+                        preview = ContextCompat.getDrawable(ctx, info.previewImage)
+                    } catch (_: Exception) {}
+                }
             }
 
-            // 2. Fallback: icona dell'app
-            if (preview == null) {
-                try {
-                    preview = info.loadIcon(ctx, 0)
-                } catch (_: Exception) {}
-            }
-
-            setImageDrawable(preview)
+            setImageDrawable(preview ?: appIcon)
         }
         row.addView(icon)
 
