@@ -311,116 +311,180 @@ class HomeActivity : AppCompatActivity() {
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        when (requestCode) {
-            UNINSTALL_APP_REQUEST_CODE -> {
-                AppRepository.invalidateCache()
-                lifecycleScope.launch {
-                    AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-                    loadHomeApps()
-                    dockController.refresh()
-                    loadDrawerApps()
+    super.onActivityResult(requestCode, resultCode, data)
+    when (requestCode) {
+        UNINSTALL_APP_REQUEST_CODE -> {
+            AppRepository.invalidateCache()
+            lifecycleScope.launch {
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                loadHomeApps()
+                dockController.refresh()
+                loadDrawerApps()
+            }
+        }
+        REQUEST_PICK_ICON -> {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                pendingIconPackage?.let { pkg ->
+                    saveCustomIcon(pkg, data.data!!)
                 }
             }
-            REQUEST_PICK_ICON -> {
-                if (resultCode == RESULT_OK && data?.data != null) {
-                    pendingIconPackage?.let { pkg ->
-                        saveCustomIcon(pkg, data.data!!)
-                    }
-                }
-                pendingIconPackage = null
-            }
-            REQUEST_PICK_WALLPAPER -> {
-                if (resultCode == RESULT_OK && data?.data != null) {
-                    try {
-                        val wallpaperManager = WallpaperManager.getInstance(this)
-                        contentResolver.openInputStream(data.data!!)?.use { input ->
-                            wallpaperManager.setStream(input)
-                        }
-                    } catch (e: Exception) {
-                        Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-            REQUEST_PICK_WIDGET -> {
-                if (resultCode == RESULT_OK && data != null) {
-                    val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
-                    val needsBind = data.getBooleanExtra(WidgetPickerActivity.EXTRA_NEEDS_BIND, false)
-                    val provider: android.content.ComponentName? =
-                        if (android.os.Build.VERSION.SDK_INT >= 33) {
-                            data.getParcelableExtra(
-                                WidgetPickerActivity.EXTRA_PROVIDER,
-                                android.content.ComponentName::class.java
-                            )
-                        } else {
-                            @Suppress("DEPRECATION")
-                            data.getParcelableExtra(WidgetPickerActivity.EXTRA_PROVIDER)
-                        }
+            pendingIconPackage = null
+        }
+        REQUEST_PICK_WALLPAPER -> {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                val uri = data.data!!
+                try {
+                    // Prepara il bitmap già ritagliato/scalato una volta sola
+                    val wm = WallpaperManager.getInstance(this)
+                    val dm = resources.displayMetrics
+                    val targetW = dm.widthPixels
+                    val targetH = dm.heightPixels
 
-                    if (widgetId != -1) {
-                        pendingWidgetId = widgetId
-                        if (needsBind && provider != null) {
-                            val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
-                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
-                                putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, Bundle())
+                    val boundsOptions = android.graphics.BitmapFactory.Options().apply {
+                        inJustDecodeBounds = true
+                    }
+                    contentResolver.openInputStream(uri)?.use {
+                        android.graphics.BitmapFactory.decodeStream(it, null, boundsOptions)
+                    }
+                    val srcW = boundsOptions.outWidth
+                    val srcH = boundsOptions.outHeight
+
+                    var sampleSize = 1
+                    while (srcW / (sampleSize * 2) >= targetW && srcH / (sampleSize * 2) >= targetH) {
+                        sampleSize *= 2
+                    }
+
+                    val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+                        inSampleSize = sampleSize
+                    }
+                    val srcBitmap = contentResolver.openInputStream(uri)?.use {
+                        android.graphics.BitmapFactory.decodeStream(it, null, decodeOptions)
+                    } ?: throw Exception("Impossibile leggere l'immagine")
+
+                    val srcRatio = srcBitmap.width.toFloat() / srcBitmap.height
+                    val targetRatio = targetW.toFloat() / targetH
+
+                    val cropW: Int
+                    val cropH: Int
+                    if (srcRatio > targetRatio) {
+                        cropH = srcBitmap.height
+                        cropW = (cropH * targetRatio).toInt()
+                    } else {
+                        cropW = srcBitmap.width
+                        cropH = (cropW / targetRatio).toInt()
+                    }
+                    val cropX = (srcBitmap.width - cropW) / 2
+                    val cropY = (srcBitmap.height - cropH) / 2
+
+                    val cropped = android.graphics.Bitmap.createBitmap(
+                        srcBitmap, cropX, cropY, cropW, cropH
+                    )
+                    val scaled = android.graphics.Bitmap.createScaledBitmap(
+                        cropped, targetW, targetH, true
+                    )
+
+                    // Chiedi dove applicarlo
+                    AlertDialog.Builder(this)
+                        .setTitle("Applica sfondo a")
+                        .setItems(arrayOf("Home screen", "Lockscreen", "Entrambe")) { _, which ->
+                            try {
+                                val flags = when (which) {
+                                    0 -> WallpaperManager.FLAG_SYSTEM
+                                    1 -> WallpaperManager.FLAG_LOCK
+                                    else -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+                                }
+                                wm.setBitmap(scaled, null, true, flags)
+                                Toast.makeText(this, "Sfondo applicato", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
-                            startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
-                        } else {
-                            findFreeCellAndPlaceWidget()
                         }
-                    }
-                } else {
-                    if (pendingWidgetId != -1) {
-                        appWidgetHost.deleteAppWidgetId(pendingWidgetId)
-                        pendingWidgetId = -1
-                    }
+                        .setNegativeButton("Annulla", null)
+                        .show()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
-            REQUEST_BIND_WIDGET -> {
-                if (resultCode == RESULT_OK) {
-                    val boundId = data?.getIntExtra(
-                        AppWidgetManager.EXTRA_APPWIDGET_ID,
-                        pendingWidgetId
-                    ) ?: pendingWidgetId
-                    pendingWidgetId = boundId
-
-                    val info = appWidgetManager.getAppWidgetInfo(boundId)
-                    if (info == null) {
-                        Toast.makeText(this, "Widget non disponibile dopo il bind", Toast.LENGTH_SHORT).show()
-                        appWidgetHost.deleteAppWidgetId(boundId)
-                        pendingWidgetId = -1
-                        return
+        }
+        REQUEST_PICK_WIDGET -> {
+            if (resultCode == RESULT_OK && data != null) {
+                val widgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
+                val needsBind = data.getBooleanExtra(WidgetPickerActivity.EXTRA_NEEDS_BIND, false)
+                val provider: android.content.ComponentName? =
+                    if (android.os.Build.VERSION.SDK_INT >= 33) {
+                        data.getParcelableExtra(
+                            WidgetPickerActivity.EXTRA_PROVIDER,
+                            android.content.ComponentName::class.java
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        data.getParcelableExtra(WidgetPickerActivity.EXTRA_PROVIDER)
                     }
 
-                    if (info.configure != null) {
-                        try {
-                            appWidgetHost.startAppWidgetConfigureActivityForResult(
-                                this@HomeActivity,
-                                pendingWidgetId,
-                                0,
-                                REQUEST_CONFIGURE_WIDGET,
-                                null
-                            )
-                        } catch (e: Exception) {
-                            appWidgetHost.deleteAppWidgetId(pendingWidgetId)
-                            pendingWidgetId = -1
+                if (widgetId != -1) {
+                    pendingWidgetId = widgetId
+                    if (needsBind && provider != null) {
+                        val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_OPTIONS, Bundle())
                         }
+                        startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
                     } else {
                         findFreeCellAndPlaceWidget()
                     }
-                } else {
-                    Toast.makeText(this, R.string.widget_bind_denied, Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                if (pendingWidgetId != -1) {
                     appWidgetHost.deleteAppWidgetId(pendingWidgetId)
                     pendingWidgetId = -1
                 }
             }
-            REQUEST_CONFIGURE_WIDGET -> {
-                if (resultCode == RESULT_OK) saveWidgetToHome()
-                else Toast.makeText(this, R.string.widget_config_cancelled, Toast.LENGTH_SHORT).show()
+        }
+        REQUEST_BIND_WIDGET -> {
+            if (resultCode == RESULT_OK) {
+                val boundId = data?.getIntExtra(
+                    AppWidgetManager.EXTRA_APPWIDGET_ID,
+                    pendingWidgetId
+                ) ?: pendingWidgetId
+                pendingWidgetId = boundId
+
+                val info = appWidgetManager.getAppWidgetInfo(boundId)
+                if (info == null) {
+                    Toast.makeText(this, "Widget non disponibile dopo il bind", Toast.LENGTH_SHORT).show()
+                    appWidgetHost.deleteAppWidgetId(boundId)
+                    pendingWidgetId = -1
+                    return
+                }
+
+                if (info.configure != null) {
+                    try {
+                        appWidgetHost.startAppWidgetConfigureActivityForResult(
+                            this@HomeActivity,
+                            pendingWidgetId,
+                            0,
+                            REQUEST_CONFIGURE_WIDGET,
+                            null
+                        )
+                    } catch (e: Exception) {
+                        appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+                        pendingWidgetId = -1
+                    }
+                } else {
+                    findFreeCellAndPlaceWidget()
+                }
+            } else {
+                Toast.makeText(this, R.string.widget_bind_denied, Toast.LENGTH_SHORT).show()
+                appWidgetHost.deleteAppWidgetId(pendingWidgetId)
+                pendingWidgetId = -1
             }
         }
+        REQUEST_CONFIGURE_WIDGET -> {
+            if (resultCode == RESULT_OK) saveWidgetToHome()
+            else Toast.makeText(this, R.string.widget_config_cancelled, Toast.LENGTH_SHORT).show()
+        }
     }
+}
 
     private fun saveCustomIcon(packageName: String, uri: Uri) {
         try {
