@@ -15,6 +15,7 @@ class AppContextMenuView(private val ctx: Context) {
     var onRename: (() -> Unit)? = null
     var onRemove: (() -> Unit)? = null
     var onMove: (() -> Unit)? = null
+    var onChangeIcon: (() -> Unit)? = null
     var onDismiss: (() -> Unit)? = null
 
     private var popupWindow: PopupWindow? = null
@@ -50,6 +51,11 @@ class AppContextMenuView(private val ctx: Context) {
 
         container.addView(createMenuItem(ctx.getString(R.string.menu_rename), textColor) {
             onRename?.invoke()
+            dismiss()
+        })
+
+        container.addView(createMenuItem("Cambia icona", textColor) {
+            onChangeIcon?.invoke()
             dismiss()
         })
 
