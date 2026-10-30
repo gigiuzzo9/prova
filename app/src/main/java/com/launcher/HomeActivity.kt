@@ -741,28 +741,30 @@ class HomeActivity : AppCompatActivity() {
             }
             row.addView(previewContainer)
 
-            val texts = android.widget.LinearLayout(ctx).apply {
-                orientation = android.widget.LinearLayout.VERTICAL
-                layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            }
-            texts.addView(TextView(ctx).apply {
-                text = try { info.loadLabel(packageManager) } catch (e: Exception) { "Widget" }
-                textSize = 16f
-                setTextColor(themeColor(android.R.attr.textColorPrimary))
-            })
-            val appName = try {
-                val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
-                packageManager.getApplicationLabel(ai).toString()
-            } catch (e: Exception) { "" }
-            if (appName.isNotEmpty()) {
-                texts.addView(TextView(ctx).apply {
-                    text = appName
-                    textSize = 13f
-                    setTextColor(themeColor(android.R.attr.textColorSecondary))
-                    setPadding(0, dp(2), 0, 0)
-                })
-            }
-            row.addView(texts)
+           val texts = android.widget.LinearLayout(ctx).apply {
+    orientation = android.widget.LinearLayout.VERTICAL
+    layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+}
+
+val appName = try {
+    val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
+    packageManager.getApplicationLabel(ai).toString()
+} catch (e: Exception) { "" }
+if (appName.isNotEmpty()) {
+    texts.addView(TextView(ctx).apply {
+        text = appName
+        textSize = 17f
+        setTextColor(themeColor(android.R.attr.textColorPrimary))
+    })
+}
+
+texts.addView(TextView(ctx).apply {
+    text = try { info.loadLabel(packageManager) } catch (e: Exception) { "Widget" }
+    textSize = 13f
+    setTextColor(themeColor(android.R.attr.textColorSecondary))
+    setPadding(0, dp(2), 0, 0)
+})
+row.addView(texts)
 
             row.setOnClickListener {
                 val bound = try {
