@@ -661,9 +661,21 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    val providers = appWidgetManager.installedProviders
-        .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
-
+    val providers = try {
+    appWidgetManager.installedProviders.sortedWith(
+        compareBy(
+            { info ->
+                try {
+                    val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
+                    packageManager.getApplicationLabel(ai).toString().lowercase()
+                } catch (e: Exception) { "" }
+            },
+            { info ->
+                try { info.loadLabel(packageManager).toString().lowercase() } catch (e: Exception) { "" }
+            }
+        )
+    )
+} catch (e: Exception) { emptyList() }
     if (providers.isEmpty()) {
         list.addView(TextView(ctx).apply {
             text = "Nessun widget disponibile"
