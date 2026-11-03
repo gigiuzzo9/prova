@@ -1032,7 +1032,7 @@ private fun renderWidgets() {
         true
     ).apply {
         isOutsideTouchable = true
-        isFocusable = true
+        isFocusable = false
         setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
     }
@@ -1629,8 +1629,10 @@ private fun renderWidgets() {
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+    // Drag & drop ha priorità
     if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
 
+    // Context menu dell'app (non del widget)
     if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
             if (!contextMenuView.isPointInside(ev.rawX, ev.rawY)) {
@@ -1641,7 +1643,13 @@ private fun renderWidgets() {
         }
     }
 
-    if (!drawerOpen && ev.actionMasked == MotionEvent.ACTION_DOWN && !isResizing) {
+    // Se il popup del widget è aperto, NON passare eventi al widget (ma lascia che il popup gestisca i suoi)
+    if (widgetPopupWindow?.isShowing == true) {
+        return super.dispatchTouchEvent(ev)
+    }
+
+    // Se il popup è chiuso, passa TUTTI gli eventi al widget se il tocco è sopra di esso
+    if (!drawerOpen && !isResizing) {
         val loc = IntArray(2)
         widgetContainer.getLocationOnScreen(loc)
         val localX = ev.rawX - loc[0]
@@ -1660,8 +1668,7 @@ private fun renderWidgets() {
         }
 
         if (targetView != null) {
-            (targetView as? LauncherAppWidgetHostView)?.dispatchTouchEvent(ev)
-            return true
+            return targetView.dispatchTouchEvent(ev)
         }
     }
 
