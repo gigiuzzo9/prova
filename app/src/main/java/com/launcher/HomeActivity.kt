@@ -807,6 +807,10 @@ private fun isColorDark(color: Int): Boolean {
     return luminance < 0.5
 }
 
+private fun renderWidgets() {
+    renderWidgetsForPage(homeScreenGrid.getCurrentPage(), widgetContainer)
+}
+
     private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
     if (homeScreenGrid.width == 0 || homeScreenGrid.height == 0) return
 
