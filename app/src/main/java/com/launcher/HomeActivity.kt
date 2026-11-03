@@ -1029,10 +1029,10 @@ private fun isColorDark(color: Int): Boolean {
         container,
         popupWidth,
         android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-        false
+        true
     ).apply {
-        isOutsideTouchable = false
-        isFocusable = false
+        isOutsideTouchable = true
+        isFocusable = true
         setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
     }
