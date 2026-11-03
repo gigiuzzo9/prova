@@ -952,12 +952,11 @@ private fun isColorDark(color: Int): Boolean {
     val ctx = this
     val density = resources.displayMetrics.density
     
-    // Larghezza identica al primo menu (60% dello schermo)
+    // Esattamente come il primo codice
     val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
 
     val container = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
-        // Padding verticale identico
         setPadding(0, (21 * density).toInt(), 0, (21 * density).toInt())
         val drawable = android.graphics.drawable.GradientDrawable().apply {
             cornerRadius = 21f
@@ -969,9 +968,9 @@ private fun isColorDark(color: Int): Boolean {
 
     var first = true
 
-    fun addItem(text: String, onClick: () -> Unit) {
+    fun addDividerIfNeeded() {
         if (!first) {
-            // Divisore identico al primo codice: larghezza 90% del popup, centrato
+            // COPIA ESATTA DI createDivider
             container.addView(android.view.View(ctx).apply {
                 layoutParams = android.widget.LinearLayout.LayoutParams(
                     (popupWidth * 0.9f).toInt(),
@@ -983,26 +982,23 @@ private fun isColorDark(color: Int): Boolean {
             })
         }
         first = false
+    }
 
+    fun addItem(text: String, onClick: () -> Unit) {
+        addDividerIfNeeded()
+        
+        // COPIA ESATTA DI createMenuItem
         val tv = TextView(ctx).apply {
             this.text = text
             setTextColor(Color.BLACK)
             textSize = 21f
             typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
-            
-            // ECCO IL SEGRETO: Nessun layoutParams specificato (di default è WRAP_CONTENT)
-            // Questo permette al testo di occupare la larghezza che gli serve 
-            // all'interno del popup senza andare a capo inutilmente.
-            
+            // Nessun layoutParams impostato! (Proprio come nel primo codice)
             setPadding((42 * density).toInt(), (26 * density).toInt(), (42 * density).toInt(), (26 * density).toInt())
             
-            val outValue = android.util.TypedValue()
-            context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
-            setBackgroundResource(outValue.resourceId)
-            
-            setOnClickListener {
+            setOnClickListener { 
                 onClick()
-                widgetPopupWindow?.dismiss()
+                widgetPopupWindow?.dismiss() 
             }
         }
         container.addView(tv)
