@@ -957,84 +957,71 @@ private fun renderWidgets() {
 ) {
     val ctx = this
     val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
-
+    
+    // Creiamo il container del menu
     val container = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
         setPadding(0, 21, 0, 21)
-
         background = android.graphics.drawable.GradientDrawable().apply {
             cornerRadius = 21f
             setColor(Color.WHITE)
         }
-
         elevation = 8f * resources.displayMetrics.density
     }
 
     var first = true
-
-    fun createDivider(): View {
-        return View(ctx).apply {
-            layoutParams = android.widget.LinearLayout.LayoutParams(
-                (popupWidth * 0.9f).toInt(),
-                (1 * resources.displayMetrics.density).toInt()
-            ).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-            }
-            setBackgroundColor(0x33000000)
+    fun addItem(text: String, onClick: () -> Unit) {
+        if (!first) {
+            container.addView(View(ctx).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    (popupWidth * 0.9f).toInt(),
+                    (1 * resources.displayMetrics.density).toInt()
+                ).apply { gravity = Gravity.CENTER_HORIZONTAL }
+                setBackgroundColor(0x33000000)
+            })
         }
-    }
+        first = false
 
-    fun createMenuItem(text: String, onClick: () -> Unit): TextView {
-        return TextView(ctx).apply {
+        container.addView(TextView(ctx).apply {
             this.text = text
             setTextColor(Color.BLACK)
             textSize = 21f
-            typeface = android.graphics.Typeface.create(
-                "sans-serif-light",
-                android.graphics.Typeface.NORMAL
-            )
+            typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
             setPadding(42, 26, 42, 26)
-
             setOnClickListener {
                 onClick()
                 widgetPopupWindow?.dismiss()
             }
-        }
+        })
     }
 
-    fun addDividerIfNeeded() {
-        if (!first) container.addView(createDivider())
-        first = false
-    }
-
-    addDividerIfNeeded()
-    container.addView(createMenuItem("Ridimensiona") {
+    addItem("Ridimensiona") {
         dragController.cancelPendingDrag()
         startResize(slot, info, cellW, cellH, hostView, pageIndex)
-    })
-
-    addDividerIfNeeded()
-    container.addView(createMenuItem("Rimuovi widget") {
+    }
+    addItem("Rimuovi widget") {
         val current = PrefsSync.widgetSlots(this)
-        PrefsSync.setWidgetSlots(
-            this,
-            current.filter { it.appWidgetId != slot.appWidgetId }
-        )
+        PrefsSync.setWidgetSlots(this, current.filter { it.appWidgetId != slot.appWidgetId })
         appWidgetHost.deleteAppWidgetId(slot.appWidgetId)
         renderWidgets()
-    })
+    }
 
+    // Mostra il popup ancorato al widget (NON focusable)
     widgetPopupWindow?.dismiss()
     widgetPopupWindow = android.widget.PopupWindow(
         container,
         popupWidth,
         android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-        true
+        false // <--- FONDAMENTALE: false, così il tocco passa al widget
     ).apply {
         isOutsideTouchable = true
-        isFocusable = false
+        isFocusable = false // <--- FONDAMENTALE: false
         setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-        showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
+        
+        // Ancoralo al widget stesso, non al centro dello schermo
+        val loc = IntArray(2)
+        hostView.getLocationOnScreen(loc)
+        showAtLocation(hostView, Gravity.NO_GRAVITY, loc[0], loc[1])
     }
 }
 
@@ -1629,10 +1616,8 @@ private fun renderWidgets() {
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-    // Drag & drop ha priorità
     if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
 
-    // Context menu dell'app (non del widget)
     if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
             if (!contextMenuView.isPointInside(ev.rawX, ev.rawY)) {
@@ -1643,38 +1628,13 @@ private fun renderWidgets() {
         }
     }
 
-    // Se il popup del widget è aperto, NON passare eventi al widget (ma lascia che il popup gestisca i suoi)
+    // Se il popup del widget è aperto, lascia che sia il popup a gestire i tocchi
     if (widgetPopupWindow?.isShowing == true) {
         return super.dispatchTouchEvent(ev)
     }
 
-    // Se il popup è chiuso, passa TUTTI gli eventi al widget se il tocco è sopra di esso
-    if (!drawerOpen && !isResizing) {
-        val loc = IntArray(2)
-        widgetContainer.getLocationOnScreen(loc)
-        val localX = ev.rawX - loc[0]
-        val localY = ev.rawY - loc[1]
-
-        var targetView: View? = null
-        for (i in 0 until widgetContainer.childCount) {
-            val child = widgetContainer.getChildAt(i)
-            if (child.visibility == View.VISIBLE &&
-                localX >= child.x && localX <= child.x + child.width &&
-                localY >= child.y && localY <= child.y + child.height
-            ) {
-                targetView = child
-                break
-            }
-        }
-
-        if (targetView != null) {
-            return targetView.dispatchTouchEvent(ev)
-        }
-    }
-
     return super.dispatchTouchEvent(ev)
 }
-
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (isResizing) { endResizeMode(); return }
