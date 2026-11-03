@@ -120,8 +120,16 @@ class HomeActivity : AppCompatActivity() {
         setContentView(R.layout.activity_home)
 
         window.statusBarColor = Color.BLACK
-        window.navigationBarColor = Color.parseColor("#80000000")
 
+// Barra di navigazione trasparente
+if (android.os.Build.VERSION.SDK_INT >= 29) {
+    window.isNavigationBarContrastEnforced = false
+}
+window.navigationBarColor = Color.TRANSPARENT
+window.decorView.systemUiVisibility = (
+    android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+)
         homeScreenGrid = findViewById(R.id.homeScreenGrid)
         widgetContainer = findViewById(R.id.widgetContainer)
         widgetContainer2 = findViewById(R.id.widgetContainer2)
