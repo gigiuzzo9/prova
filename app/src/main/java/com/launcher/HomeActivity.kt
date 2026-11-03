@@ -956,9 +956,9 @@ private fun isColorDark(color: Int): Boolean {
 
     val container = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
-        setPadding(dp(10), dp(10), dp(10), dp(10))
+        setPadding(0, dp(21), 0, dp(21))
         val drawable = android.graphics.drawable.GradientDrawable().apply {
-            cornerRadius = dp(8).toFloat()
+            cornerRadius = dp(21).toFloat()
             setColor(Color.WHITE)
         }
         background = drawable
@@ -987,9 +987,9 @@ private fun isColorDark(color: Int): Boolean {
         val tv = TextView(ctx).apply {
             this.text = text
             setTextColor(Color.BLACK)
-            textSize = 20f
+            textSize = 21f
             typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
-            setPadding(dp(26), dp(18), dp(26), dp(18))
+            setPadding(dp(42), dp(26), dp(42), dp(26))
             val outValue = android.util.TypedValue()
             context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
             setBackgroundResource(outValue.resourceId)
@@ -1028,7 +1028,7 @@ private fun isColorDark(color: Int): Boolean {
         showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
     }
 }
-
+    
     private fun setupDragController() {
         dragController = DragController(
             activity = this,
