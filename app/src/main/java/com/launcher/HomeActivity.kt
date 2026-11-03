@@ -952,15 +952,11 @@ private fun isColorDark(color: Int): Boolean {
     val density = resources.displayMetrics.density
     fun dp(v: Int) = (v * density).toInt()
 
-    // 1. Calcoliamo la larghezza (esattamente come nel primo codice: 60% dello schermo)
-    val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
-
     val container = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
-        // Rimuoviamo il padding orizzontale del container per far respirare i divisori
-        setPadding(0, dp(21), 0, dp(21)) 
+        setPadding(dp(10), dp(10), dp(10), dp(10)) // Padding originale che funzionava
         val drawable = android.graphics.drawable.GradientDrawable().apply {
-            cornerRadius = dp(21).toFloat() // Raggio uguale al primo menu
+            cornerRadius = dp(8).toFloat() // Corner radius originale
             setColor(Color.WHITE)
         }
         background = drawable
@@ -971,13 +967,14 @@ private fun isColorDark(color: Int): Boolean {
 
     fun addItem(text: String, onClick: () -> Unit) {
         if (!first) {
-            // 2. Il divisore ora è più corto del popup e centrato (come nel primo codice)
+            // Divider MATCH_PARENT (il popup si adatta al testo più lungo)
             container.addView(View(ctx).apply {
                 layoutParams = android.widget.LinearLayout.LayoutParams(
-                    (popupWidth * 0.9f).toInt(), // 90% della larghezza
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                     dp(1)
                 ).apply {
-                    gravity = Gravity.CENTER_HORIZONTAL
+                    marginStart = dp(10)
+                    marginEnd = dp(10)
                 }
                 setBackgroundColor(0x33000000)
             })
@@ -987,13 +984,13 @@ private fun isColorDark(color: Int): Boolean {
         val tv = TextView(ctx).apply {
             this.text = text
             setTextColor(Color.BLACK)
-            textSize = 21f // Testo leggermente più grande come nel primo
+            textSize = 20f // Text size originale
             
+            // NUOVO: Font e allineamento a sinistra
             typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             
-            // Padding interno del testo identico al primo
-            setPadding(dp(42), dp(26), dp(42), dp(26)) 
+            setPadding(dp(26), dp(18), dp(26), dp(18)) // Padding originale
             
             val outValue = android.util.TypedValue()
             context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
@@ -1021,18 +1018,16 @@ private fun isColorDark(color: Int): Boolean {
     }
 
     widgetPopupWindow?.dismiss()
-    
-    // 3. Impostiamo la larghezza fissa invece di WRAP_CONTENT
     widgetPopupWindow = android.widget.PopupWindow(
         container,
-        popupWidth, // <--- Larghezza fissa
+        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, // Torna a WRAP_CONTENT
         android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
         true
     ).apply {
         isOutsideTouchable = true
         isFocusable = true
         setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-        showAtLocation(widgetContainer, Gravity.CENTER, 0, 0) 
+        showAtLocation(widgetContainer, Gravity.CENTER, 0, 0) // Torna a widgetContainer
     }
 }
     
