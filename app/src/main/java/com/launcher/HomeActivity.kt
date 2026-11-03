@@ -950,31 +950,27 @@ private fun isColorDark(color: Int): Boolean {
     pageIndex: Int
 ) {
     val ctx = this
-    val density = resources.displayMetrics.density
-    
-    // Larghezza identica al primo codice
     val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
 
-    // COPIA ESATTA DEL CONTAINER DEL PRIMO CODICE
     val container = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
-        setPadding(0, (21 * density).toInt(), 0, (21 * density).toInt()) // 0 ai lati!
-        val drawable = android.graphics.drawable.GradientDrawable().apply {
+        setPadding(0, 21, 0, 21)
+
+        background = android.graphics.drawable.GradientDrawable().apply {
             cornerRadius = 21f
             setColor(Color.WHITE)
         }
-        background = drawable
-        elevation = 8f * density
+
+        elevation = 8f * resources.displayMetrics.density
     }
 
     var first = true
 
-    // COPIA ESATTA DI createDivider
     fun createDivider(): View {
         return View(ctx).apply {
             layoutParams = android.widget.LinearLayout.LayoutParams(
                 (popupWidth * 0.9f).toInt(),
-                (1 * density).toInt()
+                (1 * resources.displayMetrics.density).toInt()
             ).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
             }
@@ -982,27 +978,24 @@ private fun isColorDark(color: Int): Boolean {
         }
     }
 
-    // COPIA ESATTA DI createMenuItem
     fun createMenuItem(text: String, onClick: () -> Unit): TextView {
         return TextView(ctx).apply {
             this.text = text
             setTextColor(Color.BLACK)
             textSize = 21f
-            typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
-            setPadding((42 * density).toInt(), (26 * density).toInt(), (42 * density).toInt(), (26 * density).toInt())
-            
-            val outValue = android.util.TypedValue()
-            context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
-            setBackgroundResource(outValue.resourceId)
-            
-            setOnClickListener { 
+            typeface = android.graphics.Typeface.create(
+                "sans-serif-light",
+                android.graphics.Typeface.NORMAL
+            )
+            setPadding(42, 26, 42, 26)
+
+            setOnClickListener {
                 onClick()
-                widgetPopupWindow?.dismiss() 
+                widgetPopupWindow?.dismiss()
             }
         }
     }
 
-    // Aggiunta voci con la stessa logica del primo codice
     fun addDividerIfNeeded() {
         if (!first) container.addView(createDivider())
         first = false
@@ -1030,14 +1023,15 @@ private fun isColorDark(color: Int): Boolean {
         container,
         popupWidth,
         android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-        true
+        false
     ).apply {
-        isOutsideTouchable = true
-        isFocusable = true
+        isOutsideTouchable = false
+        isFocusable = false
         setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
     }
 }
+
     
     private fun setupDragController() {
         dragController = DragController(
