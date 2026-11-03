@@ -26,9 +26,9 @@ class HomePopupMenu(private val ctx: Context) {
 
         val container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(32, 16, 32, 16)
+            setPadding(42, 21, 42, 21)
             val drawable = GradientDrawable().apply {
-                cornerRadius = 16f
+                cornerRadius = 21f
                 setColor(Color.WHITE)
             }
             background = drawable
@@ -79,9 +79,9 @@ class HomePopupMenu(private val ctx: Context) {
         return TextView(ctx).apply {
             this.text = text
             setTextColor(Color.BLACK)
-            textSize = 16f
+            textSize = 21f
             typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-            setPadding(32, 20, 32, 20)
+            setPadding(42, 26, 42, 26)
             setOnClickListener { onClick() }
         }
     }
