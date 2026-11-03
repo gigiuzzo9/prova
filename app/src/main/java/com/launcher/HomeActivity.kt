@@ -986,6 +986,10 @@ private fun isColorDark(color: Int): Boolean {
         addDividerIfNeeded()
         val tv = TextView(ctx).apply {
             this.text = text
+            this.maxLines = 1
+            this.isSingleLine = true
+            this.ellipsize = android.text.TextUtils.TruncateAt.END
+            
             setTextColor(Color.BLACK)
             textSize = 21f
             typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
