@@ -1027,7 +1027,6 @@ private fun isColorDark(color: Int): Boolean {
         renderWidgets()
     })
 
-    widgetPopupWindow?.dismiss()
     widgetPopupWindow = android.widget.PopupWindow(
         container,
         popupWidth,
@@ -1037,12 +1036,6 @@ private fun isColorDark(color: Int): Boolean {
         isOutsideTouchable = true
         isFocusable = true
         setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-        
-        // Quando il popup si chiude, sblocca i tocchi sul widget
-        setOnDismissListener {
-            hostView.ignoreTouches = false
-        }
-        
         showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
     }
 }
@@ -1650,13 +1643,13 @@ private fun isColorDark(color: Int): Boolean {
         }
     }
 
-    // Se il popup del widget è aperto, blocca tutto
+    // Se il popup è aperto, blocca i tocchi sul widget
     if (widgetPopupWindow?.isShowing == true) {
         return true
     }
 
-    // Se il popup è chiuso, passa TUTTI gli eventi al widget se il tocco è sopra di esso
-    if (!drawerOpen && !isResizing) {
+    // Se il tocco è sopra un widget, passalo al widget e fermati
+    if (!drawerOpen && ev.actionMasked == MotionEvent.ACTION_DOWN && !isResizing) {
         val loc = IntArray(2)
         widgetContainer.getLocationOnScreen(loc)
         val localX = ev.rawX - loc[0]
@@ -1675,13 +1668,8 @@ private fun isColorDark(color: Int): Boolean {
         }
 
         if (targetView != null) {
-            val hostView = targetView as? LauncherAppWidgetHostView
-            // Se il widget ha ignoreTouches = true, consuma l'evento
-            if (hostView?.ignoreTouches == true) {
-                return true
-            }
-            // Altrimenti passa l'evento al widget
-            return targetView.dispatchTouchEvent(ev)
+            (targetView as? LauncherAppWidgetHostView)?.dispatchTouchEvent(ev)
+            return true
         }
     }
 
