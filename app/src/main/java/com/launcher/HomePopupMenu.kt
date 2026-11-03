@@ -24,6 +24,8 @@ class HomePopupMenu(private val ctx: Context) {
     fun show(anchor: View, showRemovePage: Boolean) {
         dismiss()
 
+        val popupWidth = (ctx.resources.displayMetrics.widthPixels * 0.6f).toInt()
+
         val container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, 21, 0, 21)
@@ -40,14 +42,14 @@ class HomePopupMenu(private val ctx: Context) {
             dismiss()
         })
 
-        container.addView(createDivider())
+        container.addView(createDivider(popupWidth))
 
         container.addView(createMenuItem(ctx.getString(R.string.menu_add_page)) {
             onAddPage?.invoke()
             dismiss()
         })
 
-        container.addView(createDivider())
+        container.addView(createDivider(popupWidth))
 
         container.addView(createMenuItem(ctx.getString(R.string.menu_change_wallpaper)) {
             onChangeWallpaper?.invoke()
@@ -55,7 +57,7 @@ class HomePopupMenu(private val ctx: Context) {
         })
 
         if (showRemovePage) {
-            container.addView(createDivider())
+            container.addView(createDivider(popupWidth))
             container.addView(createMenuItem(ctx.getString(R.string.menu_remove_page)) {
                 onRemovePage?.invoke()
                 dismiss()
@@ -64,7 +66,7 @@ class HomePopupMenu(private val ctx: Context) {
 
         popupWindow = PopupWindow(
             container,
-            LinearLayout.LayoutParams.WRAP_CONTENT,
+            popupWidth,
             LinearLayout.LayoutParams.WRAP_CONTENT,
             true
         ).apply {
@@ -86,14 +88,13 @@ class HomePopupMenu(private val ctx: Context) {
         }
     }
 
-    private fun createDivider(): View {
+    private fun createDivider(popupWidth: Int): View {
         return View(ctx).apply {
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                (popupWidth * 0.9f).toInt(),
                 (1 * ctx.resources.displayMetrics.density).toInt()
             ).apply {
-                marginStart = (16 * ctx.resources.displayMetrics.density).toInt()
-                marginEnd = (16 * ctx.resources.displayMetrics.density).toInt()
+                gravity = Gravity.CENTER_HORIZONTAL
             }
             setBackgroundColor(0x33000000)
         }
