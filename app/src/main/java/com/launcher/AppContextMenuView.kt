@@ -28,6 +28,7 @@ class AppContextMenuView(private val ctx: Context) {
         val bgColor = if (drawerIsWhite) Color.BLACK else Color.WHITE
         val textColor = if (drawerIsWhite) Color.WHITE else Color.BLACK
         val dividerColor = if (drawerIsWhite) 0x33FFFFFF else 0x33000000
+        val popupWidth = (ctx.resources.displayMetrics.widthPixels * 0.6f).toInt()
 
         val container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -42,7 +43,7 @@ class AppContextMenuView(private val ctx: Context) {
 
         var first = true
         fun addDividerIfNeeded() {
-            if (!first) container.addView(createDivider(dividerColor))
+            if (!first) container.addView(createDivider(popupWidth, dividerColor))
             first = false
         }
 
@@ -74,7 +75,7 @@ class AppContextMenuView(private val ctx: Context) {
 
         popupWindow = PopupWindow(
             container,
-            LinearLayout.LayoutParams.WRAP_CONTENT,
+            popupWidth,
             LinearLayout.LayoutParams.WRAP_CONTENT,
             false
         ).apply {
@@ -96,14 +97,13 @@ class AppContextMenuView(private val ctx: Context) {
         }
     }
 
-    private fun createDivider(dividerColor: Int): View {
+    private fun createDivider(popupWidth: Int, dividerColor: Int): View {
         return View(ctx).apply {
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                (popupWidth * 0.9f).toInt(),
                 (1 * ctx.resources.displayMetrics.density).toInt()
             ).apply {
-                marginStart = (16 * ctx.resources.displayMetrics.density).toInt()
-                marginEnd = (16 * ctx.resources.displayMetrics.density).toInt()
+                gravity = Gravity.CENTER_HORIZONTAL
             }
             setBackgroundColor(dividerColor)
         }
