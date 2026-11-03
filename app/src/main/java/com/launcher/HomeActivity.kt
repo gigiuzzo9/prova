@@ -1026,7 +1026,7 @@ private fun renderWidgets() {
         showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
 }
 
-
+    }
     
     private fun setupDragController() {
         dragController = DragController(
