@@ -1629,33 +1629,9 @@ private fun renderWidgets() {
         }
     }
 
-    // Se il popup del widget è aperto, lascia che il popup gestisca i tocchi
+    // Se il popup del widget è aperto, lascia che sia il popup a gestire i tocchi
     if (widgetPopupWindow?.isShowing == true) {
         return super.dispatchTouchEvent(ev)
-    }
-
-    // Se il popup è chiuso, passa TUTTI gli eventi al widget (trasparenza)
-    if (!drawerOpen && !isResizing) {
-        val loc = IntArray(2)
-        widgetContainer.getLocationOnScreen(loc)
-        val localX = ev.rawX - loc[0]
-        val localY = ev.rawY - loc[1]
-
-        var targetView: View? = null
-        for (i in 0 until widgetContainer.childCount) {
-            val child = widgetContainer.getChildAt(i)
-            if (child.visibility == View.VISIBLE &&
-                localX >= child.x && localX <= child.x + child.width &&
-                localY >= child.y && localY <= child.y + child.height
-            ) {
-                targetView = child
-                break
-            }
-        }
-
-        if (targetView != null) {
-            return targetView.dispatchTouchEvent(ev)
-        }
     }
 
     return super.dispatchTouchEvent(ev)
