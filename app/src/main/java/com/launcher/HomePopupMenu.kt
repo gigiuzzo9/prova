@@ -2,9 +2,11 @@ package com.simplylauncher
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
@@ -24,10 +26,8 @@ class HomePopupMenu(private val ctx: Context) {
 
         val container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            // Aumentato del 30%: 32 -> 42, 16 -> 21
             setPadding(42, 21, 42, 21)
             val drawable = GradientDrawable().apply {
-                // Aumentato del 30%: 16 -> 21
                 cornerRadius = 21f
                 setColor(Color.WHITE)
             }
@@ -40,10 +40,14 @@ class HomePopupMenu(private val ctx: Context) {
             dismiss()
         })
 
+        container.addView(createDivider())
+
         container.addView(createMenuItem(ctx.getString(R.string.menu_add_page)) {
             onAddPage?.invoke()
             dismiss()
         })
+
+        container.addView(createDivider())
 
         container.addView(createMenuItem(ctx.getString(R.string.menu_change_wallpaper)) {
             onChangeWallpaper?.invoke()
@@ -51,6 +55,7 @@ class HomePopupMenu(private val ctx: Context) {
         })
 
         if (showRemovePage) {
+            container.addView(createDivider())
             container.addView(createMenuItem(ctx.getString(R.string.menu_remove_page)) {
                 onRemovePage?.invoke()
                 dismiss()
@@ -74,11 +79,26 @@ class HomePopupMenu(private val ctx: Context) {
         return TextView(ctx).apply {
             this.text = text
             setTextColor(Color.BLACK)
-            // Aumentato del 30%: 16 -> 21
             textSize = 21f
-            // Aumentato del 30%: 32 -> 42, 20 -> 26
+            // Font fine ed elegante
+            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
             setPadding(42, 26, 42, 26)
             setOnClickListener { onClick() }
+        }
+    }
+
+    private fun createDivider(): View {
+        return View(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (1 * ctx.resources.displayMetrics.density).toInt()
+            ).apply {
+                // 5% margine per lato = 90% larghezza centrata
+                val margin = (ctx.resources.displayMetrics.widthPixels * 0.05f).toInt()
+                marginStart = margin
+                marginEnd = margin
+            }
+            setBackgroundColor(0x33000000)  // nero al 20% per tema chiaro
         }
     }
 
