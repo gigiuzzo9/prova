@@ -130,6 +130,8 @@ window.navigationBarColor = Color.TRANSPARENT
         
         homeScreenGrid = findViewById(R.id.homeScreenGrid)
         widgetContainer = findViewById(R.id.widgetContainer)
+        widgetContainer.isClickable = false
+        widgetContainer.isFocusable = false
         widgetContainer2 = findViewById(R.id.widgetContainer2)
         pageIndicator = findViewById(R.id.pageIndicator)
         emptyMessage = findViewById(R.id.emptyMessage)
@@ -1021,8 +1023,7 @@ private fun renderWidgets() {
         // Ancoralo al widget stesso, non al centro dello schermo
         val loc = IntArray(2)
         hostView.getLocationOnScreen(loc)
-        showAtLocation(hostView, Gravity.NO_GRAVITY, loc[0], loc[1])
-    }
+        showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
 }
 
 
