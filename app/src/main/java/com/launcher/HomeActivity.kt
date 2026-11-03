@@ -1675,6 +1675,7 @@ private fun isColorDark(color: Int): Boolean {
         }
 
         if (targetView != null) {
+            // Passa l'evento al widget e fermati qui (non chiamare super)
             return targetView.dispatchTouchEvent(ev)
         }
     }
