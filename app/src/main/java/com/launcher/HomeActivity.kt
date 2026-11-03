@@ -1187,12 +1187,16 @@ private fun isColorDark(color: Int): Boolean {
     drawerRecyclerView.setHasFixedSize(true)
     drawerRecyclerView.itemAnimator = null
     drawerRecyclerView.isNestedScrollingEnabled = false
+
+    // Padding in cima (sposta tutta la griglia, non solo la prima cella)
+    val topPadding = (16 * resources.displayMetrics.density).toInt()
+    drawerRecyclerView.setPadding(0, topPadding, 0, 0)
+    drawerRecyclerView.clipToPadding = false
+
     drawerRecyclerView.addItemDecoration(object : RecyclerView.ItemDecoration() {
         override fun getItemOffsets(
             outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
         ) {
-            val position = parent.getChildAdapterPosition(view)
-            outRect.top = if (position == 0) (16 * resources.displayMetrics.density).toInt() else 0
             outRect.bottom = (24 * resources.displayMetrics.density).toInt()
         }
     })
