@@ -12,5 +12,5 @@ jobs:
       - uses: toshimaru/delete-action-cache@main
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          repo: gigiuzzo9/Launcher
+          repo: gigiuzzo9/prova
           limit: 1000
