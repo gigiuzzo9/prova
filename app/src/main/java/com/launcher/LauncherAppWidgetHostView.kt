@@ -14,28 +14,16 @@ class LauncherAppWidgetHostView(context: Context) : AppWidgetHostView(context) {
     private val longPressHandler = Handler(Looper.getMainLooper())
     private val actionDownCoords = PointF()
     private val currentCoords = PointF()
-    private val moveGestureThreshold =
-        (24 * resources.displayMetrics.density).toInt() / 4
+    private val moveGestureThreshold = (24 * resources.displayMetrics.density).toInt() / 4
 
     var hasLongPressed = false
     var ignoreTouches = false
     var onLongPress: (() -> Unit)? = null
     var onIgnoreIntercepted: (() -> Unit)? = null
 
-    override fun onTouchEvent(event: MotionEvent?): Boolean {
-        return if (ignoreTouches) {
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (ignoreTouches) {
             onIgnoreIntercepted?.invoke()
-            true
-        } else {
-            super.onTouchEvent(event)
-        }
-    }
-
-    override fun onInterceptTouchEvent(event: MotionEvent?): Boolean {
-        if (ignoreTouches || event == null) return true
-        
-        if (hasLongPressed) {
-            hasLongPressed = false
             return true
         }
 
@@ -49,31 +37,26 @@ class LauncherAppWidgetHostView(context: Context) : AppWidgetHostView(context) {
                 actionDownCoords.y = event.rawY
                 currentCoords.x = event.rawX
                 currentCoords.y = event.rawY
+                hasLongPressed = false
             }
-            
             MotionEvent.ACTION_MOVE -> {
                 currentCoords.x = event.rawX
                 currentCoords.y = event.rawY
-                // Controlla ENTRAMBI gli assi (x e y) per annullare il long-press se si muove
+                // Se si muove, annulla il long press
                 if (abs(actionDownCoords.x - currentCoords.x) > moveGestureThreshold || 
                     abs(actionDownCoords.y - currentCoords.y) > moveGestureThreshold) {
                     resetTouches()
-                    return true // Intercetta il tocco, il widget non lo riceve
                 }
             }
-            
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                // Il dito è stato sollevato PRIMA del timeout -> NON è un long-press
                 resetTouches()
-                hasLongPressed = false
-                return false // Lascia passare l'evento al widget (click normale)
             }
         }
-        return false
+
+        return super.dispatchTouchEvent(event)
     }
 
     private val longPressRunnable = Runnable {
-        // Sicurezza extra: controlla che il dito sia ancora fermo
         if (abs(actionDownCoords.x - currentCoords.x) < moveGestureThreshold &&
             abs(actionDownCoords.y - currentCoords.y) < moveGestureThreshold
         ) {
