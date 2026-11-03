@@ -1189,7 +1189,7 @@ private fun isColorDark(color: Int): Boolean {
     drawerRecyclerView.isNestedScrollingEnabled = false
 
     // Padding in cima (sposta tutta la griglia, non solo la prima cella)
-    val topPadding = (16 * resources.displayMetrics.density).toInt()
+    val topPadding = (20 * resources.displayMetrics.density).toInt()
     drawerRecyclerView.setPadding(0, topPadding, 0, 0)
     drawerRecyclerView.clipToPadding = false
 
