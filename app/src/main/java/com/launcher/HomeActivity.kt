@@ -941,72 +941,93 @@ private fun isColorDark(color: Int): Boolean {
     }
 
     private fun showWidgetMenu(
-        slot: WidgetSlot,
-        info: AppWidgetProviderInfo,
-        cellW: Int,
-        cellH: Int,
-        hostView: LauncherAppWidgetHostView,
-        pageIndex: Int
-    ) {
-        val ctx = this
-        val density = resources.displayMetrics.density
-        fun dp(v: Int) = (v * density).toInt()
+    slot: WidgetSlot,
+    info: AppWidgetProviderInfo,
+    cellW: Int,
+    cellH: Int,
+    hostView: LauncherAppWidgetHostView,
+    pageIndex: Int
+) {
+    val ctx = this
+    val density = resources.displayMetrics.density
+    fun dp(v: Int) = (v * density).toInt()
 
-        val container = android.widget.LinearLayout(ctx).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(dp(10), dp(10), dp(10), dp(10))
-            val drawable = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = dp(8).toFloat()
-                setColor(Color.WHITE)
-            }
-            background = drawable
-            elevation = 8f * density
-        }
+    val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
 
-        fun addItem(text: String, onClick: () -> Unit) {
-            val tv = TextView(ctx).apply {
-                this.text = text
-                setTextColor(Color.BLACK)
-                textSize = 20f
-                setPadding(dp(26), dp(18), dp(26), dp(18))
-                val outValue = android.util.TypedValue()
-                context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
-                setBackgroundResource(outValue.resourceId)
-                setOnClickListener {
-                    onClick()
-                    widgetPopupWindow?.dismiss()
-                }
-            }
-            container.addView(tv)
+    val container = android.widget.LinearLayout(ctx).apply {
+        orientation = android.widget.LinearLayout.VERTICAL
+        setPadding(dp(10), dp(10), dp(10), dp(10))
+        val drawable = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = dp(8).toFloat()
+            setColor(Color.WHITE)
         }
-
-        addItem("Ridimensiona") {
-            dragController.cancelPendingDrag()
-            startResize(slot, info, cellW, cellH, hostView, pageIndex)
-        }
-        addItem("Rimuovi widget") {
-            val current = PrefsSync.widgetSlots(this)
-            PrefsSync.setWidgetSlots(
-                this,
-                current.filter { it.appWidgetId != slot.appWidgetId }
-            )
-            appWidgetHost.deleteAppWidgetId(slot.appWidgetId)
-            renderWidgets()
-        }
-
-        widgetPopupWindow?.dismiss()
-        widgetPopupWindow = android.widget.PopupWindow(
-            container,
-            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-            true
-        ).apply {
-            isOutsideTouchable = true
-            isFocusable = true
-            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-            showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
-        }
+        background = drawable
+        elevation = 8f * density
     }
+
+    var first = true
+
+    fun addDividerIfNeeded() {
+        if (!first) {
+            container.addView(View(ctx).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    (popupWidth * 0.9f).toInt(),
+                    dp(1)
+                ).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                }
+                setBackgroundColor(0x33000000)
+            })
+        }
+        first = false
+    }
+
+    fun addItem(text: String, onClick: () -> Unit) {
+        addDividerIfNeeded()
+        val tv = TextView(ctx).apply {
+            this.text = text
+            setTextColor(Color.BLACK)
+            textSize = 20f
+            typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
+            setPadding(dp(26), dp(18), dp(26), dp(18))
+            val outValue = android.util.TypedValue()
+            context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+            setBackgroundResource(outValue.resourceId)
+            setOnClickListener {
+                onClick()
+                widgetPopupWindow?.dismiss()
+            }
+        }
+        container.addView(tv)
+    }
+
+    addItem("Ridimensiona") {
+        dragController.cancelPendingDrag()
+        startResize(slot, info, cellW, cellH, hostView, pageIndex)
+    }
+    addItem("Rimuovi widget") {
+        val current = PrefsSync.widgetSlots(this)
+        PrefsSync.setWidgetSlots(
+            this,
+            current.filter { it.appWidgetId != slot.appWidgetId }
+        )
+        appWidgetHost.deleteAppWidgetId(slot.appWidgetId)
+        renderWidgets()
+    }
+
+    widgetPopupWindow?.dismiss()
+    widgetPopupWindow = android.widget.PopupWindow(
+        container,
+        popupWidth,
+        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+        true
+    ).apply {
+        isOutsideTouchable = true
+        isFocusable = true
+        setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
+    }
+}
 
     private fun setupDragController() {
         dragController = DragController(
