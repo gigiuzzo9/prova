@@ -21,12 +21,19 @@ class LauncherAppWidgetHostView(context: Context) : AppWidgetHostView(context) {
     var onIgnoreIntercepted: (() -> Unit)? = null
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
-        return if (ignoreTouches) {
+        if (ignoreTouches) {
             onIgnoreIntercepted?.invoke()
-            true
-        } else {
-            super.onTouchEvent(event)
+            return true
         }
+
+        // Se il dito si alza, annulla SEMPRE il timer del long-press
+        // e resetta hasLongPressed, indipendentemente da cosa fa il widget
+        if (event?.actionMasked == MotionEvent.ACTION_UP || event?.actionMasked == MotionEvent.ACTION_CANCEL) {
+            resetTouches()
+            hasLongPressed = false
+        }
+
+        return super.onTouchEvent(event)
     }
 
     override fun onInterceptTouchEvent(event: MotionEvent?): Boolean {
