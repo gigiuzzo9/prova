@@ -1650,7 +1650,6 @@ private fun isColorDark(color: Int): Boolean {
         }
     }
 
-    // Passa TUTTI gli eventi al widget se il tocco è sopra di esso
     if (!drawerOpen && !isResizing) {
         val loc = IntArray(2)
         widgetContainer.getLocationOnScreen(loc)
@@ -1670,7 +1669,11 @@ private fun isColorDark(color: Int): Boolean {
         }
 
         if (targetView != null) {
-            // Passiamo l'evento al widget (sia DOWN che MOVE che UP)
+            val hostView = targetView as? LauncherAppWidgetHostView
+            // Se il widget ha ignoreTouches = true, consumiamo l'evento qui
+            if (hostView?.ignoreTouches == true) {
+                return true 
+            }
             return targetView.dispatchTouchEvent(ev)
         }
     }
