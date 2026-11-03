@@ -952,12 +952,13 @@ private fun isColorDark(color: Int): Boolean {
     val ctx = this
     val density = resources.displayMetrics.density
     
-    // Esattamente come il primo codice
+    // Larghezza identica al primo codice
     val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
 
+    // COPIA ESATTA DEL CONTAINER DEL PRIMO CODICE
     val container = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
-        setPadding(0, (21 * density).toInt(), 0, (21 * density).toInt())
+        setPadding(0, (21 * density).toInt(), 0, (21 * density).toInt()) // 0 ai lati!
         val drawable = android.graphics.drawable.GradientDrawable().apply {
             cornerRadius = 21f
             setColor(Color.WHITE)
@@ -968,48 +969,53 @@ private fun isColorDark(color: Int): Boolean {
 
     var first = true
 
-    fun addDividerIfNeeded() {
-        if (!first) {
-            // COPIA ESATTA DI createDivider
-            container.addView(android.view.View(ctx).apply {
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    (popupWidth * 0.9f).toInt(),
-                    (1 * density).toInt()
-                ).apply {
-                    gravity = Gravity.CENTER_HORIZONTAL
-                }
-                setBackgroundColor(0x33000000)
-            })
+    // COPIA ESATTA DI createDivider
+    fun createDivider(): View {
+        return View(ctx).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                (popupWidth * 0.9f).toInt(),
+                (1 * density).toInt()
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
+            setBackgroundColor(0x33000000)
         }
-        first = false
     }
 
-    fun addItem(text: String, onClick: () -> Unit) {
-        addDividerIfNeeded()
-        
-        // COPIA ESATTA DI createMenuItem
-        val tv = TextView(ctx).apply {
+    // COPIA ESATTA DI createMenuItem
+    fun createMenuItem(text: String, onClick: () -> Unit): TextView {
+        return TextView(ctx).apply {
             this.text = text
             setTextColor(Color.BLACK)
             textSize = 21f
             typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
-            // Nessun layoutParams impostato! (Proprio come nel primo codice)
             setPadding((42 * density).toInt(), (26 * density).toInt(), (42 * density).toInt(), (26 * density).toInt())
+            
+            val outValue = android.util.TypedValue()
+            context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+            setBackgroundResource(outValue.resourceId)
             
             setOnClickListener { 
                 onClick()
                 widgetPopupWindow?.dismiss() 
             }
         }
-        container.addView(tv)
     }
 
-    addItem("Ridimensiona") {
+    // Aggiunta voci con la stessa logica del primo codice
+    fun addDividerIfNeeded() {
+        if (!first) container.addView(createDivider())
+        first = false
+    }
+
+    addDividerIfNeeded()
+    container.addView(createMenuItem("Ridimensiona") {
         dragController.cancelPendingDrag()
         startResize(slot, info, cellW, cellH, hostView, pageIndex)
-    }
-    
-    addItem("Rimuovi widget") {
+    })
+
+    addDividerIfNeeded()
+    container.addView(createMenuItem("Rimuovi widget") {
         val current = PrefsSync.widgetSlots(this)
         PrefsSync.setWidgetSlots(
             this,
@@ -1017,7 +1023,7 @@ private fun isColorDark(color: Int): Boolean {
         )
         appWidgetHost.deleteAppWidgetId(slot.appWidgetId)
         renderWidgets()
-    }
+    })
 
     widgetPopupWindow?.dismiss()
     widgetPopupWindow = android.widget.PopupWindow(
