@@ -957,10 +957,9 @@ private fun isColorDark(color: Int): Boolean {
 
     val container = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
-        // Padding verticale identico al primo menu (21 top, 21 bottom)
+        // Padding verticale identico
         setPadding(0, (21 * density).toInt(), 0, (21 * density).toInt())
         val drawable = android.graphics.drawable.GradientDrawable().apply {
-            // Raggio di 21f identico al primo menu
             cornerRadius = 21f
             setColor(Color.WHITE)
         }
@@ -970,10 +969,9 @@ private fun isColorDark(color: Int): Boolean {
 
     var first = true
 
-    // Funzione interna che replica ESATTAMENTE createMenuItem del primo codice
     fun addItem(text: String, onClick: () -> Unit) {
         if (!first) {
-            // Divisore identico al primo menu
+            // Divisore identico al primo codice: larghezza 90% del popup, centrato
             container.addView(android.view.View(ctx).apply {
                 layoutParams = android.widget.LinearLayout.LayoutParams(
                     (popupWidth * 0.9f).toInt(),
@@ -981,7 +979,7 @@ private fun isColorDark(color: Int): Boolean {
                 ).apply {
                     gravity = Gravity.CENTER_HORIZONTAL
                 }
-                setBackgroundColor(0x33000000) // Colore divisore identico
+                setBackgroundColor(0x33000000)
             })
         }
         first = false
@@ -989,10 +987,13 @@ private fun isColorDark(color: Int): Boolean {
         val tv = TextView(ctx).apply {
             this.text = text
             setTextColor(Color.BLACK)
-            textSize = 21f // Dimensione testo identica
-            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL) // Font identico
+            textSize = 21f
+            typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
             
-            // Padding identico (42 left, 26 top, 42 right, 26 bottom)
+            // ECCO IL SEGRETO: Nessun layoutParams specificato (di default è WRAP_CONTENT)
+            // Questo permette al testo di occupare la larghezza che gli serve 
+            // all'interno del popup senza andare a capo inutilmente.
+            
             setPadding((42 * density).toInt(), (26 * density).toInt(), (42 * density).toInt(), (26 * density).toInt())
             
             val outValue = android.util.TypedValue()
@@ -1004,8 +1005,6 @@ private fun isColorDark(color: Int): Boolean {
                 widgetPopupWindow?.dismiss()
             }
         }
-        // IMPORTANTE: Usiamo WRAP_CONTENT per la larghezza del TextView per evitare 
-        // che il click effect si estenda troppo, ma il testo sarà distanziato dal padding 42
         container.addView(tv)
     }
 
@@ -1033,8 +1032,7 @@ private fun isColorDark(color: Int): Boolean {
     ).apply {
         isOutsideTouchable = true
         isFocusable = true
-        // Rimuoviamo il ColorDrawable trasparente per evitare problemi di shadow
-        setBackgroundDrawable(null) 
+        setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
     }
 }
