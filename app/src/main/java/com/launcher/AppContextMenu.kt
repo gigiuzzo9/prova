@@ -30,16 +30,14 @@ object AppContextMenu {
 
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(42, 21, 42, 21)
+            setPadding(32, 16, 32, 16)
             val drawable = GradientDrawable().apply {
-                cornerRadius = 21f
+                cornerRadius = 16f
                 setColor(Color.WHITE)
             }
             background = drawable
             elevation = 8f * context.resources.displayMetrics.density
         }
-
-        var itemCount = 0
 
         // 1. Disinstalla
         container.addView(createMenuItem(context, context.getString(R.string.menu_uninstall)) {
@@ -50,7 +48,6 @@ object AppContextMenu {
             context.startActivity(intent)
             popupWindow?.dismiss()
         })
-        itemCount++
 
         // 2. Rinomina
         container.addView(createDivider(context))
@@ -58,7 +55,6 @@ object AppContextMenu {
             onRename()
             popupWindow?.dismiss()
         })
-        itemCount++
 
         // 3. Rimuovi (solo se in home o dock)
         if (isInHome || isInDock) {
@@ -67,7 +63,6 @@ object AppContextMenu {
                 onRemove()
                 popupWindow?.dismiss()
             })
-            itemCount++
         }
 
         popupWindow = PopupWindow(
@@ -86,9 +81,9 @@ object AppContextMenu {
         return TextView(context).apply {
             this.text = text
             setTextColor(Color.BLACK)
-            textSize = 21f
+            textSize = 16f
             typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-            setPadding(42, 26, 42, 26)
+            setPadding(32, 20, 32, 20)
             val outValue = android.util.TypedValue()
             context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
             setBackgroundResource(outValue.resourceId)
@@ -106,7 +101,7 @@ object AppContextMenu {
                 marginStart = margin
                 marginEnd = margin
             }
-            setBackgroundColor(0x33000000)  // nero al 20%
+            setBackgroundColor(0x33000000)
         }
     }
 }
