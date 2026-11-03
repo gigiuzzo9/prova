@@ -1189,11 +1189,12 @@ private fun isColorDark(color: Int): Boolean {
         drawerRecyclerView.isNestedScrollingEnabled = false
         drawerRecyclerView.addItemDecoration(object : RecyclerView.ItemDecoration() {
             override fun getItemOffsets(
-                outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
-            ) {
-                outRect.bottom = (24 * resources.displayMetrics.density).toInt()
-            }
-        })
+    outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
+) {
+    val position = parent.getChildAdapterPosition(view)
+    outRect.top = if (position == 0) (16 * resources.displayMetrics.density).toInt() else 0
+    outRect.bottom = (24 * resources.displayMetrics.density).toInt()
+}
         drawerAdapter = AppAdapter(
             onClick = { app ->
                 AppRepository.launchApp(this, app.packageName)
