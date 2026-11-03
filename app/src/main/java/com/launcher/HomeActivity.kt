@@ -956,14 +956,14 @@ private fun isColorDark(color: Int): Boolean {
 
     val container = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
-        // Larghezza fissa MATCH_PARENT per riempire il popup
+        // FONDAMENTALE: Forza il container a riempire il popup
         layoutParams = android.view.ViewGroup.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT
         )
-        setPadding(0, dp(21), 0, dp(21)) // Identico agli altri
+        setPadding(0, dp(21), 0, dp(21))
         val drawable = android.graphics.drawable.GradientDrawable().apply {
-            cornerRadius = dp(21).toFloat() // Identico agli altri
+            cornerRadius = dp(21).toFloat()
             setColor(Color.WHITE)
         }
         background = drawable
@@ -972,11 +972,11 @@ private fun isColorDark(color: Int): Boolean {
 
     var first = true
 
-    fun addDividerIfNeeded() {
+    fun addItem(text: String, onClick: () -> Unit) {
         if (!first) {
             container.addView(View(ctx).apply {
                 layoutParams = android.widget.LinearLayout.LayoutParams(
-                    (popupWidth * 0.9f).toInt(), // 90% larghezza
+                    (popupWidth * 0.9f).toInt(),
                     dp(1)
                 ).apply {
                     gravity = Gravity.CENTER_HORIZONTAL
@@ -985,26 +985,20 @@ private fun isColorDark(color: Int): Boolean {
             })
         }
         first = false
-    }
 
-    fun addItem(text: String, onClick: () -> Unit) {
-        addDividerIfNeeded()
         val tv = TextView(ctx).apply {
             this.text = text
-            // Larghezza MATCH_PARENT per allineare a sinistra
+            // FONDAMENTALE: Forza il testo a riempire la larghezza e allinealo a sinistra
             layoutParams = android.widget.LinearLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT
             )
-            
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            maxLines = 1
-            isSingleLine = true
             
             setTextColor(Color.BLACK)
-            textSize = 21f // Identico agli altri
+            textSize = 21f
             typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
-            setPadding(dp(42), dp(26), dp(42), dp(26)) // Identico agli altri
+            setPadding(dp(42), dp(26), dp(42), dp(26))
             
             val outValue = android.util.TypedValue()
             context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
@@ -1034,7 +1028,7 @@ private fun isColorDark(color: Int): Boolean {
     widgetPopupWindow?.dismiss()
     widgetPopupWindow = android.widget.PopupWindow(
         container,
-        popupWidth, // 60% schermo
+        popupWidth,
         android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
         true
     ).apply {
