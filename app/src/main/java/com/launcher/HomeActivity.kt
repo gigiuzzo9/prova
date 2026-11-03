@@ -1191,7 +1191,7 @@ private fun isColorDark(color: Int): Boolean {
             override fun getItemOffsets(
                 outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
             ) {
-                outRect.bottom = (16 * resources.displayMetrics.density).toInt()
+                outRect.bottom = (20 * resources.displayMetrics.density).toInt()
             }
         })
         drawerAdapter = AppAdapter(
