@@ -36,6 +36,7 @@ import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.ceil
 import kotlin.math.max
+import android.graphics.Typeface
 
 class HomeActivity : AppCompatActivity() {
 
