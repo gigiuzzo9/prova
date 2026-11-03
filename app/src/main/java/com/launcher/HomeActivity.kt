@@ -1650,6 +1650,12 @@ private fun isColorDark(color: Int): Boolean {
         }
     }
 
+    // Se il popup del widget è aperto, blocca i tocchi sul widget
+    if (widgetPopupWindow?.isShowing == true) {
+        return true
+    }
+
+    // Se il popup è chiuso, passa l'evento al widget se il tocco è sopra di esso
     if (!drawerOpen && !isResizing) {
         val loc = IntArray(2)
         widgetContainer.getLocationOnScreen(loc)
@@ -1669,11 +1675,6 @@ private fun isColorDark(color: Int): Boolean {
         }
 
         if (targetView != null) {
-            val hostView = targetView as? LauncherAppWidgetHostView
-            // Se il widget ha ignoreTouches = true, consumiamo l'evento qui
-            if (hostView?.ignoreTouches == true) {
-                return true 
-            }
             return targetView.dispatchTouchEvent(ev)
         }
     }
