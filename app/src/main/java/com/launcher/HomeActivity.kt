@@ -807,61 +807,57 @@ private fun isColorDark(color: Int): Boolean {
     return luminance < 0.5
 }
 
-    private fun renderWidgets() {
-        renderWidgetsForPage(homeScreenGrid.getCurrentPage(), widgetContainer)
-    }
-
     private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
-        if (homeScreenGrid.width == 0 || homeScreenGrid.height == 0) return
+    if (homeScreenGrid.width == 0 || homeScreenGrid.height == 0) return
 
-        val allWidgets = PrefsSync.widgetSlots(this)
-        container.removeAllViews()
+    val allWidgets = PrefsSync.widgetSlots(this)
+    container.removeAllViews()
 
-        val cellW = homeScreenGrid.width / currentCols
-        val cellH = homeScreenGrid.height / currentRows
+    val cellW = homeScreenGrid.width / currentCols
+    val cellH = homeScreenGrid.height / currentRows
 
-        val pageWidgets = allWidgets.filter { it.page == page }
-        for (slot in pageWidgets) {
-            try {
-                val info = appWidgetManager.getAppWidgetInfo(slot.appWidgetId) ?: continue
-                val hostView = appWidgetHost.createView(baseContext, slot.appWidgetId, info) as LauncherAppWidgetHostView
-                hostView.setAppWidget(slot.appWidgetId, info)
-                hostView.tag = slot.appWidgetId
+    val pageWidgets = allWidgets.filter { it.page == page }
+    for (slot in pageWidgets) {
+        try {
+            val info = appWidgetManager.getAppWidgetInfo(slot.appWidgetId) ?: continue
+            val hostView = appWidgetHost.createView(baseContext, slot.appWidgetId, info) as LauncherAppWidgetHostView
+            hostView.setAppWidget(slot.appWidgetId, info)
+            hostView.tag = slot.appWidgetId
 
-                val widgetWidth = cellW * slot.widthCells
-                val widgetHeight = cellH * slot.heightCells
+            val widgetWidth = cellW * slot.widthCells
+            val widgetHeight = cellH * slot.heightCells
 
-                val lp = FrameLayout.LayoutParams(widgetWidth, widgetHeight).apply {
-                    leftMargin = slot.col * cellW
-                    topMargin = slot.row * cellH
-                }
-                container.addView(hostView, lp)
-
-                hostView.post {
-                    try {
-                        val density = resources.displayMetrics.density
-                        val wDp = (widgetWidth / density).toInt()
-                        val hDp = (widgetHeight / density).toInt()
-                        if (android.os.Build.VERSION.SDK_INT >= 31) {
-                            hostView.updateAppWidgetSize(Bundle(), listOf(SizeF(wDp.toFloat(), hDp.toFloat())))
-                        } else {
-                            hostView.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
-                        }
-                    } catch (_: Exception) {}
-                }
-
-                hostView.onLongPress = {
-                    dragController.onWidgetLongPress(slot, info, hostView)
-                    showWidgetMenu(slot, info, cellW, cellH, hostView, page)
-                }
-                hostView.onIgnoreIntercepted = {
-                    widgetPopupWindow?.dismiss()
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("WIDGET_DEBUG", "Errore render widget ${slot.appWidgetId}", e)
+            val lp = FrameLayout.LayoutParams(widgetWidth, widgetHeight).apply {
+                leftMargin = slot.col * cellW
+                topMargin = slot.row * cellH
             }
+            container.addView(hostView, lp)
+
+            hostView.post {
+                try {
+                    val density = resources.displayMetrics.density
+                    val wDp = (widgetWidth / density).toInt()
+                    val hDp = (widgetHeight / density).toInt()
+                    if (android.os.Build.VERSION.SDK_INT >= 31) {
+                        hostView.updateAppWidgetSize(Bundle(), listOf(SizeF(wDp.toFloat(), hDp.toFloat())))
+                    } else {
+                        hostView.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
+                    }
+                } catch (_: Exception) {}
+            }
+
+            hostView.onLongPress = {
+                dragController.onWidgetLongPress(slot, info, hostView)
+                showWidgetMenu(slot, info, cellW, cellH, hostView, page)
+            }
+            hostView.onIgnoreIntercepted = {
+                // Non chiudere il popup qui. Si chiude con isOutsideTouchable = true.
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("WIDGET_DEBUG", "Errore render widget ${slot.appWidgetId}", e)
         }
     }
+}
 
     private fun startResize(
         slot: WidgetSlot,
@@ -958,9 +954,6 @@ private fun isColorDark(color: Int): Boolean {
     val ctx = this
     val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
 
-    // Blocca i tocchi sul widget mentre il popup è aperto
-    hostView.ignoreTouches = true
-
     val container = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
         setPadding(0, 21, 0, 21)
@@ -1027,6 +1020,7 @@ private fun isColorDark(color: Int): Boolean {
         renderWidgets()
     })
 
+    widgetPopupWindow?.dismiss()
     widgetPopupWindow = android.widget.PopupWindow(
         container,
         popupWidth,
