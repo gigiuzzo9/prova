@@ -958,6 +958,9 @@ private fun isColorDark(color: Int): Boolean {
     val ctx = this
     val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
 
+    // Blocca i tocchi sul widget mentre il popup è aperto
+    hostView.ignoreTouches = true
+
     val container = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
         setPadding(0, 21, 0, 21)
@@ -1034,6 +1037,12 @@ private fun isColorDark(color: Int): Boolean {
         isOutsideTouchable = true
         isFocusable = true
         setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        
+        // Quando il popup si chiude, sblocca i tocchi sul widget
+        setOnDismissListener {
+            hostView.ignoreTouches = false
+        }
+        
         showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
     }
 }
