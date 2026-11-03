@@ -31,7 +31,7 @@ class AppContextMenuView(private val ctx: Context) {
 
         val container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(42, 21, 42, 21)
+            setPadding(0, 21, 0, 21)
             val drawable = GradientDrawable().apply {
                 cornerRadius = 21f
                 setColor(bgColor)
@@ -41,7 +41,6 @@ class AppContextMenuView(private val ctx: Context) {
         }
 
         var first = true
-
         fun addDividerIfNeeded() {
             if (!first) container.addView(createDivider(dividerColor))
             first = false
@@ -103,9 +102,8 @@ class AppContextMenuView(private val ctx: Context) {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 (1 * ctx.resources.displayMetrics.density).toInt()
             ).apply {
-                val margin = (ctx.resources.displayMetrics.widthPixels * 0.05f).toInt()
-                marginStart = margin
-                marginEnd = margin
+                marginStart = (16 * ctx.resources.displayMetrics.density).toInt()
+                marginEnd = (16 * ctx.resources.displayMetrics.density).toInt()
             }
             setBackgroundColor(dividerColor)
         }
