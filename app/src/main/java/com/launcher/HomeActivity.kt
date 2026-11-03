@@ -956,65 +956,73 @@ private fun isColorDark(color: Int): Boolean {
     pageIndex: Int
 ) {
     val ctx = this
+    val density = resources.displayMetrics.density
+    fun dp(v: Int) = (v * density).toInt()
+
     val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
 
     val container = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
-        setPadding(0, 21, 0, 21)
-
-        background = android.graphics.drawable.GradientDrawable().apply {
-            cornerRadius = 21f
+        // FONDAMENTALE: Forza il container a riempire il popup
+        layoutParams = android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        setPadding(0, dp(21), 0, dp(21))
+        val drawable = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = dp(21).toFloat()
             setColor(Color.WHITE)
         }
-
-        elevation = 8f * resources.displayMetrics.density
+        background = drawable
+        elevation = 8f * density
     }
 
     var first = true
 
-    fun createDivider(): View {
-        return View(ctx).apply {
-            layoutParams = android.widget.LinearLayout.LayoutParams(
-                (popupWidth * 0.9f).toInt(),
-                (1 * resources.displayMetrics.density).toInt()
-            ).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-            }
-            setBackgroundColor(0x33000000)
+    fun addItem(text: String, onClick: () -> Unit) {
+        if (!first) {
+            container.addView(View(ctx).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    (popupWidth * 0.9f).toInt(),
+                    dp(1)
+                ).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                }
+                setBackgroundColor(0x33000000)
+            })
         }
-    }
+        first = false
 
-    fun createMenuItem(text: String, onClick: () -> Unit): TextView {
-        return TextView(ctx).apply {
+        val tv = TextView(ctx).apply {
             this.text = text
+            // FONDAMENTALE: Forza il testo a riempire la larghezza e allinealo a sinistra
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            
             setTextColor(Color.BLACK)
             textSize = 21f
-            typeface = android.graphics.Typeface.create(
-                "sans-serif-light",
-                android.graphics.Typeface.NORMAL
-            )
-            setPadding(42, 26, 42, 26)
-
+            typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
+            setPadding(dp(42), dp(26), dp(42), dp(26))
+            
+            val outValue = android.util.TypedValue()
+            context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+            setBackgroundResource(outValue.resourceId)
             setOnClickListener {
                 onClick()
                 widgetPopupWindow?.dismiss()
             }
         }
+        container.addView(tv)
     }
 
-    fun addDividerIfNeeded() {
-        if (!first) container.addView(createDivider())
-        first = false
-    }
-
-    addDividerIfNeeded()
-    container.addView(createMenuItem("Ridimensiona") {
+    addItem("Ridimensiona") {
         dragController.cancelPendingDrag()
         startResize(slot, info, cellW, cellH, hostView, pageIndex)
-    })
-
-    addDividerIfNeeded()
-    container.addView(createMenuItem("Rimuovi widget") {
+    }
+    addItem("Rimuovi widget") {
         val current = PrefsSync.widgetSlots(this)
         PrefsSync.setWidgetSlots(
             this,
@@ -1022,17 +1030,17 @@ private fun isColorDark(color: Int): Boolean {
         )
         appWidgetHost.deleteAppWidgetId(slot.appWidgetId)
         renderWidgets()
-    })
+    }
 
     widgetPopupWindow?.dismiss()
     widgetPopupWindow = android.widget.PopupWindow(
         container,
         popupWidth,
         android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-        false
+        true
     ).apply {
-        isOutsideTouchable = false
-        isFocusable = false
+        isOutsideTouchable = true
+        isFocusable = true
         setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
     }
