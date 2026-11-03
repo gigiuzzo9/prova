@@ -110,11 +110,11 @@
 
     </LinearLayout>
 
+    <!-- QUI: rimossi background="#66000000" e i margini del card -->
     <FrameLayout
         android:id="@+id/drawerOverlay"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:background="#66000000"
         android:visibility="gone"
         android:clickable="true"
         android:focusable="true"
