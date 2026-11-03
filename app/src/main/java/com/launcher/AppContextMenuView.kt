@@ -2,9 +2,11 @@ package com.simplylauncher
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
@@ -25,13 +27,12 @@ class AppContextMenuView(private val ctx: Context) {
 
         val bgColor = if (drawerIsWhite) Color.BLACK else Color.WHITE
         val textColor = if (drawerIsWhite) Color.WHITE else Color.BLACK
+        val dividerColor = if (drawerIsWhite) 0x33FFFFFF else 0x33000000
 
         val container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            // Aumentato del 30%: 32 -> 42, 16 -> 21
             setPadding(42, 21, 42, 21)
             val drawable = GradientDrawable().apply {
-                // Aumentato del 30%: 16 -> 21
                 cornerRadius = 21f
                 setColor(bgColor)
             }
@@ -39,23 +40,34 @@ class AppContextMenuView(private val ctx: Context) {
             elevation = 8f * ctx.resources.displayMetrics.density
         }
 
+        var first = true
+
+        fun addDividerIfNeeded() {
+            if (!first) container.addView(createDivider(dividerColor))
+            first = false
+        }
+
         if (showRemove) {
+            addDividerIfNeeded()
             container.addView(createMenuItem(ctx.getString(R.string.menu_remove), textColor) {
                 onRemove?.invoke()
                 dismiss()
             })
         }
 
+        addDividerIfNeeded()
         container.addView(createMenuItem(ctx.getString(R.string.menu_uninstall), textColor) {
             onUninstall?.invoke()
             dismiss()
         })
 
+        addDividerIfNeeded()
         container.addView(createMenuItem(ctx.getString(R.string.menu_rename), textColor) {
             onRename?.invoke()
             dismiss()
         })
 
+        addDividerIfNeeded()
         container.addView(createMenuItem("Cambia icona", textColor) {
             onChangeIcon?.invoke()
             dismiss()
@@ -78,11 +90,24 @@ class AppContextMenuView(private val ctx: Context) {
         return TextView(ctx).apply {
             this.text = text
             setTextColor(textColor)
-            // Aumentato del 30%: 16 -> 21
             textSize = 21f
-            // Aumentato del 30%: 32 -> 42, 20 -> 26
+            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
             setPadding(42, 26, 42, 26)
             setOnClickListener { onClick() }
+        }
+    }
+
+    private fun createDivider(dividerColor: Int): View {
+        return View(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (1 * ctx.resources.displayMetrics.density).toInt()
+            ).apply {
+                val margin = (ctx.resources.displayMetrics.widthPixels * 0.05f).toInt()
+                marginStart = margin
+                marginEnd = margin
+            }
+            setBackgroundColor(dividerColor)
         }
     }
 
