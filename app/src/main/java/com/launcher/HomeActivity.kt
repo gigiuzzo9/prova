@@ -1634,8 +1634,22 @@ private fun renderWidgets() {
         return super.dispatchTouchEvent(ev)
     }
 
+    // Quando il dito si alza o il tocco viene annullato,
+    // annulla il long-press su TUTTI i widget visibili
+    if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) {
+        for (i in 0 until widgetContainer.childCount) {
+            val child = widgetContainer.getChildAt(i)
+            if (child is LauncherAppWidgetHostView) {
+                child.resetTouches()
+                child.hasLongPressed = false
+            }
+        }
+    }
+
     return super.dispatchTouchEvent(ev)
 }
+
+    
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (isResizing) { endResizeMode(); return }
