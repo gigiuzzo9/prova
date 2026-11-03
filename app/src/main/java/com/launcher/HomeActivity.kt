@@ -963,6 +963,11 @@ private fun isColorDark(color: Int): Boolean {
         }
         background = drawable
         elevation = 8f * density
+        // Forza il layout a stringersi sul contenuto
+        layoutParams = android.view.ViewGroup.LayoutParams(
+            popupWidth,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
 
     var first = true
@@ -988,12 +993,13 @@ private fun isColorDark(color: Int): Boolean {
             this.text = text
             this.maxLines = 1
             this.isSingleLine = true
-            this.ellipsize = android.text.TextUtils.TruncateAt.END
+            this.gravity = Gravity.START or Gravity.CENTER_VERTICAL // Allinea a sinistra
             
             setTextColor(Color.BLACK)
             textSize = 21f
             typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
             setPadding(dp(42), dp(26), dp(42), dp(26))
+            
             val outValue = android.util.TypedValue()
             context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
             setBackgroundResource(outValue.resourceId)
@@ -1023,13 +1029,14 @@ private fun isColorDark(color: Int): Boolean {
     widgetPopupWindow = android.widget.PopupWindow(
         container,
         popupWidth,
-        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+        android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
         true
     ).apply {
         isOutsideTouchable = true
         isFocusable = true
         setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-        showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
+        // Ancorato al centro dello schermo, non a widgetContainer che è enorme
+        showAtLocation(window.decorView, Gravity.CENTER, 0, 0)
     }
 }
     
