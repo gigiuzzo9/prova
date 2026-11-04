@@ -44,6 +44,7 @@ class HomeScreenGrid @JvmOverloads constructor(
     private var labelSideMargin = 0
 
     private val cells = mutableMapOf<Pair<Int, Int>, Rect>()
+    private val widgetBounds = mutableListOf<Rect>()
 
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
@@ -98,6 +99,20 @@ class HomeScreenGrid @JvmOverloads constructor(
         setWillNotDraw(false)
         drawingArea.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         addView(drawingArea)
+    }
+
+    fun updateWidgetBounds(bounds: List<Rect>) {
+        widgetBounds.clear()
+        widgetBounds.addAll(bounds)
+    }
+
+    private fun isPointOverWidget(x: Float, y: Float): Boolean {
+        for (rect in widgetBounds) {
+            if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun invalidateDrawing() {
@@ -344,6 +359,10 @@ class HomeScreenGrid @JvmOverloads constructor(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (isPointOverWidget(event.x, event.y)) {
+            return false
+        }
+
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 swipeAnimator?.cancel()
