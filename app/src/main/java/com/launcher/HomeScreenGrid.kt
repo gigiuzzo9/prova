@@ -278,47 +278,48 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect, offsetX: Float) {
-    val app = AppCache.get(slot.packageName) ?: return
-    val bitmap = getIconBitmap(slot.packageName) ?: return
+        val app = AppCache.get(slot.packageName) ?: return
+        val bitmap = getIconBitmap(slot.packageName) ?: return
 
-    val isCustom = PrefsSync.customIcons(context).containsKey(slot.packageName)
-    // Padding visivo del 10% per lato (20% totale) per le icone custom
-    val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
-    
-    // Dimensione effettiva dell'icona disegnata
-    val drawSize = iconSize - pad * 2
+        val isCustom = PrefsSync.customIcons(context).containsKey(slot.packageName)
+        // Padding visivo del 10% per lato (20% totale) per le icone custom
+        val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
+        
+        // Dimensione effettiva dell'icona disegnata
+        val drawSize = iconSize - pad * 2
 
-    // Coordinate per centrare l'icona nella cella
-    val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
-    val iconTop = cell.top.toFloat() + iconMargin.toFloat() + pad
+        // Coordinate per centrare l'icona nella cella
+        val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
+        val iconTop = cell.top.toFloat() + iconMargin.toFloat() + pad
 
-    val dstRect = Rect(
-        iconLeft.toInt(),
-        iconTop.toInt(),
-        (iconLeft + drawSize).toInt(),
-        (iconTop + drawSize).toInt()
-    )
+        val dstRect = Rect(
+            iconLeft.toInt(),
+            iconTop.toInt(),
+            (iconLeft + drawSize).toInt(),
+            (iconTop + drawSize).toInt()
+        )
 
-    // Disegna il bitmap scalato al rettangolo di destinazione
-    canvas.drawBitmap(bitmap, null, dstRect, null)
+        // Disegna il bitmap scalato al rettangolo di destinazione
+        canvas.drawBitmap(bitmap, null, dstRect, null)
 
-    if (app.label.isNotEmpty()) {
-        val textWidth = cell.width() - 2 * labelSideMargin
-        val layout = StaticLayout.Builder
-            .obtain(app.label, 0, app.label.length, textPaint, textWidth)
-            .setMaxLines(1)
-            .setEllipsize(TextUtils.TruncateAt.END)
-            .setAlignment(Layout.Alignment.ALIGN_CENTER)
-            .build()
+        if (app.label.isNotEmpty()) {
+            val textWidth = cell.width() - 2 * labelSideMargin
+            val layout = StaticLayout.Builder
+                .obtain(app.label, 0, app.label.length, textPaint, textWidth)
+                .setMaxLines(1)
+                .setEllipsize(TextUtils.TruncateAt.END)
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                .build()
 
-        // Il nome parte sotto l'icona standard (iconSize), centrato
-        val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
-        canvas.save()
-        canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
-        layout.draw(canvas)
-        canvas.restore()
+            // Il nome parte sotto l'icona standard (iconSize), centrato
+            val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
+            canvas.save()
+            canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
+            layout.draw(canvas)
+            canvas.restore()
+        }
     }
-}
+
     private fun drawingItem(canvas: Canvas) {
         val dragged = draggingItem ?: return
         if (draggingCoords.first < 0f) return
@@ -344,6 +345,19 @@ class HomeScreenGrid @JvmOverloads constructor(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // Se il tocco è sopra un widget, lascia che sia il widget a gestirlo
+        for (i in 0 until childCount) {
+            val child = getChildAt(i)
+            if (child is LauncherAppWidgetHostView && child.visibility == View.VISIBLE) {
+                val childX = child.x
+                val childY = child.y
+                if (event.x >= childX && event.x <= childX + child.width &&
+                    event.y >= childY && event.y <= childY + child.height) {
+                    return false  // non intercettare, il tocco va al widget
+                }
+            }
+        }
+
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 swipeAnimator?.cancel()
