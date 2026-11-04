@@ -1671,25 +1671,57 @@ class HomeActivity : AppCompatActivity() {
     }
 
     override fun onResume() {
+    val t0 = System.nanoTime()
     super.onResume()
     if (drawerOpen) closeDrawer()
     drawerBgApplied = false
 
-    // NON chiamare AppRepository.invalidateCache() qui
+    val newCols = PrefsSync.cols(this)
+    val newRows = PrefsSync.rows(this)
+    val newPageCount = PrefsSync.pageCount(this)
+    val gridChanged = newCols != currentCols ||
+            newRows != currentRows ||
+            newPageCount != currentPageCount
 
-    currentCols = PrefsSync.cols(this)
-    currentRows = PrefsSync.rows(this)
-    currentPageCount = PrefsSync.pageCount(this)
+    currentCols = newCols
+    currentRows = newRows
+    currentPageCount = newPageCount
 
-    homeScreenGrid.setGridSize(currentCols, currentRows)
-    homeScreenGrid.setPageCount(currentPageCount)
+    if (gridChanged) {
+        homeScreenGrid.setGridSize(currentCols, currentRows)
+        homeScreenGrid.setPageCount(currentPageCount)
+    }
+
+    val syncMs = (System.nanoTime() - t0) / 1_000_000
 
     lifecycleScope.launch {
-        AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+        val t1 = System.nanoTime()
+        val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+        val loadAppsMs = (System.nanoTime() - t1) / 1_000_000
+
+        val t2 = System.nanoTime()
         loadHomeApps()
+        val homeMs = (System.nanoTime() - t2) / 1_000_000
+
+        val t3 = System.nanoTime()
         dockController.refresh()
-        loadDrawerApps()
+        val dockMs = (System.nanoTime() - t3) / 1_000_000
+
+        val t4 = System.nanoTime()
+        drawerAdapter.submitList(apps)
+        val drawerMs = (System.nanoTime() - t4) / 1_000_000
+
+        val t5 = System.nanoTime()
         renderWidgets()
+        val widgetMs = (System.nanoTime() - t5) / 1_000_000
+
+        val totalMs = (System.nanoTime() - t1) / 1_000_000
+
+        Toast.makeText(
+            this@HomeActivity,
+            "sync:$syncMs  apps:$loadAppsMs  home:$homeMs  dock:$dockMs  drawer:$drawerMs  widget:$widgetMs  tot:$totalMs ms",
+            Toast.LENGTH_LONG
+        ).show()
     }
 }
 
