@@ -1675,7 +1675,7 @@ class HomeActivity : AppCompatActivity() {
     if (drawerOpen) closeDrawer()
     drawerBgApplied = false
 
-    AppRepository.invalidateCache()
+    // NON chiamare AppRepository.invalidateCache() qui
 
     currentCols = PrefsSync.cols(this)
     currentRows = PrefsSync.rows(this)
@@ -1684,16 +1684,13 @@ class HomeActivity : AppCompatActivity() {
     homeScreenGrid.setGridSize(currentCols, currentRows)
     homeScreenGrid.setPageCount(currentPageCount)
 
-    // Ritarda il lavoro pesante per far apparire subito la home
-    homeScreenGrid.postDelayed({
-        lifecycleScope.launch {
-            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-            loadHomeApps()
-            dockController.refresh()
-            loadDrawerApps()
-            renderWidgets()
-        }
-    }, 10L) // 100ms di delay
+    lifecycleScope.launch {
+        AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+        loadHomeApps()
+        dockController.refresh()
+        loadDrawerApps()
+        renderWidgets()
+    }
 }
 
     override fun onDestroy() {
