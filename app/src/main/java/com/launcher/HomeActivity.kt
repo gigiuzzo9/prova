@@ -812,8 +812,7 @@ private fun isColorDark(color: Int): Boolean {
 private fun renderWidgets() {
     renderWidgetsForPage(homeScreenGrid.getCurrentPage(), widgetContainer)
 }
-
-    private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
+private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
     if (homeScreenGrid.width == 0 || homeScreenGrid.height == 0) return
 
     val allWidgets = PrefsSync.widgetSlots(this)
@@ -863,6 +862,16 @@ private fun renderWidgets() {
             android.util.Log.e("WIDGET_DEBUG", "Errore render widget ${slot.appWidgetId}", e)
         }
     }
+
+    val bounds = mutableListOf<Rect>()
+    for (slot in pageWidgets) {
+        val left = slot.col * cellW
+        val top = slot.row * cellH
+        val right = left + slot.widthCells * cellW
+        val bottom = top + slot.heightCells * cellH
+        bounds.add(Rect(left, top, right, bottom))
+    }
+    homeScreenGrid.updateWidgetBounds(bounds)
 }
 
     private fun startResize(
