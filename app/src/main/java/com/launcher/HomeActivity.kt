@@ -1693,7 +1693,7 @@ class HomeActivity : AppCompatActivity() {
             loadDrawerApps()
             renderWidgets()
         }
-    }, 100L) // 100ms di delay
+    }, 50L) // 100ms di delay
 }
 
     override fun onDestroy() {
