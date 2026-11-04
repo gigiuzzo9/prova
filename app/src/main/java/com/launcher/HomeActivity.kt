@@ -1635,6 +1635,7 @@ private fun renderWidgets() {
     }
 
     // Se il tocco è sopra un widget, passalo al widget e FERMATI QUI.
+    // Questo impedisce che il tocco arrivi alla griglia (e apra il menu sbagliato).
     if (!drawerOpen && !isResizing) {
         val loc = IntArray(2)
         widgetContainer.getLocationOnScreen(loc)
@@ -1654,9 +1655,7 @@ private fun renderWidgets() {
         }
 
         if (targetView != null) {
-            // Passa l'evento al widget
             targetView.dispatchTouchEvent(ev)
-            // Fermati qui: il tocco non deve arrivare alla griglia
             return true
         }
     }
