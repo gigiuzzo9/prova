@@ -293,47 +293,50 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect, offsetX: Float) {
-    val app = AppCache.get(slot.packageName) ?: return
-    val bitmap = getIconBitmap(slot.packageName) ?: return
+        val app = AppCache.get(slot.packageName) ?: return
+        val bitmap = getIconBitmap(slot.packageName) ?: return
 
-    val isCustom = PrefsSync.customIcons(context).containsKey(slot.packageName)
-    // Padding visivo del 10% per lato (20% totale) per le icone custom
-    val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
-    
-    // Dimensione effettiva dell'icona disegnata
-    val drawSize = iconSize - pad * 2
+        val isCustom = PrefsSync.customIcons(context).containsKey(slot.packageName)
+        val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
+        val drawSize = iconSize - pad * 2
 
-    // Coordinate per centrare l'icona nella cella
-    val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
-    val iconTop = cell.top.toFloat() + iconMargin.toFloat() + pad
+        val hideLabels = PrefsSync.hideAppLabels(context)
+        val hasLabel = app.label.isNotEmpty() && !hideLabels
 
-    val dstRect = Rect(
-        iconLeft.toInt(),
-        iconTop.toInt(),
-        (iconLeft + drawSize).toInt(),
-        (iconTop + drawSize).toInt()
-    )
+        val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
+        val iconTop = if (hasLabel) {
+            cell.top.toFloat() + iconMargin.toFloat() + pad
+        } else {
+            // Centra verticalmente se il nome è nascosto
+            cell.top.toFloat() + (cell.height() - iconSize) / 2f + pad
+        }
 
-    // Disegna il bitmap scalato al rettangolo di destinazione
-    canvas.drawBitmap(bitmap, null, dstRect, null)
+        val dstRect = Rect(
+            iconLeft.toInt(),
+            iconTop.toInt(),
+            (iconLeft + drawSize).toInt(),
+            (iconTop + drawSize).toInt()
+        )
 
-    if (app.label.isNotEmpty()) {
-        val textWidth = cell.width() - 2 * labelSideMargin
-        val layout = StaticLayout.Builder
-            .obtain(app.label, 0, app.label.length, textPaint, textWidth)
-            .setMaxLines(1)
-            .setEllipsize(TextUtils.TruncateAt.END)
-            .setAlignment(Layout.Alignment.ALIGN_CENTER)
-            .build()
+        canvas.drawBitmap(bitmap, null, dstRect, null)
 
-        // Il nome parte sotto l'icona standard (iconSize), centrato
-        val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
-        canvas.save()
-        canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
-        layout.draw(canvas)
-        canvas.restore()
+        if (hasLabel) {
+            val textWidth = cell.width() - 2 * labelSideMargin
+            val layout = StaticLayout.Builder
+                .obtain(app.label, 0, app.label.length, textPaint, textWidth)
+                .setMaxLines(1)
+                .setEllipsize(TextUtils.TruncateAt.END)
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                .build()
+
+            val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
+            canvas.save()
+            canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
+            layout.draw(canvas)
+            canvas.restore()
+        }
     }
-}
+
     private fun drawingItem(canvas: Canvas) {
         val dragged = draggingItem ?: return
         if (draggingCoords.first < 0f) return
