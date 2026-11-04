@@ -343,21 +343,22 @@ class HomeScreenGrid @JvmOverloads constructor(
         canvas.drawBitmap(bitmap, cx, cy, null)
     }
 
-    @SuppressLint("ClickableViewAccessibility")
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        // Se il tocco è sopra un widget, lascia che sia il widget a gestirlo
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // Se il tocco è sopra un widget, passalo direttamente al widget e fermati
         for (i in 0 until childCount) {
             val child = getChildAt(i)
             if (child is LauncherAppWidgetHostView && child.visibility == View.VISIBLE) {
-                val childX = child.x
-                val childY = child.y
-                if (event.x >= childX && event.x <= childX + child.width &&
-                    event.y >= childY && event.y <= childY + child.height) {
-                    return false  // non intercettare, il tocco va al widget
+                if (ev.x >= child.x && ev.x <= child.x + child.width &&
+                    ev.y >= child.y && ev.y <= child.y + child.height) {
+                    return child.dispatchTouchEvent(ev)
                 }
             }
         }
+        return super.dispatchTouchEvent(ev)
+    }
 
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 swipeAnimator?.cancel()
