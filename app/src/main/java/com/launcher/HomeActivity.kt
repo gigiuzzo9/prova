@@ -98,6 +98,10 @@ class HomeActivity : AppCompatActivity() {
     private var drawerBgApplied = false
     private var adjWidgetPage = -1
 
+    // Cache per evitare render inutili dei widget (sblocco / resume)
+    private var lastWidgetSlotsHash = 0
+    private var lastWidgetPage = -1
+
     private val REQUEST_BIND_WIDGET = 101
     private val REQUEST_CONFIGURE_WIDGET = 102
 
@@ -804,8 +808,34 @@ class HomeActivity : AppCompatActivity() {
         return luminance < 0.5
     }
 
+    /**
+     * Render pubblico "forzato": invalida la cache e ricrea i widget.
+     * Da usare quando un'azione cambia davvero gli slot (add/remove/resize/drop).
+     */
     private fun renderWidgets() {
+        lastWidgetSlotsHash = 0
+        lastWidgetPage = -1
         renderWidgetsForPage(homeScreenGrid.getCurrentPage(), widgetContainer)
+    }
+
+    /**
+     * Render "pigro": evita di ricreare i widget se nulla è cambiato.
+     * Da usare in onResume e in tutti i casi in cui non sai se serve.
+     */
+    private fun renderWidgetsIfNeeded() {
+        if (homeScreenGrid.width == 0 || homeScreenGrid.height == 0) {
+            // Layout non ancora misurato: rimanda
+            widgetContainer.post { renderWidgetsIfNeeded() }
+            return
+        }
+        val slots = PrefsSync.widgetSlots(this)
+        val page = homeScreenGrid.getCurrentPage()
+        val hash = slots.hashCode()
+
+        if (hash == lastWidgetSlotsHash && page == lastWidgetPage && widgetContainer.childCount > 0) {
+            return
+        }
+        renderWidgetsForPage(page, widgetContainer)
     }
 
     private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
@@ -868,6 +898,12 @@ class HomeActivity : AppCompatActivity() {
             bounds.add(Rect(left, top, right, bottom))
         }
         homeScreenGrid.updateWidgetBounds(bounds)
+
+        // Aggiorna la cache solo per il container principale (quello visibile)
+        if (container === widgetContainer) {
+            lastWidgetSlotsHash = allWidgets.hashCode()
+            lastWidgetPage = page
+        }
     }
 
     private fun startResize(
@@ -1619,7 +1655,6 @@ class HomeActivity : AppCompatActivity() {
                 )
             )
 
-            // Aggiorna il colore del testo in base allo sfondo del cassetto
             val luminance = (0.299 * Color.red(currentDrawerColor) + 0.587 * Color.green(currentDrawerColor) + 0.114 * Color.blue(currentDrawerColor)) / 255.0
             drawerAdapter.setDrawerTextColor(
                 if (luminance > 0.5) Color.BLACK else Color.WHITE
@@ -1671,59 +1706,36 @@ class HomeActivity : AppCompatActivity() {
     }
 
     override fun onResume() {
-    val t0 = System.nanoTime()
-    super.onResume()
-    if (drawerOpen) closeDrawer()
-    drawerBgApplied = false
+        super.onResume()
+        if (drawerOpen) closeDrawer()
+        drawerBgApplied = false
 
-    val newCols = PrefsSync.cols(this)
-    val newRows = PrefsSync.rows(this)
-    val newPageCount = PrefsSync.pageCount(this)
-    val gridChanged = newCols != currentCols ||
-            newRows != currentRows ||
-            newPageCount != currentPageCount
+        val newCols = PrefsSync.cols(this)
+        val newRows = PrefsSync.rows(this)
+        val newPageCount = PrefsSync.pageCount(this)
+        val gridChanged = newCols != currentCols ||
+                newRows != currentRows ||
+                newPageCount != currentPageCount
 
-    currentCols = newCols
-    currentRows = newRows
-    currentPageCount = newPageCount
+        currentCols = newCols
+        currentRows = newRows
+        currentPageCount = newPageCount
 
-    if (gridChanged) {
-        homeScreenGrid.setGridSize(currentCols, currentRows)
-        homeScreenGrid.setPageCount(currentPageCount)
+        if (gridChanged) {
+            homeScreenGrid.setGridSize(currentCols, currentRows)
+            homeScreenGrid.setPageCount(currentPageCount)
+        }
+
+        lifecycleScope.launch {
+            // Una sola scansione delle app, riusata per drawer e home
+            val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+            loadHomeApps()
+            dockController.refresh()
+            drawerAdapter.submitList(apps)
+            // Render pigro: non ricrea i widget se nulla è cambiato
+            renderWidgetsIfNeeded()
+        }
     }
-
-    val syncMs = (System.nanoTime() - t0) / 1_000_000
-
-    lifecycleScope.launch {
-        val t1 = System.nanoTime()
-        val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-        val loadAppsMs = (System.nanoTime() - t1) / 1_000_000
-
-        val t2 = System.nanoTime()
-        loadHomeApps()
-        val homeMs = (System.nanoTime() - t2) / 1_000_000
-
-        val t3 = System.nanoTime()
-        dockController.refresh()
-        val dockMs = (System.nanoTime() - t3) / 1_000_000
-
-        val t4 = System.nanoTime()
-        drawerAdapter.submitList(apps)
-        val drawerMs = (System.nanoTime() - t4) / 1_000_000
-
-        val t5 = System.nanoTime()
-        renderWidgets()
-        val widgetMs = (System.nanoTime() - t5) / 1_000_000
-
-        val totalMs = (System.nanoTime() - t1) / 1_000_000
-
-        Toast.makeText(
-            this@HomeActivity,
-            "sync:$syncMs  apps:$loadAppsMs  home:$homeMs  dock:$dockMs  drawer:$drawerMs  widget:$widgetMs  tot:$totalMs ms",
-            Toast.LENGTH_LONG
-        ).show()
-    }
-}
 
     override fun onDestroy() {
         super.onDestroy()
