@@ -60,7 +60,7 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var drawerRecyclerView: RecyclerView
     private lateinit var drawerAdapter: AppAdapter
     private var drawerOpen = false
-
+    private var isWidgetMenuOpening = false
     private lateinit var contextMenuView: AppContextMenuView
     private var currentApp: AppInfo? = null
     private var currentAnchor: View? = null
@@ -950,6 +950,7 @@ private fun renderWidgets() {
     }
 
     private fun showWidgetMenu(
+    isWidgetMenuOpening = true
     slot: WidgetSlot,
     info: AppWidgetProviderInfo,
     cellW: Int,
@@ -1010,20 +1011,19 @@ private fun renderWidgets() {
 
     // Mostra il popup ancorato al widget (NON focusable)
     widgetPopupWindow?.dismiss()
-    widgetPopupWindow = android.widget.PopupWindow(
-        container,
-        popupWidth,
-        android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-        false // <--- FONDAMENTALE: false, così il tocco passa al widget
-    ).apply {
-        isOutsideTouchable = true
-        isFocusable = false // <--- FONDAMENTALE: false
-        setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-        
-        // Ancoralo al widget stesso, non al centro dello schermo
-        val loc = IntArray(2)
-        hostView.getLocationOnScreen(loc)
-        showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
+widgetPopupWindow = android.widget.PopupWindow(
+    container,
+    popupWidth,
+    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+    true // focusable
+).apply {
+    isOutsideTouchable = true
+    isFocusable = true
+    setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+    setOnDismissListener {
+        isWidgetMenuOpening = false // <-- resetta il flag
+    }
+    showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
 }
 
     }
@@ -1617,7 +1617,12 @@ private fun renderWidgets() {
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-    if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
+    if (isWidgetMenuOpening || widgetPopupWindow?.isShowing == true) {
+        return true
+    }
+
+        
+        if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
 
     if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
