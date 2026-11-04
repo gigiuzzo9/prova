@@ -36,10 +36,13 @@ import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.ceil
 import kotlin.math.max
+import android.graphics.Typeface
 
 class HomeActivity : AppCompatActivity() {
 
     private lateinit var homeScreenGrid: HomeScreenGrid
+    private lateinit var widgetContainer: FrameLayout
+    private lateinit var widgetContainer2: FrameLayout
     private lateinit var pageIndicator: PageIndicatorView
     private lateinit var emptyMessage: TextView
     private lateinit var dockDrawerButton: FrameLayout
@@ -57,7 +60,7 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var drawerRecyclerView: RecyclerView
     private lateinit var drawerAdapter: AppAdapter
     private var drawerOpen = false
-    private var isWidgetMenuOpening = false
+
     private lateinit var contextMenuView: AppContextMenuView
     private var currentApp: AppInfo? = null
     private var currentAnchor: View? = null
@@ -116,13 +119,20 @@ class HomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_home)
 
-        window.statusBarColor = Color.BLACK
-        if (android.os.Build.VERSION.SDK_INT >= 29) {
-            window.isNavigationBarContrastEnforced = false
-        }
-        window.navigationBarColor = Color.TRANSPARENT
+        // Mantieni il colore della status bar nero come prima
+window.statusBarColor = Color.BLACK
 
+// Barra di navigazione trasparente senza spostare il layout
+if (android.os.Build.VERSION.SDK_INT >= 29) {
+    window.isNavigationBarContrastEnforced = false
+}
+window.navigationBarColor = Color.TRANSPARENT
+        
         homeScreenGrid = findViewById(R.id.homeScreenGrid)
+        widgetContainer = findViewById(R.id.widgetContainer)
+        widgetContainer.isClickable = false
+        widgetContainer.isFocusable = false
+        widgetContainer2 = findViewById(R.id.widgetContainer2)
         pageIndicator = findViewById(R.id.pageIndicator)
         emptyMessage = findViewById(R.id.emptyMessage)
         dockDrawerButton = findViewById(R.id.dockDrawerButton)
@@ -223,8 +233,37 @@ class HomeActivity : AppCompatActivity() {
             showHomePopup(view)
         }
 
+        homeScreenGrid.onSwipeOffsetChanged = { offset ->
+            widgetContainer.translationX = offset
+
+            val page = homeScreenGrid.getCurrentPage()
+            val adj = when {
+                offset > 0 && page > 0 -> page - 1
+                offset < 0 && page < currentPageCount - 1 -> page + 1
+                else -> -1
+            }
+            if (adj != -1) {
+                if (adjWidgetPage != adj) {
+                    adjWidgetPage = adj
+                    renderWidgetsForPage(adj, widgetContainer2)
+                }
+                val sign = if (offset > 0) -1 else 1
+                widgetContainer2.translationX = offset + sign * homeScreenGrid.width
+            } else {
+                widgetContainer2.translationX = 0f
+                widgetContainer2.removeAllViews()
+                adjWidgetPage = -1
+            }
+        }
+
         homeScreenGrid.pageChangeListener = { page ->
             pageIndicator.setCurrentPage(page)
+            val tmp = widgetContainer
+            widgetContainer = widgetContainer2
+            widgetContainer2 = tmp
+            widgetContainer.translationX = 0f
+            widgetContainer2.translationX = 0f
+            widgetContainer2.removeAllViews()
             adjWidgetPage = -1
             renderWidgets()
         }
@@ -267,7 +306,7 @@ class HomeActivity : AppCompatActivity() {
         isResizing = false
         resizeOverlay.visibility = View.GONE
         resizeFrame.visibility = View.GONE
-        homeScreenGrid.postDelayed({ renderWidgets() }, 50)
+        widgetContainer.postDelayed({ renderWidgets() }, 50)
     }
 
     override fun onStart() {
@@ -567,7 +606,7 @@ class HomeActivity : AppCompatActivity() {
         )
         PrefsSync.setWidgetSlots(this, widgets)
         Toast.makeText(this, R.string.widget_added, Toast.LENGTH_SHORT).show()
-        homeScreenGrid.post { renderWidgets() }
+        widgetContainer.post { renderWidgets() }
     }
 
     private fun startWidgetPicker() {
@@ -593,6 +632,7 @@ class HomeActivity : AppCompatActivity() {
         return 0xFF000000.toInt()
     }
 
+    // Calcola se il tema è scuro o chiaro, per le icone delle barre
     val bgColor = themeColor(android.R.attr.colorBackground)
     val isDarkBg = isColorDark(bgColor)
 
@@ -614,6 +654,7 @@ class HomeActivity : AppCompatActivity() {
         window?.setBackgroundDrawable(
             android.graphics.drawable.ColorDrawable(bgColor)
         )
+        // Barre di sistema che seguono il tema
         window?.statusBarColor = bgColor
         window?.navigationBarColor = bgColor
         if (android.os.Build.VERSION.SDK_INT >= 30) {
@@ -769,21 +810,14 @@ private fun isColorDark(color: Int): Boolean {
 }
 
 private fun renderWidgets() {
-    renderWidgetsForPage(homeScreenGrid.getCurrentPage(), homeScreenGrid)
+    renderWidgetsForPage(homeScreenGrid.getCurrentPage(), widgetContainer)
 }
 
-    private fun renderWidgetsForPage(page: Int, container: ViewGroup) {
+    private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
     if (homeScreenGrid.width == 0 || homeScreenGrid.height == 0) return
 
     val allWidgets = PrefsSync.widgetSlots(this)
-    
-    // Rimuovi solo i widget della pagina corrente
-    for (i in container.childCount - 1 downTo 0) {
-        val child = container.getChildAt(i)
-        if (child is LauncherAppWidgetHostView) {
-            container.removeViewAt(i)
-        }
-    }
+    container.removeAllViews()
 
     val cellW = homeScreenGrid.width / currentCols
     val cellH = homeScreenGrid.height / currentRows
@@ -799,7 +833,6 @@ private fun renderWidgets() {
             val widgetWidth = cellW * slot.widthCells
             val widgetHeight = cellH * slot.heightCells
 
-            // Aggiungi direttamente alla HomeScreenGrid
             val lp = FrameLayout.LayoutParams(widgetWidth, widgetHeight).apply {
                 leftMargin = slot.col * cellW
                 topMargin = slot.row * cellH
@@ -824,7 +857,7 @@ private fun renderWidgets() {
                 showWidgetMenu(slot, info, cellW, cellH, hostView, page)
             }
             hostView.onIgnoreIntercepted = {
-                // Non chiudere il popup qui.
+                // Non chiudere il popup qui. Si chiude con isOutsideTouchable = true.
             }
         } catch (e: Exception) {
             android.util.Log.e("WIDGET_DEBUG", "Errore render widget ${slot.appWidgetId}", e)
@@ -845,7 +878,7 @@ private fun renderWidgets() {
         isResizing = true
 
         val containerLoc = IntArray(2)
-        homeScreenGrid.getLocationOnScreen(containerLoc)
+        widgetContainer.getLocationOnScreen(containerLoc)
         val overlayLoc = IntArray(2)
         resizeOverlay.getLocationOnScreen(overlayLoc)
 
@@ -924,11 +957,10 @@ private fun renderWidgets() {
     hostView: LauncherAppWidgetHostView,
     pageIndex: Int
 ) {
-    isWidgetMenuOpening = true
-
     val ctx = this
     val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
     
+    // Creiamo il container del menu
     val container = android.widget.LinearLayout(ctx).apply {
         orientation = android.widget.LinearLayout.VERTICAL
         setPadding(0, 21, 0, 21)
@@ -976,22 +1008,25 @@ private fun renderWidgets() {
         renderWidgets()
     }
 
+    // Mostra il popup ancorato al widget (NON focusable)
     widgetPopupWindow?.dismiss()
     widgetPopupWindow = android.widget.PopupWindow(
         container,
         popupWidth,
         android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-        true
+        false // <--- FONDAMENTALE: false, così il tocco passa al widget
     ).apply {
         isOutsideTouchable = true
-        isFocusable = true
+        isFocusable = false // <--- FONDAMENTALE: false
         setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-        setOnDismissListener {
-            isWidgetMenuOpening = false
-        }
-        showAtLocation(homeScreenGrid, Gravity.CENTER, 0, 0)
-    }
+        
+        // Ancoralo al widget stesso, non al centro dello schermo
+        val loc = IntArray(2)
+        hostView.getLocationOnScreen(loc)
+        showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
 }
+
+    }
     
     private fun setupDragController() {
         dragController = DragController(
@@ -1059,8 +1094,8 @@ private fun renderWidgets() {
             val widgetHeightPx = cellH * heightCells
             dragOverlayView.layoutParams = FrameLayout.LayoutParams(widgetWidthPx, widgetHeightPx)
 
-            val hostView = (0 until homeScreenGrid.childCount)
-                .map { homeScreenGrid.getChildAt(it) }
+            val hostView = (0 until widgetContainer.childCount)
+                .map { widgetContainer.getChildAt(it) }
                 .firstOrNull { it.tag == widgetId } as? LauncherAppWidgetHostView
 
             if (hostView != null && hostView.width > 0 && hostView.height > 0) {
@@ -1173,6 +1208,7 @@ private fun renderWidgets() {
     drawerRecyclerView.itemAnimator = null
     drawerRecyclerView.isNestedScrollingEnabled = false
 
+    // Padding in cima (sposta tutta la griglia, non solo la prima cella)
     val topPadding = (20 * resources.displayMetrics.density).toInt()
     drawerRecyclerView.setPadding(0, topPadding, 0, 0)
     drawerRecyclerView.clipToPadding = false
@@ -1350,6 +1386,8 @@ private fun renderWidgets() {
         homeScreenGrid.visibility = View.VISIBLE
         pageIndicator.visibility = View.VISIBLE
         dockLayout.visibility = View.VISIBLE
+        widgetContainer.visibility = View.VISIBLE
+        widgetContainer2.visibility = View.VISIBLE
     }
 
     fun onDragFromDrawerEnded() {
@@ -1537,6 +1575,8 @@ private fun renderWidgets() {
         if (drawerOpen) return
         drawerOpen = true
         homeScreenGrid.visibility = View.INVISIBLE
+        widgetContainer.visibility = View.INVISIBLE
+        widgetContainer2.visibility = View.INVISIBLE
         pageIndicator.visibility = View.INVISIBLE
         dockLayout.visibility = View.INVISIBLE
         emptyMessage.visibility = View.INVISIBLE
@@ -1553,6 +1593,8 @@ private fun renderWidgets() {
         drawerOpen = false
         drawerOverlay.visibility = View.GONE
         homeScreenGrid.visibility = View.VISIBLE
+        widgetContainer.visibility = View.VISIBLE
+        widgetContainer2.visibility = View.VISIBLE
         pageIndicator.visibility = View.VISIBLE
         dockLayout.visibility = View.VISIBLE
     }
@@ -1575,25 +1617,39 @@ private fun renderWidgets() {
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (isWidgetMenuOpening || widgetPopupWindow?.isShowing == true) {
-            return true
-        }
+    if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
 
-        if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
-
-        if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
-            if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
-                if (!contextMenuView.isPointInside(ev.rawX, ev.rawY)) {
-                    contextMenuView.dismiss()
-                    currentApp = null
-                    currentAnchor = null
-                }
+    if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            if (!contextMenuView.isPointInside(ev.rawX, ev.rawY)) {
+                contextMenuView.dismiss()
+                currentApp = null
+                currentAnchor = null
             }
         }
+    }
 
+    // Se il popup del widget è aperto, lascia che sia il popup a gestire i tocchi
+    if (widgetPopupWindow?.isShowing == true) {
         return super.dispatchTouchEvent(ev)
     }
 
+    // Quando il dito si alza o il tocco viene annullato,
+    // annulla il long-press su TUTTI i widget visibili
+    if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) {
+        for (i in 0 until widgetContainer.childCount) {
+            val child = widgetContainer.getChildAt(i)
+            if (child is LauncherAppWidgetHostView) {
+                child.resetTouches()
+                child.hasLongPressed = false
+            }
+        }
+    }
+
+    return super.dispatchTouchEvent(ev)
+}
+
+    
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (isResizing) { endResizeMode(); return }
