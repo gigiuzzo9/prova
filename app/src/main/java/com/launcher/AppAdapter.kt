@@ -1,5 +1,6 @@
 package com.simplylauncher
 
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -17,6 +18,7 @@ class AppAdapter(
 ) : ListAdapter<AppInfo, AppAdapter.AppViewHolder>(DiffCallback()) {
 
     private var draggingPackage: String? = null
+    private var drawerTextColor: Int = Color.WHITE
 
     init {
         setHasStableIds(true)
@@ -28,6 +30,12 @@ class AppAdapter(
     fun setDraggingPackage(pkg: String?) {
         if (draggingPackage == pkg) return
         draggingPackage = pkg
+        notifyDataSetChanged()
+    }
+
+    fun setDrawerTextColor(color: Int) {
+        if (drawerTextColor == color) return
+        drawerTextColor = color
         notifyDataSetChanged()
     }
 
@@ -47,7 +55,6 @@ class AppAdapter(
         private val iconSizePx = (57 * itemView.context.resources.displayMetrics.density).toInt()
 
         fun bind(app: AppInfo) {
-            // Carica il bitmap alla risoluzione originale (o più alta) e lascia che Glide lo ridimensioni
             val highResBitmap = AppCache.getIconBitmap(app.packageName, iconSizePx * 3)
             
             if (highResBitmap != null) {
@@ -69,6 +76,7 @@ class AppAdapter(
             }
 
             label.text = app.label
+            label.setTextColor(drawerTextColor)
 
             itemView.alpha = if (app.packageName == draggingPackage) 0f else 1f
 
