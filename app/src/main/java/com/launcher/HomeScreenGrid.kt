@@ -293,49 +293,50 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect, offsetX: Float) {
-        val app = AppCache.get(slot.packageName) ?: return
-        val bitmap = getIconBitmap(slot.packageName) ?: return
+    val app = AppCache.get(slot.packageName) ?: return
+    val bitmap = getIconBitmap(slot.packageName) ?: return
 
-        val isCustom = PrefsSync.customIcons(context).containsKey(slot.packageName)
-        val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
-        val drawSize = iconSize - pad * 2
+    val isCustom = PrefsSync.customIcons(context).containsKey(slot.packageName)
+    val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
+    val drawSize = iconSize - pad * 2
 
-        val hideLabels = PrefsSync.hideAppLabels(context)
-        val hasLabel = app.label.isNotEmpty() && !hideLabels
+    val hideLabels = PrefsSync.hideAppLabels(context)
+    val hasLabel = app.label.isNotEmpty() && !hideLabels
 
-        val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
-        val iconTop = if (hasLabel) {
-            cell.top.toFloat() + iconMargin.toFloat() + pad
-        } else {
-            // Centra verticalmente se il nome è nascosto
-            cell.top.toFloat() + (cell.height() - iconSize) / 2f + pad
-        }
-
-        val dstRect = Rect(
-            iconLeft.toInt(),
-            iconTop.toInt(),
-            (iconLeft + drawSize).toInt(),
-            (iconTop + drawSize).toInt()
-        )
-
-        canvas.drawBitmap(bitmap, null, dstRect, null)
-
-        if (hasLabel) {
-            val textWidth = cell.width() - 2 * labelSideMargin
-            val layout = StaticLayout.Builder
-                .obtain(app.label, 0, app.label.length, textPaint, textWidth)
-                .setMaxLines(1)
-                .setEllipsize(TextUtils.TruncateAt.END)
-                .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                .build()
-
-            val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
-            canvas.save()
-            canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
-            layout.draw(canvas)
-            canvas.restore()
-        }
+    val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
+    val iconTop = if (hasLabel) {
+        cell.top.toFloat() + iconMargin.toFloat() + pad
+    } else {
+        cell.top.toFloat() + (cell.height() - iconSize) / 2f + pad
     }
+
+    val dstRect = Rect(
+        iconLeft.toInt(),
+        iconTop.toInt(),
+        (iconLeft + drawSize).toInt(),
+        (iconTop + drawSize).toInt()
+    )
+
+    // Paint con filtro per ammorbidire i bordi (come FIT_CENTER su ImageView)
+    val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    canvas.drawBitmap(bitmap, null, dstRect, iconPaint)
+
+    if (hasLabel) {
+        val textWidth = cell.width() - 2 * labelSideMargin
+        val layout = StaticLayout.Builder
+            .obtain(app.label, 0, app.label.length, textPaint, textWidth)
+            .setMaxLines(1)
+            .setEllipsize(TextUtils.TruncateAt.END)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .build()
+
+        val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
+        canvas.save()
+        canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
+        layout.draw(canvas)
+        canvas.restore()
+    }
+}
 
     private fun drawingItem(canvas: Canvas) {
         val dragged = draggingItem ?: return
