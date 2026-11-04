@@ -1671,19 +1671,21 @@ class HomeActivity : AppCompatActivity() {
     }
 
     override fun onResume() {
-        super.onResume()
-        if (drawerOpen) closeDrawer()
-        drawerBgApplied = false
+    super.onResume()
+    if (drawerOpen) closeDrawer()
+    drawerBgApplied = false
 
-        AppRepository.invalidateCache()
+    AppRepository.invalidateCache()
 
-        currentCols = PrefsSync.cols(this)
-        currentRows = PrefsSync.rows(this)
-        currentPageCount = PrefsSync.pageCount(this)
+    currentCols = PrefsSync.cols(this)
+    currentRows = PrefsSync.rows(this)
+    currentPageCount = PrefsSync.pageCount(this)
 
-        homeScreenGrid.setGridSize(currentCols, currentRows)
-        homeScreenGrid.setPageCount(currentPageCount)
+    homeScreenGrid.setGridSize(currentCols, currentRows)
+    homeScreenGrid.setPageCount(currentPageCount)
 
+    // Ritarda il lavoro pesante per far apparire subito la home
+    homeScreenGrid.postDelayed({
         lifecycleScope.launch {
             AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
             loadHomeApps()
@@ -1691,7 +1693,8 @@ class HomeActivity : AppCompatActivity() {
             loadDrawerApps()
             renderWidgets()
         }
-    }
+    }, 100L) // 100ms di delay
+}
 
     override fun onDestroy() {
         super.onDestroy()
