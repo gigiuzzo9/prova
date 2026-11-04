@@ -1,10 +1,12 @@
 package com.simplylauncher
 
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -22,6 +24,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var columnsChipGroup: ChipGroup
     private lateinit var rowsChipGroup: ChipGroup
     private lateinit var colorPalette: LinearLayout
+    private lateinit var hideAppLabelsCheckBox: CheckBox
 
     private val paletteColors = listOf(
         Color.WHITE,
@@ -42,6 +45,7 @@ class SettingsActivity : AppCompatActivity() {
         columnsChipGroup = findViewById(R.id.columnsChipGroup)
         rowsChipGroup = findViewById(R.id.rowsChipGroup)
         colorPalette = findViewById(R.id.colorPalette)
+        hideAppLabelsCheckBox = findViewById(R.id.hideAppLabelsCheckBox)
 
         loadCurrentSettings()
         setupListeners()
@@ -70,6 +74,8 @@ class SettingsActivity : AppCompatActivity() {
                 6 -> rowsChipGroup.check(R.id.chipRow6)
                 7 -> rowsChipGroup.check(R.id.chipRow7)
             }
+
+            hideAppLabelsCheckBox.isChecked = PrefsSync.hideAppLabels(this@SettingsActivity)
         }
     }
 
@@ -162,6 +168,11 @@ class SettingsActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 Prefs.setRows(this@SettingsActivity, rows)
             }
+        }
+
+        hideAppLabelsCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            PrefsSync.setHideAppLabels(this, isChecked)
+            sendBroadcast(Intent("com.simplylauncher.RELOAD"))
         }
     }
 }
