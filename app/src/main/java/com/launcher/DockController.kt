@@ -5,8 +5,6 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.lifecycle.lifecycleScope
-import com.bumptech.glide.Glide
-import com.bumptech.glide.load.engine.DiskCacheStrategy
 import kotlinx.coroutines.launch
 
 class DockController(
@@ -42,15 +40,11 @@ class DockController(
                 val app = if (pkg.isNullOrBlank()) null else byPkg[pkg]
 
                 if (app != null) {
+                    // MODIFICA: carica il bitmap ad alta risoluzione (size * 3)
+                    val bitmap = AppCache.getIconBitmap(app.packageName, size * 3)
                     val imageView = ImageView(activity)
-
-                    val highResBitmap = AppCache.getIconBitmap(app.packageName, size * 3)
-                    if (highResBitmap != null) {
-                        Glide.with(activity)
-                            .load(highResBitmap)
-                            .override(size, size)
-                            .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
-                            .into(imageView)
+                    if (bitmap != null) {
+                        imageView.setImageBitmap(bitmap)
                     }
 
                     if (customIcons.containsKey(app.packageName)) {
