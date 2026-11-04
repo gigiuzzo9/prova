@@ -46,9 +46,9 @@ class LauncherAppWidgetHostView(context: Context) : AppWidgetHostView(context) {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 longPressHandler.postDelayed(
-    longPressRunnable,
-    400L 
-)
+                    longPressRunnable,
+                    ViewConfiguration.getLongPressTimeout().toLong()
+                )
                 actionDownCoords.x = event.rawX
                 actionDownCoords.y = event.rawY
                 currentCoords.x = event.rawX
