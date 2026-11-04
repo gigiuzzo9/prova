@@ -1,4 +1,4 @@
-package com.simplylauncher 
+package com.simplylauncher
 
 import android.app.AlertDialog
 import android.app.WallpaperManager
@@ -119,15 +119,12 @@ class HomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_home)
 
-        // Mantieni il colore della status bar nero come prima
-window.statusBarColor = Color.BLACK
+        window.statusBarColor = Color.BLACK
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            window.isNavigationBarContrastEnforced = false
+        }
+        window.navigationBarColor = Color.TRANSPARENT
 
-// Barra di navigazione trasparente senza spostare il layout
-if (android.os.Build.VERSION.SDK_INT >= 29) {
-    window.isNavigationBarContrastEnforced = false
-}
-window.navigationBarColor = Color.TRANSPARENT
-        
         homeScreenGrid = findViewById(R.id.homeScreenGrid)
         widgetContainer = findViewById(R.id.widgetContainer)
         widgetContainer.isClickable = false
@@ -620,259 +617,258 @@ window.navigationBarColor = Color.TRANSPARENT
     }
 
     private fun showWidgetPickerDialog(widgetId: Int) {
-    val ctx = this
-    val density = resources.displayMetrics.density
-    fun dp(v: Int) = (v * density).toInt()
+        val ctx = this
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
 
-    fun themeColor(attr: Int): Int {
-        val tv = android.util.TypedValue()
-        if (theme.resolveAttribute(attr, tv, true)) {
-            return if (tv.resourceId != 0) androidx.core.content.ContextCompat.getColor(ctx, tv.resourceId) else tv.data
+        fun themeColor(attr: Int): Int {
+            val tv = android.util.TypedValue()
+            if (theme.resolveAttribute(attr, tv, true)) {
+                return if (tv.resourceId != 0) androidx.core.content.ContextCompat.getColor(ctx, tv.resourceId) else tv.data
+            }
+            return 0xFF000000.toInt()
         }
-        return 0xFF000000.toInt()
-    }
 
-    // Calcola se il tema è scuro o chiaro, per le icone delle barre
-    val bgColor = themeColor(android.R.attr.colorBackground)
-    val isDarkBg = isColorDark(bgColor)
+        val bgColor = themeColor(android.R.attr.colorBackground)
+        val isDarkBg = isColorDark(bgColor)
 
-    val scrollView = android.widget.ScrollView(ctx).apply {
-        setBackgroundColor(bgColor)
-    }
-    val list = android.widget.LinearLayout(ctx).apply {
-        orientation = android.widget.LinearLayout.VERTICAL
-        setPadding(dp(8), dp(8), dp(8), dp(8))
-    }
-    scrollView.addView(list)
+        val scrollView = android.widget.ScrollView(ctx).apply {
+            setBackgroundColor(bgColor)
+        }
+        val list = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+        }
+        scrollView.addView(list)
 
-    val dialog = android.app.Dialog(ctx, android.R.style.Theme_DeviceDefault_Light_NoActionBar).apply {
-        setContentView(scrollView)
-        window?.setLayout(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
-        window?.setBackgroundDrawable(
-            android.graphics.drawable.ColorDrawable(bgColor)
-        )
-        // Barre di sistema che seguono il tema
-        window?.statusBarColor = bgColor
-        window?.navigationBarColor = bgColor
-        if (android.os.Build.VERSION.SDK_INT >= 30) {
-            window?.insetsController?.setSystemBarsAppearance(
-                if (isDarkBg) 0 else android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
-                android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+        val dialog = android.app.Dialog(ctx, android.R.style.Theme_DeviceDefault_Light_NoActionBar).apply {
+            setContentView(scrollView)
+            window?.setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
-        } else {
-            @Suppress("DEPRECATION")
-            window?.decorView?.systemUiVisibility =
-                if (isDarkBg) 0
-                else android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-        }
-    }
-
-    val providers = try {
-    appWidgetManager.installedProviders.sortedWith(
-        compareBy(
-            { info ->
-                try {
-                    val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
-                    packageManager.getApplicationLabel(ai).toString().lowercase()
-                } catch (e: Exception) { "" }
-            },
-            { info ->
-                try { info.loadLabel(packageManager).toString().lowercase() } catch (e: Exception) { "" }
-            }
-        )
-    )
-} catch (e: Exception) { emptyList() }
-    if (providers.isEmpty()) {
-        list.addView(TextView(ctx).apply {
-            text = "Nessun widget disponibile"
-            setTextColor(themeColor(android.R.attr.textColorSecondary))
-            setPadding(dp(24), dp(24), dp(24), dp(24))
-        })
-    } else {
-        providers.forEach { info ->
-            val row = android.widget.LinearLayout(ctx).apply {
-                orientation = android.widget.LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(12), dp(16), dp(12), dp(16))
-                isClickable = true
-                val outValue = android.util.TypedValue()
-                context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
-                setBackgroundResource(outValue.resourceId)
-            }
-
-            val previewContainer = android.widget.FrameLayout(ctx).apply {
-                layoutParams = android.widget.LinearLayout.LayoutParams(dp(160), dp(160)).apply {
-                    marginEnd = dp(16)
-                }
-            }
-
-            val preview: android.graphics.drawable.Drawable? = (
-                try {
-                    info.loadPreviewImage(ctx, resources.displayMetrics.densityDpi)
-                } catch (e: Exception) { null }
-            ) ?: (if (info.previewImage != 0) {
-                try { androidx.core.content.ContextCompat.getDrawable(ctx, info.previewImage) } catch (e: Exception) { null }
-            } else null) ?: (try {
-                val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
-                packageManager.getApplicationIcon(ai)
-            } catch (e: Exception) { null })
-
-            if (preview != null) {
-                val iv = ImageView(ctx).apply {
-                    scaleType = ImageView.ScaleType.FIT_CENTER
-                    setImageDrawable(preview)
-                }
-                val intrinsicW = preview.intrinsicWidth
-                val intrinsicH = preview.intrinsicHeight
-                val wR = if (intrinsicW > 1 && intrinsicH > 1) intrinsicW else info.minWidth
-                val hR = if (intrinsicW > 1 && intrinsicH > 1) intrinsicH else info.minHeight
-
-                if (wR > 0 && hR > 0) {
-                    val ratio = wR.toFloat() / hR.toFloat()
-                    val sizePx = dp(160)
-                    val lp = if (ratio >= 1f) {
-                        android.widget.FrameLayout.LayoutParams(sizePx, (sizePx / ratio).toInt().coerceAtLeast(1)).apply { gravity = Gravity.CENTER }
-                    } else {
-                        android.widget.FrameLayout.LayoutParams((sizePx * ratio).toInt().coerceAtLeast(1), sizePx).apply { gravity = Gravity.CENTER }
-                    }
-                    previewContainer.addView(iv, lp)
-                } else {
-                    previewContainer.addView(iv, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                }
+            window?.setBackgroundDrawable(
+                android.graphics.drawable.ColorDrawable(bgColor)
+            )
+            window?.statusBarColor = bgColor
+            window?.navigationBarColor = bgColor
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                window?.insetsController?.setSystemBarsAppearance(
+                    if (isDarkBg) 0 else android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                    android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                )
             } else {
-                previewContainer.addView(ImageView(ctx).apply {
-                    setImageResource(android.R.drawable.sym_def_app_icon)
-                    scaleType = ImageView.ScaleType.FIT_CENTER
-                }, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                @Suppress("DEPRECATION")
+                window?.decorView?.systemUiVisibility =
+                    if (isDarkBg) 0
+                    else android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
             }
-            row.addView(previewContainer)
+        }
 
-           val texts = android.widget.LinearLayout(ctx).apply {
-    orientation = android.widget.LinearLayout.VERTICAL
-    layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-}
-
-val appName = try {
-    val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
-    packageManager.getApplicationLabel(ai).toString()
-} catch (e: Exception) { "" }
-if (appName.isNotEmpty()) {
-    texts.addView(TextView(ctx).apply {
-        text = appName
-        textSize = 17f
-        setTextColor(themeColor(android.R.attr.textColorPrimary))
-    })
-}
-
-texts.addView(TextView(ctx).apply {
-    text = try { info.loadLabel(packageManager) } catch (e: Exception) { "Widget" }
-    textSize = 13f
-    setTextColor(themeColor(android.R.attr.textColorSecondary))
-    setPadding(0, dp(2), 0, 0)
-})
-row.addView(texts)
-
-            row.setOnClickListener {
-                val bound = try {
-                    appWidgetManager.bindAppWidgetIdIfAllowed(widgetId, info.provider)
-                } catch (e: Exception) { false }
-
-                if (bound) {
-                    pendingWidgetId = widgetId
-                    dialog.dismiss()
-                    findFreeCellAndPlaceWidget()
-                } else {
-                    val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
-                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
+        val providers = try {
+            appWidgetManager.installedProviders.sortedWith(
+                compareBy(
+                    { info ->
+                        try {
+                            val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
+                            packageManager.getApplicationLabel(ai).toString().lowercase()
+                        } catch (e: Exception) { "" }
+                    },
+                    { info ->
+                        try { info.loadLabel(packageManager).toString().lowercase() } catch (e: Exception) { "" }
                     }
-                    startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
-                    dialog.dismiss()
+                )
+            )
+        } catch (e: Exception) { emptyList() }
+        if (providers.isEmpty()) {
+            list.addView(TextView(ctx).apply {
+                text = "Nessun widget disponibile"
+                setTextColor(themeColor(android.R.attr.textColorSecondary))
+                setPadding(dp(24), dp(24), dp(24), dp(24))
+            })
+        } else {
+            providers.forEach { info ->
+                val row = android.widget.LinearLayout(ctx).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(12), dp(16), dp(12), dp(16))
+                    isClickable = true
+                    val outValue = android.util.TypedValue()
+                    context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+                    setBackgroundResource(outValue.resourceId)
                 }
-            }
 
-            list.addView(row)
-        }
-    }
-
-    dialog.show()
-}
-
-private fun isColorDark(color: Int): Boolean {
-    val r = android.graphics.Color.red(color)
-    val g = android.graphics.Color.green(color)
-    val b = android.graphics.Color.blue(color)
-    val luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
-    return luminance < 0.5
-}
-
-private fun renderWidgets() {
-    renderWidgetsForPage(homeScreenGrid.getCurrentPage(), widgetContainer)
-}
-private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
-    if (homeScreenGrid.width == 0 || homeScreenGrid.height == 0) return
-
-    val allWidgets = PrefsSync.widgetSlots(this)
-    container.removeAllViews()
-
-    val cellW = homeScreenGrid.width / currentCols
-    val cellH = homeScreenGrid.height / currentRows
-
-    val pageWidgets = allWidgets.filter { it.page == page }
-    for (slot in pageWidgets) {
-        try {
-            val info = appWidgetManager.getAppWidgetInfo(slot.appWidgetId) ?: continue
-            val hostView = appWidgetHost.createView(baseContext, slot.appWidgetId, info) as LauncherAppWidgetHostView
-            hostView.setAppWidget(slot.appWidgetId, info)
-            hostView.tag = slot.appWidgetId
-
-            val widgetWidth = cellW * slot.widthCells
-            val widgetHeight = cellH * slot.heightCells
-
-            val lp = FrameLayout.LayoutParams(widgetWidth, widgetHeight).apply {
-                leftMargin = slot.col * cellW
-                topMargin = slot.row * cellH
-            }
-            container.addView(hostView, lp)
-
-            hostView.post {
-                try {
-                    val density = resources.displayMetrics.density
-                    val wDp = (widgetWidth / density).toInt()
-                    val hDp = (widgetHeight / density).toInt()
-                    if (android.os.Build.VERSION.SDK_INT >= 31) {
-                        hostView.updateAppWidgetSize(Bundle(), listOf(SizeF(wDp.toFloat(), hDp.toFloat())))
-                    } else {
-                        hostView.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
+                val previewContainer = android.widget.FrameLayout(ctx).apply {
+                    layoutParams = android.widget.LinearLayout.LayoutParams(dp(160), dp(160)).apply {
+                        marginEnd = dp(16)
                     }
-                } catch (_: Exception) {}
-            }
+                }
 
-            hostView.onLongPress = {
-                dragController.onWidgetLongPress(slot, info, hostView)
-                showWidgetMenu(slot, info, cellW, cellH, hostView, page)
+                val preview: android.graphics.drawable.Drawable? = (
+                    try {
+                        info.loadPreviewImage(ctx, resources.displayMetrics.densityDpi)
+                    } catch (e: Exception) { null }
+                ) ?: (if (info.previewImage != 0) {
+                    try { androidx.core.content.ContextCompat.getDrawable(ctx, info.previewImage) } catch (e: Exception) { null }
+                } else null) ?: (try {
+                    val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
+                    packageManager.getApplicationIcon(ai)
+                } catch (e: Exception) { null })
+
+                if (preview != null) {
+                    val iv = ImageView(ctx).apply {
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                        setImageDrawable(preview)
+                    }
+                    val intrinsicW = preview.intrinsicWidth
+                    val intrinsicH = preview.intrinsicHeight
+                    val wR = if (intrinsicW > 1 && intrinsicH > 1) intrinsicW else info.minWidth
+                    val hR = if (intrinsicW > 1 && intrinsicH > 1) intrinsicH else info.minHeight
+
+                    if (wR > 0 && hR > 0) {
+                        val ratio = wR.toFloat() / hR.toFloat()
+                        val sizePx = dp(160)
+                        val lp = if (ratio >= 1f) {
+                            android.widget.FrameLayout.LayoutParams(sizePx, (sizePx / ratio).toInt().coerceAtLeast(1)).apply { gravity = Gravity.CENTER }
+                        } else {
+                            android.widget.FrameLayout.LayoutParams((sizePx * ratio).toInt().coerceAtLeast(1), sizePx).apply { gravity = Gravity.CENTER }
+                        }
+                        previewContainer.addView(iv, lp)
+                    } else {
+                        previewContainer.addView(iv, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                    }
+                } else {
+                    previewContainer.addView(ImageView(ctx).apply {
+                        setImageResource(android.R.drawable.sym_def_app_icon)
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                    }, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                }
+                row.addView(previewContainer)
+
+                val texts = android.widget.LinearLayout(ctx).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                    layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                }
+
+                val appName = try {
+                    val ai = packageManager.getApplicationInfo(info.provider.packageName, 0)
+                    packageManager.getApplicationLabel(ai).toString()
+                } catch (e: Exception) { "" }
+                if (appName.isNotEmpty()) {
+                    texts.addView(TextView(ctx).apply {
+                        text = appName
+                        textSize = 17f
+                        setTextColor(themeColor(android.R.attr.textColorPrimary))
+                    })
+                }
+
+                texts.addView(TextView(ctx).apply {
+                    text = try { info.loadLabel(packageManager) } catch (e: Exception) { "Widget" }
+                    textSize = 13f
+                    setTextColor(themeColor(android.R.attr.textColorSecondary))
+                    setPadding(0, dp(2), 0, 0)
+                })
+                row.addView(texts)
+
+                row.setOnClickListener {
+                    val bound = try {
+                        appWidgetManager.bindAppWidgetIdIfAllowed(widgetId, info.provider)
+                    } catch (e: Exception) { false }
+
+                    if (bound) {
+                        pendingWidgetId = widgetId
+                        dialog.dismiss()
+                        findFreeCellAndPlaceWidget()
+                    } else {
+                        val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
+                        }
+                        startActivityForResult(bindIntent, REQUEST_BIND_WIDGET)
+                        dialog.dismiss()
+                    }
+                }
+
+                list.addView(row)
             }
-            hostView.onIgnoreIntercepted = {
-                // Non chiudere il popup qui. Si chiude con isOutsideTouchable = true.
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("WIDGET_DEBUG", "Errore render widget ${slot.appWidgetId}", e)
         }
+
+        dialog.show()
     }
 
-    val bounds = mutableListOf<Rect>()
-    for (slot in pageWidgets) {
-        val left = slot.col * cellW
-        val top = slot.row * cellH
-        val right = left + slot.widthCells * cellW
-        val bottom = top + slot.heightCells * cellH
-        bounds.add(Rect(left, top, right, bottom))
+    private fun isColorDark(color: Int): Boolean {
+        val r = android.graphics.Color.red(color)
+        val g = android.graphics.Color.green(color)
+        val b = android.graphics.Color.blue(color)
+        val luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+        return luminance < 0.5
     }
-    homeScreenGrid.updateWidgetBounds(bounds)
-}
+
+    private fun renderWidgets() {
+        renderWidgetsForPage(homeScreenGrid.getCurrentPage(), widgetContainer)
+    }
+
+    private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
+        if (homeScreenGrid.width == 0 || homeScreenGrid.height == 0) return
+
+        val allWidgets = PrefsSync.widgetSlots(this)
+        container.removeAllViews()
+
+        val cellW = homeScreenGrid.width / currentCols
+        val cellH = homeScreenGrid.height / currentRows
+
+        val pageWidgets = allWidgets.filter { it.page == page }
+        for (slot in pageWidgets) {
+            try {
+                val info = appWidgetManager.getAppWidgetInfo(slot.appWidgetId) ?: continue
+                val hostView = appWidgetHost.createView(baseContext, slot.appWidgetId, info) as LauncherAppWidgetHostView
+                hostView.setAppWidget(slot.appWidgetId, info)
+                hostView.tag = slot.appWidgetId
+
+                val widgetWidth = cellW * slot.widthCells
+                val widgetHeight = cellH * slot.heightCells
+
+                val lp = FrameLayout.LayoutParams(widgetWidth, widgetHeight).apply {
+                    leftMargin = slot.col * cellW
+                    topMargin = slot.row * cellH
+                }
+                container.addView(hostView, lp)
+
+                hostView.post {
+                    try {
+                        val density = resources.displayMetrics.density
+                        val wDp = (widgetWidth / density).toInt()
+                        val hDp = (widgetHeight / density).toInt()
+                        if (android.os.Build.VERSION.SDK_INT >= 31) {
+                            hostView.updateAppWidgetSize(Bundle(), listOf(SizeF(wDp.toFloat(), hDp.toFloat())))
+                        } else {
+                            hostView.updateAppWidgetSize(Bundle(), wDp, hDp, wDp, hDp)
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                hostView.onLongPress = {
+                    dragController.onWidgetLongPress(slot, info, hostView)
+                    showWidgetMenu(slot, info, cellW, cellH, hostView, page)
+                }
+                hostView.onIgnoreIntercepted = {
+                    // Non chiudere il popup qui. Si chiude con isOutsideTouchable = true.
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("WIDGET_DEBUG", "Errore render widget ${slot.appWidgetId}", e)
+            }
+        }
+
+        val bounds = mutableListOf<Rect>()
+        for (slot in pageWidgets) {
+            val left = slot.col * cellW
+            val top = slot.row * cellH
+            val right = left + slot.widthCells * cellW
+            val bottom = top + slot.heightCells * cellH
+            bounds.add(Rect(left, top, right, bottom))
+        }
+        homeScreenGrid.updateWidgetBounds(bounds)
+    }
 
     private fun startResize(
         slot: WidgetSlot,
@@ -959,84 +955,77 @@ private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
     }
 
     private fun showWidgetMenu(
-    slot: WidgetSlot,
-    info: AppWidgetProviderInfo,
-    cellW: Int,
-    cellH: Int,
-    hostView: LauncherAppWidgetHostView,
-    pageIndex: Int
-) {
-    val ctx = this
-    val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
-    
-    // Creiamo il container del menu
-    val container = android.widget.LinearLayout(ctx).apply {
-        orientation = android.widget.LinearLayout.VERTICAL
-        setPadding(0, 21, 0, 21)
-        background = android.graphics.drawable.GradientDrawable().apply {
-            cornerRadius = 21f
-            setColor(Color.WHITE)
-        }
-        elevation = 8f * resources.displayMetrics.density
-    }
+        slot: WidgetSlot,
+        info: AppWidgetProviderInfo,
+        cellW: Int,
+        cellH: Int,
+        hostView: LauncherAppWidgetHostView,
+        pageIndex: Int
+    ) {
+        val ctx = this
+        val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
 
-    var first = true
-    fun addItem(text: String, onClick: () -> Unit) {
-        if (!first) {
-            container.addView(View(ctx).apply {
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    (popupWidth * 0.9f).toInt(),
-                    (1 * resources.displayMetrics.density).toInt()
-                ).apply { gravity = Gravity.CENTER_HORIZONTAL }
-                setBackgroundColor(0x33000000)
+        val container = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(0, 21, 0, 21)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 21f
+                setColor(Color.WHITE)
+            }
+            elevation = 8f * resources.displayMetrics.density
+        }
+
+        var first = true
+        fun addItem(text: String, onClick: () -> Unit) {
+            if (!first) {
+                container.addView(View(ctx).apply {
+                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                        (popupWidth * 0.9f).toInt(),
+                        (1 * resources.displayMetrics.density).toInt()
+                    ).apply { gravity = Gravity.CENTER_HORIZONTAL }
+                    setBackgroundColor(0x33000000)
+                })
+            }
+            first = false
+
+            container.addView(TextView(ctx).apply {
+                this.text = text
+                setTextColor(Color.BLACK)
+                textSize = 21f
+                typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
+                setPadding(42, 26, 42, 26)
+                setOnClickListener {
+                    onClick()
+                    widgetPopupWindow?.dismiss()
+                }
             })
         }
-        first = false
 
-        container.addView(TextView(ctx).apply {
-            this.text = text
-            setTextColor(Color.BLACK)
-            textSize = 21f
-            typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
-            setPadding(42, 26, 42, 26)
-            setOnClickListener {
-                onClick()
-                widgetPopupWindow?.dismiss()
-            }
-        })
+        addItem("Ridimensiona") {
+            dragController.cancelPendingDrag()
+            startResize(slot, info, cellW, cellH, hostView, pageIndex)
+        }
+        addItem("Rimuovi widget") {
+            val current = PrefsSync.widgetSlots(this)
+            PrefsSync.setWidgetSlots(this, current.filter { it.appWidgetId != slot.appWidgetId })
+            appWidgetHost.deleteAppWidgetId(slot.appWidgetId)
+            renderWidgets()
+        }
+
+        widgetPopupWindow?.dismiss()
+        widgetPopupWindow = android.widget.PopupWindow(
+            container,
+            popupWidth,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            false
+        ).apply {
+            isOutsideTouchable = true
+            isFocusable = false
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
+        }
     }
 
-    addItem("Ridimensiona") {
-        dragController.cancelPendingDrag()
-        startResize(slot, info, cellW, cellH, hostView, pageIndex)
-    }
-    addItem("Rimuovi widget") {
-        val current = PrefsSync.widgetSlots(this)
-        PrefsSync.setWidgetSlots(this, current.filter { it.appWidgetId != slot.appWidgetId })
-        appWidgetHost.deleteAppWidgetId(slot.appWidgetId)
-        renderWidgets()
-    }
-
-    // Mostra il popup ancorato al widget (NON focusable)
-    widgetPopupWindow?.dismiss()
-    widgetPopupWindow = android.widget.PopupWindow(
-        container,
-        popupWidth,
-        android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-        false // <--- FONDAMENTALE: false, così il tocco passa al widget
-    ).apply {
-        isOutsideTouchable = true
-        isFocusable = false // <--- FONDAMENTALE: false
-        setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-        
-        // Ancoralo al widget stesso, non al centro dello schermo
-        val loc = IntArray(2)
-        hostView.getLocationOnScreen(loc)
-        showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
-}
-
-    }
-    
     private fun setupDragController() {
         dragController = DragController(
             activity = this,
@@ -1212,43 +1201,44 @@ private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
     }
 
     private fun setupDrawer() {
-    drawerRecyclerView.layoutManager = MyGridLayoutManager(this, 4)
-    drawerRecyclerView.setHasFixedSize(true)
-    drawerRecyclerView.itemAnimator = null
-    drawerRecyclerView.isNestedScrollingEnabled = false
+        drawerRecyclerView.layoutManager = MyGridLayoutManager(this, 4)
+        drawerRecyclerView.setHasFixedSize(true)
+        drawerRecyclerView.itemAnimator = null
+        drawerRecyclerView.isNestedScrollingEnabled = false
 
-    // Padding in cima (sposta tutta la griglia, non solo la prima cella)
-    val topPadding = (20 * resources.displayMetrics.density).toInt()
-    drawerRecyclerView.setPadding(0, topPadding, 0, 0)
-    drawerRecyclerView.clipToPadding = false
+        val topPadding = (20 * resources.displayMetrics.density).toInt()
+        drawerRecyclerView.setPadding(0, topPadding, 0, 0)
+        drawerRecyclerView.clipToPadding = false
 
-    drawerRecyclerView.addItemDecoration(object : RecyclerView.ItemDecoration() {
-        override fun getItemOffsets(
-            outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
-        ) {
-            outRect.bottom = (24 * resources.displayMetrics.density).toInt()
-        }
-    })
-    drawerAdapter = AppAdapter(
-        onClick = { app ->
-            AppRepository.launchApp(this, app.packageName)
-            closeDrawer()
-        },
-        onLongPress = { app, view ->
-            dragController.onLongPress(app, view, DragController.SOURCE_DRAWER, true)
-        }
-    )
-    drawerRecyclerView.adapter = drawerAdapter
-    drawerOverlay.setOnClickListener { closeDrawer() }
-
-    // Imposta il colore del testo in base allo sfondo del cassetto
-    lifecycleScope.launch {
-        val color = Prefs.colorFlow(this@HomeActivity).first()
-        drawerAdapter.setDrawerTextColor(
-            if (color == Color.WHITE) Color.BLACK else Color.WHITE
+        drawerRecyclerView.addItemDecoration(object : RecyclerView.ItemDecoration() {
+            override fun getItemOffsets(
+                outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State
+            ) {
+                outRect.bottom = (24 * resources.displayMetrics.density).toInt()
+            }
+        })
+        drawerAdapter = AppAdapter(
+            onClick = { app ->
+                AppRepository.launchApp(this, app.packageName)
+                closeDrawer()
+            },
+            onLongPress = { app, view ->
+                dragController.onLongPress(app, view, DragController.SOURCE_DRAWER, true)
+            }
         )
+        drawerRecyclerView.adapter = drawerAdapter
+        drawerOverlay.setOnClickListener { closeDrawer() }
+
+        // Imposta il colore del testo in base allo sfondo del cassetto
+        lifecycleScope.launch {
+            val color = Prefs.colorFlow(this@HomeActivity).first()
+            val luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0
+            drawerAdapter.setDrawerTextColor(
+                if (luminance > 0.5) Color.BLACK else Color.WHITE
+            )
+        }
     }
-}
+
     private fun setupContextMenu() {
         contextMenuView = AppContextMenuView(this)
         contextMenuView.onMove = { contextMenuView.dismiss() }
@@ -1628,44 +1618,47 @@ private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
                     Color.blue(currentDrawerColor)
                 )
             )
+
+            // Aggiorna il colore del testo in base allo sfondo del cassetto
+            val luminance = (0.299 * Color.red(currentDrawerColor) + 0.587 * Color.green(currentDrawerColor) + 0.114 * Color.blue(currentDrawerColor)) / 255.0
+            drawerAdapter.setDrawerTextColor(
+                if (luminance > 0.5) Color.BLACK else Color.WHITE
+            )
+
             drawerBgApplied = true
         }
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-    if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
+        if (::dragController.isInitialized && !isResizing && dragController.onTouch(ev)) return true
 
-    if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
-        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
-            if (!contextMenuView.isPointInside(ev.rawX, ev.rawY)) {
-                contextMenuView.dismiss()
-                currentApp = null
-                currentAnchor = null
+        if (::contextMenuView.isInitialized && contextMenuView.isShowing()) {
+            if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+                if (!contextMenuView.isPointInside(ev.rawX, ev.rawY)) {
+                    contextMenuView.dismiss()
+                    currentApp = null
+                    currentAnchor = null
+                }
             }
         }
-    }
 
-    // Se il popup del widget è aperto, lascia che sia il popup a gestire i tocchi
-    if (widgetPopupWindow?.isShowing == true) {
+        if (widgetPopupWindow?.isShowing == true) {
+            return super.dispatchTouchEvent(ev)
+        }
+
+        if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) {
+            for (i in 0 until widgetContainer.childCount) {
+                val child = widgetContainer.getChildAt(i)
+                if (child is LauncherAppWidgetHostView) {
+                    child.resetTouches()
+                    child.hasLongPressed = false
+                }
+            }
+        }
+
         return super.dispatchTouchEvent(ev)
     }
 
-    // Quando il dito si alza o il tocco viene annullato,
-    // annulla il long-press su TUTTI i widget visibili
-    if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) {
-        for (i in 0 until widgetContainer.childCount) {
-            val child = widgetContainer.getChildAt(i)
-            if (child is LauncherAppWidgetHostView) {
-                child.resetTouches()
-                child.hasLongPressed = false
-            }
-        }
-    }
-
-    return super.dispatchTouchEvent(ev)
-}
-
-    
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (isResizing) { endResizeMode(); return }
