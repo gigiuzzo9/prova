@@ -1,4 +1,4 @@
-package com.simplylauncher
+package com.simplylauncher 
 
 import android.app.AlertDialog
 import android.app.WallpaperManager
