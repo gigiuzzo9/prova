@@ -8,6 +8,8 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 
 class AppAdapter(
     private val onClick: (AppInfo) -> Unit,
@@ -45,16 +47,22 @@ class AppAdapter(
         private val iconSizePx = (57 * itemView.context.resources.displayMetrics.density).toInt()
 
         fun bind(app: AppInfo) {
-            val bitmap = AppCache.getIconBitmap(app.packageName, iconSizePx)
-            if (bitmap != null) {
-                icon.setImageBitmap(bitmap)
+            // Carica il bitmap alla risoluzione originale (o più alta) e lascia che Glide lo ridimensioni
+            val highResBitmap = AppCache.getIconBitmap(app.packageName, iconSizePx * 3)
+            
+            if (highResBitmap != null) {
+                Glide.with(itemView.context)
+                    .load(highResBitmap)
+                    .override(iconSizePx, iconSizePx)
+                    .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
+                    .into(icon)
             } else {
                 icon.setImageDrawable(null)
             }
 
             val isCustom = PrefsSync.customIcons(itemView.context).containsKey(app.packageName)
             if (isCustom) {
-                val pad = (iconSizePx * 0.05f).toInt() // 10% per lato = 20% totale
+                val pad = (iconSizePx * 0.05f).toInt()
                 icon.setPadding(pad, pad, pad, pad)
             } else {
                 icon.setPadding(0, 0, 0, 0)
