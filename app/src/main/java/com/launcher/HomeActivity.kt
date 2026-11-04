@@ -1240,8 +1240,15 @@ private fun renderWidgetsForPage(page: Int, container: FrameLayout) {
     )
     drawerRecyclerView.adapter = drawerAdapter
     drawerOverlay.setOnClickListener { closeDrawer() }
-}
 
+    // Imposta il colore del testo in base allo sfondo del cassetto
+    lifecycleScope.launch {
+        val color = Prefs.colorFlow(this@HomeActivity).first()
+        drawerAdapter.setDrawerTextColor(
+            if (color == Color.WHITE) Color.BLACK else Color.WHITE
+        )
+    }
+}
     private fun setupContextMenu() {
         contextMenuView = AppContextMenuView(this)
         contextMenuView.onMove = { contextMenuView.dismiss() }
