@@ -344,18 +344,47 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        // Se il tocco è sopra un widget, passalo direttamente al widget e fermati
-        for (i in 0 until childCount) {
-            val child = getChildAt(i)
-            if (child is LauncherAppWidgetHostView && child.visibility == View.VISIBLE) {
-                if (ev.x >= child.x && ev.x <= child.x + child.width &&
-                    ev.y >= child.y && ev.y <= child.y + child.height) {
-                    return child.dispatchTouchEvent(ev)
-                }
+    // Trova il widget sotto il dito
+    var targetWidget: LauncherAppWidgetHostView? = null
+    for (i in 0 until childCount) {
+        val child = getChildAt(i)
+        if (child is LauncherAppWidgetHostView && child.visibility == View.VISIBLE) {
+            if (ev.x >= child.x && ev.x <= child.x + child.width &&
+                ev.y >= child.y && ev.y <= child.y + child.height) {
+                targetWidget = child
+                break
             }
         }
-        return super.dispatchTouchEvent(ev)
     }
+
+    if (targetWidget != null) {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                // Avvia il timer del long-press per il widget
+                postDelayed(widgetLongPressRunnable, 500L)
+                return true // consuma il tocco
+            }
+            MotionEvent.ACTION_MOVE -> {
+                // Se il dito si muove, annulla il timer
+                removeCallbacks(widgetLongPressRunnable)
+                return true
+            }
+            MotionEvent.ACTION_UP -> {
+                // Se il dito si alza prima del timer, annulla
+                removeCallbacks(widgetLongPressRunnable)
+                // Passa il tocco al widget (per il tap)
+                return targetWidget.dispatchTouchEvent(ev)
+            }
+        }
+    }
+
+    return super.dispatchTouchEvent(ev)
+}
+
+private val widgetLongPressRunnable = Runnable {
+    // Chiama la callback per aprire il popup del widget
+    onWidgetLongPress?.invoke(touchDownX, touchDownY)
+}
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
