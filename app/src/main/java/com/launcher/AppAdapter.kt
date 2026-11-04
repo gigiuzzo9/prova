@@ -6,11 +6,14 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class AppAdapter(
     private val onClick: (AppInfo) -> Unit,
@@ -22,6 +25,10 @@ class AppAdapter(
 
     init {
         setHasStableIds(true)
+        
+        // Leggi il colore del cassetto all'inizio
+        val ctx = onClick.let { null } // placeholder, non usare
+        // Non possiamo accedere al Context qui. Lo facciamo in onBindViewHolder.
     }
 
     override fun getItemId(position: Int): Long =
