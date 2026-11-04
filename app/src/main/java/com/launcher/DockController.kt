@@ -26,7 +26,6 @@ class DockController(
                 AppCache.get(pkg)?.let { byPkg[pkg] = it }
             }
 
-            // Se la cache è vuota o manca qualcuno, ricarica
             if (byPkg.size < dockItems.count { it.isNotBlank() }) {
                 val allApps = AppRepository.loadInstalledAppsWithCustomLabels(activity)
                 AppCache.putAll(allApps)
@@ -38,14 +37,20 @@ class DockController(
             val customIcons = PrefsSync.customIcons(activity)
 
             slots.forEachIndexed { index, slot ->
-                slot.removeAllViews()
                 val pkg = dockItems.getOrNull(index)
                 val app = if (pkg.isNullOrBlank()) null else byPkg[pkg]
 
+                // Controlla se la slot ha già l'icona corretta
+                val currentTag = slot.tag as? String
+                if (currentTag == app?.packageName && slot.childCount > 0) {
+                    // L'icona è già corretta, non fare nulla
+                    return@forEachIndexed
+                }
+
+                slot.removeAllViews()
                 if (app != null) {
                     val imageView = ImageView(activity)
 
-                    // Carica il bitmap ad alta risoluzione e lascia che Glide lo ridimensioni
                     val highResBitmap = AppCache.getIconBitmap(app.packageName, size * 3)
                     if (highResBitmap != null) {
                         Glide.with(activity)
@@ -55,9 +60,8 @@ class DockController(
                             .into(imageView)
                     }
 
-                    // Padding per le icone personalizzate
                     if (customIcons.containsKey(app.packageName)) {
-                        val pad = (size * 0.035f).toInt() // 7.5% per lato = 15% totale
+                        val pad = (size * 0.035f).toInt()
                         imageView.setPadding(pad, pad, pad, pad)
                     }
 
