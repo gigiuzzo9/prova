@@ -104,4 +104,11 @@ object PrefsSync {
         val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
         prefs(context).edit().putString("custom_icons", raw).apply()
     }
+
+    // --- Home labels ---
+
+    // Se true, i nomi delle app sulla home sono nascosti (default: false, cioè visibili)
+    fun hideAppLabels(context: Context): Boolean = prefs(context).getBoolean("hide_app_labels", false)
+    fun setHideAppLabels(context: Context, value: Boolean) =
+        prefs(context).edit().putBoolean("hide_app_labels", value).apply()
 }
