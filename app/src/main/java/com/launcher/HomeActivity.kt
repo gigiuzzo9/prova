@@ -950,7 +950,6 @@ private fun renderWidgets() {
     }
 
     private fun showWidgetMenu(
-    isWidgetMenuOpening = true
     slot: WidgetSlot,
     info: AppWidgetProviderInfo,
     cellW: Int,
@@ -958,6 +957,9 @@ private fun renderWidgets() {
     hostView: LauncherAppWidgetHostView,
     pageIndex: Int
 ) {
+    // Imposta il flag all'inizio del corpo del metodo
+    isWidgetMenuOpening = true
+
     val ctx = this
     val popupWidth = (resources.displayMetrics.widthPixels * 0.6f).toInt()
     
@@ -1009,24 +1011,23 @@ private fun renderWidgets() {
         renderWidgets()
     }
 
-    // Mostra il popup ancorato al widget (NON focusable)
+    // Mostra il popup ancorato al widget
     widgetPopupWindow?.dismiss()
-widgetPopupWindow = android.widget.PopupWindow(
-    container,
-    popupWidth,
-    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-    true // focusable
-).apply {
-    isOutsideTouchable = true
-    isFocusable = true
-    setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-    setOnDismissListener {
-        isWidgetMenuOpening = false // <-- resetta il flag
+    widgetPopupWindow = android.widget.PopupWindow(
+        container,
+        popupWidth,
+        android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+        true // focusable
+    ).apply {
+        isOutsideTouchable = true
+        isFocusable = true
+        setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        setOnDismissListener {
+            isWidgetMenuOpening = false // resetta il flag alla chiusura
+        }
+        showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
     }
-    showAtLocation(widgetContainer, Gravity.CENTER, 0, 0)
 }
-
-    }
     
     private fun setupDragController() {
         dragController = DragController(
