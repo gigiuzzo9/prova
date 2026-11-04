@@ -44,7 +44,19 @@ object AppCache {
         val app = map[pkg] ?: return null
         return try {
             val cloned = app.icon.constantState?.newDrawable()?.mutate() ?: app.icon
-            val bmp = cloned.toBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+
+            // 1. Ottieni il bitmap originale alla sua risoluzione nativa (es. 512x512)
+            val originalWidth = cloned.intrinsicWidth.coerceAtLeast(1)
+            val originalHeight = cloned.intrinsicHeight.coerceAtLeast(1)
+            val originalBitmap = cloned.toBitmap(originalWidth, originalHeight, Bitmap.Config.ARGB_8888)
+
+            // 2. Ridimensiona con filtro bilineare di alta qualità
+            val bmp = if (originalWidth == sizePx && originalHeight == sizePx) {
+                originalBitmap
+            } else {
+                Bitmap.createScaledBitmap(originalBitmap, sizePx, sizePx, true)
+            }
+
             iconBitmapCache[key] = bmp
             bmp
         } catch (e: Exception) {
