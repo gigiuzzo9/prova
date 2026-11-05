@@ -106,18 +106,21 @@ class HomeActivity : AppCompatActivity() {
     private val REQUEST_CONFIGURE_WIDGET = 102
 
     private val reloadReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            AppRepository.invalidateCache()
-            lifecycleScope.launch {
-                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-                loadHomeApps()
-                dockController.refresh()
-                val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-                drawerAdapter.submitList(apps)
-                renderWidgets()
-            }
+    override fun onReceive(context: Context?, intent: Intent?) {
+        val pkg = intent?.data?.schemeSpecificPart
+        if (pkg != null && pkg == packageName) return
+
+        AppRepository.invalidateCache()
+        lifecycleScope.launch {
+            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+            loadHomeApps()
+            dockController.refresh()
+            val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+            drawerAdapter.submitList(apps)
+            renderWidgets()
         }
     }
+}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -211,11 +214,15 @@ class HomeActivity : AppCompatActivity() {
 
         askLauncherIfNeeded()
 
-        registerReceiver(
-            reloadReceiver,
-            IntentFilter("com.simplylauncher.RELOAD"),
-            RECEIVER_NOT_EXPORTED
-        )
+        val reloadFilter = IntentFilter().apply {
+    addAction("com.simplylauncher.RELOAD")
+    addAction(Intent.ACTION_PACKAGE_ADDED)
+    addAction(Intent.ACTION_PACKAGE_REMOVED)
+    addAction(Intent.ACTION_PACKAGE_REPLACED)
+    addAction(Intent.ACTION_PACKAGE_CHANGED)
+    addDataScheme("package")
+}
+registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
     }
 
     private fun setupGrid() {
