@@ -300,14 +300,16 @@ class HomeScreenGrid @JvmOverloads constructor(
     val drawSize = iconSize - pad * 2
 
     // Priorità: icona personalizzata > icona scorciatoia > icona app
-    val bitmap = if (isCustom) {
+    val bitmap: Bitmap? = if (isCustom) {
         AppCache.getIconBitmap(slot.packageName, drawSize * 3)
     } else if (slot.shortcutId.isNotEmpty()) {
         loadShortcutIcon(slot.packageName, slot.shortcutId, drawSize * 3)
             ?: AppCache.getIconBitmap(slot.packageName, drawSize * 3)
     } else {
         AppCache.getIconBitmap(slot.packageName, drawSize * 3)
-    } ?: return
+    }
+
+    if (bitmap == null) return
 
     val hideLabels = PrefsSync.hideAppLabels(context)
     val hasLabel = app.label.isNotEmpty() && !hideLabels
