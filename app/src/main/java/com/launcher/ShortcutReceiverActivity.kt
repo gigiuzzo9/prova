@@ -15,10 +15,41 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         if (request != null && request.requestType == LauncherApps.PinItemRequest.REQUEST_TYPE_SHORTCUT) {
             val shortcutInfo = request.shortcutInfo
             if (shortcutInfo != null && request.accept()) {
-                // Qui devi creare un HomeSlot o un AppInfo per la scorciatoia.
-                // Esempio: salva l'intent della scorciatoia per poterlo lanciare.
-                val shortcutIntent = launcherApps.getShortcutIntent(shortcutInfo, null, null)
-                // ... salva nel tuo database (PrefsSync) con un ID univoco ...
+                val packageName = shortcutInfo.`package`
+                val shortcutId = shortcutInfo.id
+
+                // Trova la prima cella libera (semplificato: cerca in tutte le pagine)
+                val slots = PrefsSync.homeSlots(this).toMutableList()
+                val occupied = mutableSetOf<Pair<Int, Int>>()
+                slots.forEach { occupied.add(it.row to it.col) }
+
+                var foundRow = 0
+                var foundCol = 0
+                var found = false
+                for (r in 0 until 6) {
+                    for (c in 0 until 4) {
+                        if (!occupied.contains(r to c)) {
+                            foundRow = r
+                            foundCol = c
+                            found = true
+                            break
+                        }
+                    }
+                    if (found) break
+                }
+
+                if (found) {
+                    val newSlot = HomeSlot(
+                        packageName = packageName,
+                        row = foundRow,
+                        col = foundCol,
+                        page = 0,
+                        shortcutId = shortcutId
+                    )
+                    slots.add(newSlot)
+                    PrefsSync.setHomeSlots(this, slots)
+                    sendBroadcast(Intent("com.simplylauncher.RELOAD"))
+                }
             }
         }
         finish()
