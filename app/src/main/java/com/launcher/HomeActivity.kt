@@ -1208,25 +1208,39 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
     }
 
     private fun handleDropOnDock(source: String, pkg: String, x: Float, y: Float) {
-        var closestIndex = 0
-        var closestDist = Float.MAX_VALUE
-        dockSlots.forEachIndexed { index, slot ->
-            val loc = IntArray(2)
-            slot.getLocationOnScreen(loc)
-            val cx = loc[0] + slot.width / 2f
-            val cy = loc[1] + slot.height / 2f
-            val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble()).toFloat()
-            if (dist < closestDist) { closestDist = dist; closestIndex = index }
+    // Recupera lo shortcutId dell'elemento trascinato (se è una scorciatoia)
+    val draggedSlot = PrefsSync.homeSlots(this).firstOrNull {
+        it.packageName == pkg && it.shortcutId.isNotEmpty()
+    }
+    val shortcutId = draggedSlot?.shortcutId ?: ""
+
+    var closestIndex = 0
+    var closestDist = Float.MAX_VALUE
+    dockSlots.forEachIndexed { index, slot ->
+        val loc = IntArray(2)
+        slot.getLocationOnScreen(loc)
+        val cx = loc[0] + slot.width / 2f
+        val cy = loc[1] + slot.height / 2f
+        val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble()).toFloat()
+        if (dist < closestDist) { closestDist = dist; closestIndex = index }
+    }
+
+    lifecycleScope.launch {
+        if (source == DragController.SOURCE_DOCK) {
+            dockController.swapDockSlots(pkg, closestIndex)
+        } else {
+            dockController.addToDockAtPublic(pkg, closestIndex)
         }
 
-        lifecycleScope.launch {
-            if (source == DragController.SOURCE_DOCK) {
-                dockController.swapDockSlots(pkg, closestIndex)
-            } else {
-                dockController.addToDockAtPublic(pkg, closestIndex)
-            }
-        }
+        // Salva lo shortcutId nella dock
+        val dockShortcutIds = PrefsSync.dockShortcutIds(this@HomeActivity).toMutableList()
+        while (dockShortcutIds.size < 4) dockShortcutIds.add("")
+        dockShortcutIds[closestIndex] = shortcutId
+        PrefsSync.setDockShortcutIds(this@HomeActivity, dockShortcutIds)
+
+        dockController.refresh()
     }
+}
 
     private fun handleWidgetDrop(widgetId: Int, x: Float, y: Float) {
         val pageIndex = homeScreenGrid.getCurrentPage()
@@ -1579,9 +1593,17 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
     slots.add(newSlot)
     PrefsSync.setHomeSlots(this, slots)
 
+    // Se l'elemento viene spostato dalla dock alla griglia, svuota lo shortcutId nella dock
     val dockItems = PrefsSync.dockItems(this)
     if (dockItems.contains(pkg)) {
         PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
+        val dockShortcutIds = PrefsSync.dockShortcutIds(this).toMutableList()
+        while (dockShortcutIds.size < 4) dockShortcutIds.add("")
+        val dockIndex = dockItems.indexOf(pkg)
+        if (dockIndex != -1) {
+            dockShortcutIds[dockIndex] = ""
+            PrefsSync.setDockShortcutIds(this, dockShortcutIds)
+        }
         dockController.refresh()
     }
 
