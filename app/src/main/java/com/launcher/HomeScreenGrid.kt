@@ -359,11 +359,11 @@ class HomeScreenGrid @JvmOverloads constructor(
             val shortcut = shortcuts?.firstOrNull { it.id == shortcutId } ?: return null
             val density = resources.displayMetrics.densityDpi
             val drawable = launcherApps.getShortcutIconDrawable(shortcut, density) ?: return null
-            val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
+            val bmp: Bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
             drawable.setBounds(0, 0, sizePx, sizePx)
             drawable.draw(canvas)
-            bitmap
+            bmp
         } catch (e: Exception) {
             null
         }
