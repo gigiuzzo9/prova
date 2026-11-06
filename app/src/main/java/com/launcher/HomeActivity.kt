@@ -229,12 +229,12 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
     private fun setupGrid() {
     homeScreenGrid.itemClickListener = { slot ->
         if (slot.shortcutId.isNotEmpty()) {
-            // È una scorciatoia: lanciala con LauncherApps
             try {
                 val launcherApps = getSystemService(LAUNCHER_APPS_SERVICE) as LauncherApps
                 launcherApps.startShortcut(slot.packageName, slot.shortcutId, null, null, android.os.Process.myUserHandle())
             } catch (e: Exception) {
-                android.widget.Toast.makeText(this, "Impossibile avviare la scorciatoia", android.widget.Toast.LENGTH_SHORT).show()
+                android.util.Log.e("SHORTCUT", "Errore startShortcut", e)
+                android.widget.Toast.makeText(this, "Errore: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
             }
         } else if (slot.packageName.isNotEmpty()) {
             AppRepository.launchApp(this, slot.packageName)
