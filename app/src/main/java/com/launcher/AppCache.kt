@@ -2,6 +2,8 @@ package com.simplylauncher
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.core.graphics.drawable.toBitmap
@@ -56,6 +58,30 @@ object AppCache {
         val app = map[pkg] ?: return null
         return try {
             val cloned = app.icon.constantState?.newDrawable()?.mutate() ?: app.icon
+
+            // Gestione speciale per le icone adattive (evita il bordo nero su Huawei)
+            if (cloned is AdaptiveIconDrawable) {
+                val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bmp)
+                val inset = (sizePx * 0.1f).toInt()
+                val left = inset
+                val top = inset
+                val right = sizePx - inset
+                val bottom = sizePx - inset
+
+                cloned.background?.let {
+                    it.setBounds(left, top, right, bottom)
+                    it.draw(canvas)
+                }
+                cloned.foreground?.let {
+                    it.setBounds(left, top, right, bottom)
+                    it.draw(canvas)
+                }
+                iconBitmapCache[key] = bmp
+                return bmp
+            }
+
+            // Per le icone normali
             val originalWidth = cloned.intrinsicWidth.coerceAtLeast(1)
             val originalHeight = cloned.intrinsicHeight.coerceAtLeast(1)
             val originalBitmap = cloned.toBitmap(originalWidth, originalHeight, Bitmap.Config.ARGB_8888)
@@ -73,10 +99,6 @@ object AppCache {
 
     // ---------- Persistenza su disco (per cold start veloce) ----------
 
-    /**
-     * Salva su disco i bitmap delle icone (una sola dimensione: 96dp di default,
-     * sufficiente per la home e il drawer, scalabile poi in memoria).
-     */
     fun persistIconsToDisk(context: android.content.Context, sizePx: Int) {
         val dir = File(context.filesDir, "icons_cache")
         if (!dir.exists()) dir.mkdirs()
@@ -84,14 +106,12 @@ object AppCache {
         val existing = dir.listFiles()?.mapNotNull { it.nameWithoutExtension }?.toSet() ?: emptySet()
         val currentPkgs = map.keys
 
-        // Rimuovi icone di pacchetti non più presenti
         existing.forEach { pkg ->
             if (pkg !in currentPkgs) {
                 File(dir, "$pkg.png").delete()
             }
         }
 
-        // Salva icone mancanti
         for (app in map.values) {
             val file = File(dir, "${app.packageName}.png")
             if (file.exists()) continue
@@ -104,13 +124,6 @@ object AppCache {
         }
     }
 
-    /**
-     * Carica da disco le icone dei pacchetti richiesti e popola AppCache con
-     * AppInfo "minimali" (label dal disco se disponibile, icona dal PNG).
-     * NON sovrascrive AppInfo già presenti: se un pkg è già in cache, lo lascia.
-     *
-     * Ritorna il numero di icone caricate.
-     */
     fun warmFromDisk(
         context: android.content.Context,
         labelsByPkg: Map<String, String>
@@ -134,7 +147,6 @@ object AppCache {
         return loaded
     }
 
-    /** Svuota solo i bitmap in memoria (utile al resume per liberare RAM). */
     fun clearBitmaps() {
         iconBitmapCache.clear()
     }
