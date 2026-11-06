@@ -43,7 +43,6 @@ class DockController(
                 val app = if (pkg.isNullOrBlank()) null else byPkg[pkg]
 
                 if (app != null) {
-                    // Carica il bitmap ad alta risoluzione
                     val bitmap = AppCache.getIconBitmap(app.packageName, size * 3)
                     val imageView = ImageView(activity)
                     if (bitmap != null) {
@@ -62,7 +61,6 @@ class DockController(
                     slot.tag = app.packageName
                     slot.setOnClickListener {
                         if (shortcutId.isNotEmpty()) {
-                            // È una scorciatoia: lanciala con LauncherApps
                             try {
                                 val launcherApps = activity.getSystemService(android.content.Context.LAUNCHER_APPS_SERVICE) as LauncherApps
                                 launcherApps.startShortcut(app.packageName, shortcutId, null, null, android.os.Process.myUserHandle())
@@ -70,7 +68,6 @@ class DockController(
                                 android.widget.Toast.makeText(activity, "Impossibile avviare la scorciatoia", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         } else {
-                            // App normale
                             AppRepository.launchApp(activity, app.packageName)
                         }
                     }
@@ -106,15 +103,25 @@ class DockController(
             dockItems[fromIndex] = b
             dockItems[slotIndex] = a
             PrefsSync.setDockItems(activity, dockItems)
+
+            // Scambia anche gli shortcutId
+            val dockShortcutIds = PrefsSync.dockShortcutIds(activity).toMutableList()
+            while (dockShortcutIds.size < 4) dockShortcutIds.add("")
+            val aId = dockShortcutIds[fromIndex]
+            val bId = dockShortcutIds[slotIndex]
+            dockShortcutIds[fromIndex] = bId
+            dockShortcutIds[slotIndex] = aId
+            PrefsSync.setDockShortcutIds(activity, dockShortcutIds)
+
             refresh()
         }
     }
 
-    suspend fun addToDockAtPublic(pkg: String, slotIndex: Int) {
-        addToDockAt(pkg, slotIndex)
+    suspend fun addToDockAtPublic(pkg: String, slotIndex: Int, shortcutId: String = "") {
+        addToDockAt(pkg, slotIndex, shortcutId)
     }
 
-    private suspend fun addToDockAt(pkg: String, slotIndex: Int) {
+    private suspend fun addToDockAt(pkg: String, slotIndex: Int, shortcutId: String) {
         val dockItems = PrefsSync.dockItems(activity).toMutableList()
         while (dockItems.size < 4) dockItems.add("")
 
@@ -138,6 +145,13 @@ class DockController(
         }
 
         PrefsSync.setDockItems(activity, dockItems)
+
+        // Salva lo shortcutId nella dock
+        val dockShortcutIds = PrefsSync.dockShortcutIds(activity).toMutableList()
+        while (dockShortcutIds.size < 4) dockShortcutIds.add("")
+        dockShortcutIds[slotIndex] = shortcutId
+        PrefsSync.setDockShortcutIds(activity, dockShortcutIds)
+
         refresh()
     }
 }
