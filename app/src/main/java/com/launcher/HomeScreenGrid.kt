@@ -299,15 +299,8 @@ class HomeScreenGrid @JvmOverloads constructor(
     val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
     val drawSize = iconSize - pad * 2
 
-    // Priorità: icona personalizzata > icona scorciatoia > icona app
-    val bitmap: Bitmap? = if (isCustom) {
-        AppCache.getIconBitmap(slot.packageName, drawSize * 3)
-    } else if (slot.shortcutId.isNotEmpty()) {
-        loadShortcutIcon(slot.packageName, slot.shortcutId, drawSize * 3)
-            ?: AppCache.getIconBitmap(slot.packageName, drawSize * 3)
-    } else {
-        AppCache.getIconBitmap(slot.packageName, drawSize * 3)
-    }
+    // Usa sempre l'icona dell'app (o quella personalizzata) per evitare il bordo nero
+    val bitmap: Bitmap? = AppCache.getIconBitmap(slot.packageName, drawSize * 3)
 
     if (bitmap == null) return
 
