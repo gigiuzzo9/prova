@@ -299,10 +299,10 @@ class HomeScreenGrid @JvmOverloads constructor(
         val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
         val drawSize = iconSize - pad * 2
 
-        // Se è una scorciatoia, usa l'icona della scorciatoia (o quella dell'app come fallback)
-        val bitmap = if (slot.shortcutId.isNotEmpty()) {
-            // Per ora, usa l'icona dell'app come fallback (l'icona della scorciatoia richiederebbe LauncherApps)
-            AppCache.getIconBitmap(slot.packageName, drawSize * 3)
+        // Se è una scorciatoia, carica l'icona specifica della scorciatoia
+        val bitmap: Bitmap? = if (slot.shortcutId.isNotEmpty()) {
+            loadShortcutIcon(slot.packageName, slot.shortcutId, drawSize * 3)
+                ?: AppCache.getIconBitmap(slot.packageName, drawSize * 3)
         } else {
             AppCache.getIconBitmap(slot.packageName, drawSize * 3)
         } ?: return
@@ -324,7 +324,6 @@ class HomeScreenGrid @JvmOverloads constructor(
             (iconTop + drawSize).toInt()
         )
 
-        // Paint con filtro per ammorbidire i bordi (come FIT_CENTER su ImageView)
         val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         canvas.drawBitmap(bitmap, null, dstRect, iconPaint)
 
@@ -342,6 +341,31 @@ class HomeScreenGrid @JvmOverloads constructor(
             canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
             layout.draw(canvas)
             canvas.restore()
+        }
+    }
+
+    private fun loadShortcutIcon(packageName: String, shortcutId: String, sizePx: Int): Bitmap? {
+        return try {
+            val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as android.content.pm.LauncherApps
+            val query = android.content.pm.LauncherApps.ShortcutQuery().apply {
+                setPackage(packageName)
+                setQueryFlags(
+                    android.content.pm.LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+                    android.content.pm.LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
+                    android.content.pm.LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED
+                )
+            }
+            val shortcuts = launcherApps.getShortcuts(query, android.os.Process.myUserHandle())
+            val shortcut = shortcuts?.firstOrNull { it.id == shortcutId } ?: return null
+            val density = resources.displayMetrics.densityDpi
+            val drawable = launcherApps.getShortcutIconDrawable(shortcut, density) ?: return null
+            val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, sizePx, sizePx)
+            drawable.draw(canvas)
+            bitmap
+        } catch (e: Exception) {
+            null
         }
     }
 
