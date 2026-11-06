@@ -62,6 +62,19 @@ object PrefsSync {
         prefs(context).edit().putString("dock_items", normalized.joinToString(",")).apply()
     }
 
+    // --- Dock shortcuts (per supportare le scorciatoie nella dock) ---
+
+    fun dockShortcutIds(context: Context): List<String> {
+        val raw = prefs(context).getString("dock_shortcut_ids", "") ?: ""
+        return if (raw.isEmpty()) emptyList() else raw.split(",")
+    }
+
+    fun setDockShortcutIds(context: Context, ids: List<String>) {
+        val normalized = ids.toMutableList()
+        while (normalized.size < 4) normalized.add("")
+        prefs(context).edit().putString("dock_shortcut_ids", normalized.joinToString(",")).apply()
+    }
+
     // --- Custom labels ---
 
     fun customLabels(context: Context): Map<String, String> {
@@ -107,7 +120,6 @@ object PrefsSync {
 
     // --- Home labels ---
 
-    // Se true, i nomi delle app sulla home sono nascosti (default: false, cioè visibili)
     fun hideAppLabels(context: Context): Boolean = prefs(context).getBoolean("hide_app_labels", false)
     fun setHideAppLabels(context: Context, value: Boolean) =
         prefs(context).edit().putBoolean("hide_app_labels", value).apply()
