@@ -127,7 +127,11 @@ class DockController(
 
         dockItems.replaceAll { if (it == pkg) "" else it }
 
+        // Cerca lo shortcutId nella griglia PRIMA di rimuovere l'elemento
         val homeSlots = PrefsSync.homeSlots(activity)
+        val originalSlot = homeSlots.firstOrNull { it.packageName == pkg }
+        val actualShortcutId = shortcutId.ifEmpty { originalSlot?.shortcutId ?: "" }
+
         val filtered = homeSlots.filter { it.packageName != pkg }
         if (filtered.size != homeSlots.size) {
             PrefsSync.setHomeSlots(activity, filtered)
@@ -149,7 +153,7 @@ class DockController(
         // Salva lo shortcutId nella dock
         val dockShortcutIds = PrefsSync.dockShortcutIds(activity).toMutableList()
         while (dockShortcutIds.size < 4) dockShortcutIds.add("")
-        dockShortcutIds[slotIndex] = shortcutId
+        dockShortcutIds[slotIndex] = actualShortcutId
         PrefsSync.setDockShortcutIds(activity, dockShortcutIds)
 
         refresh()
