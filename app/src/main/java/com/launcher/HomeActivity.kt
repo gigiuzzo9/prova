@@ -99,29 +99,30 @@ class HomeActivity : AppCompatActivity() {
     private var drawerBgApplied = false
     private var adjWidgetPage = -1
 
-    // Cache per evitare render inutili dei widget (sblocco / resume)
     private var lastWidgetSlotsHash = 0
     private var lastWidgetPage = -1
+
+    private var draggingShortcutId: String = ""
 
     private val REQUEST_BIND_WIDGET = 101
     private val REQUEST_CONFIGURE_WIDGET = 102
 
     private val reloadReceiver = object : BroadcastReceiver() {
-    override fun onReceive(context: Context?, intent: Intent?) {
-        val pkg = intent?.data?.schemeSpecificPart
-        if (pkg != null && pkg == packageName) return
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val pkg = intent?.data?.schemeSpecificPart
+            if (pkg != null && pkg == packageName) return
 
-        AppRepository.invalidateCache()
-        lifecycleScope.launch {
-            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-            loadHomeApps()
-            dockController.refresh()
-            val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-            drawerAdapter.submitList(apps)
-            renderWidgets()
+            AppRepository.invalidateCache()
+            lifecycleScope.launch {
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                loadHomeApps()
+                dockController.refresh()
+                val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                drawerAdapter.submitList(apps)
+                renderWidgets()
+            }
         }
     }
-}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -216,75 +217,75 @@ class HomeActivity : AppCompatActivity() {
         askLauncherIfNeeded()
 
         val reloadFilter = IntentFilter().apply {
-    addAction("com.simplylauncher.RELOAD")
-    addAction(Intent.ACTION_PACKAGE_ADDED)
-    addAction(Intent.ACTION_PACKAGE_REMOVED)
-    addAction(Intent.ACTION_PACKAGE_REPLACED)
-    addAction(Intent.ACTION_PACKAGE_CHANGED)
-    addDataScheme("package")
-}
-registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
+            addAction("com.simplylauncher.RELOAD")
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addAction(Intent.ACTION_PACKAGE_CHANGED)
+            addDataScheme("package")
+        }
+        registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
     }
 
     private fun setupGrid() {
-    homeScreenGrid.itemClickListener = { slot ->
-        if (slot.shortcutId.isNotEmpty()) {
-            try {
-                val launcherApps = getSystemService(LAUNCHER_APPS_SERVICE) as LauncherApps
-                launcherApps.startShortcut(slot.packageName, slot.shortcutId, null, null, android.os.Process.myUserHandle())
-            } catch (e: Exception) {
-                android.util.Log.e("SHORTCUT", "Errore startShortcut", e)
-                android.widget.Toast.makeText(this, "Errore: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+        homeScreenGrid.itemClickListener = { slot ->
+            if (slot.shortcutId.isNotEmpty()) {
+                try {
+                    val launcherApps = getSystemService(LAUNCHER_APPS_SERVICE) as LauncherApps
+                    launcherApps.startShortcut(slot.packageName, slot.shortcutId, null, null, android.os.Process.myUserHandle())
+                } catch (e: Exception) {
+                    android.util.Log.e("SHORTCUT", "Errore startShortcut", e)
+                    android.widget.Toast.makeText(this, "Errore: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            } else if (slot.packageName.isNotEmpty()) {
+                AppRepository.launchApp(this, slot.packageName)
             }
-        } else if (slot.packageName.isNotEmpty()) {
-            AppRepository.launchApp(this, slot.packageName)
         }
-    }
-    homeScreenGrid.itemLongClickListener = { slot, view ->
-        val app = AppCache.get(slot.packageName)
-        if (app != null) {
-            dragController.onLongPress(app, view, DragController.SOURCE_HOME, false)
-        }
-    }
-    homeScreenGrid.emptyCellLongClickListener = { view ->
-        showHomePopup(view)
-    }
-
-    homeScreenGrid.onSwipeOffsetChanged = { offset ->
-        widgetContainer.translationX = offset
-
-        val page = homeScreenGrid.getCurrentPage()
-        val adj = when {
-            offset > 0 && page > 0 -> page - 1
-            offset < 0 && page < currentPageCount - 1 -> page + 1
-            else -> -1
-        }
-        if (adj != -1) {
-            if (adjWidgetPage != adj) {
-                adjWidgetPage = adj
-                renderWidgetsForPage(adj, widgetContainer2)
+        homeScreenGrid.itemLongClickListener = { slot, view ->
+            val app = AppCache.get(slot.packageName)
+            if (app != null) {
+                dragController.onLongPress(app, view, DragController.SOURCE_HOME, false)
             }
-            val sign = if (offset > 0) -1 else 1
-            widgetContainer2.translationX = offset + sign * homeScreenGrid.width
-        } else {
+        }
+        homeScreenGrid.emptyCellLongClickListener = { view ->
+            showHomePopup(view)
+        }
+
+        homeScreenGrid.onSwipeOffsetChanged = { offset ->
+            widgetContainer.translationX = offset
+
+            val page = homeScreenGrid.getCurrentPage()
+            val adj = when {
+                offset > 0 && page > 0 -> page - 1
+                offset < 0 && page < currentPageCount - 1 -> page + 1
+                else -> -1
+            }
+            if (adj != -1) {
+                if (adjWidgetPage != adj) {
+                    adjWidgetPage = adj
+                    renderWidgetsForPage(adj, widgetContainer2)
+                }
+                val sign = if (offset > 0) -1 else 1
+                widgetContainer2.translationX = offset + sign * homeScreenGrid.width
+            } else {
+                widgetContainer2.translationX = 0f
+                widgetContainer2.removeAllViews()
+                adjWidgetPage = -1
+            }
+        }
+
+        homeScreenGrid.pageChangeListener = { page ->
+            pageIndicator.setCurrentPage(page)
+            val tmp = widgetContainer
+            widgetContainer = widgetContainer2
+            widgetContainer2 = tmp
+            widgetContainer.translationX = 0f
             widgetContainer2.translationX = 0f
             widgetContainer2.removeAllViews()
             adjWidgetPage = -1
+            renderWidgets()
         }
     }
-
-    homeScreenGrid.pageChangeListener = { page ->
-        pageIndicator.setCurrentPage(page)
-        val tmp = widgetContainer
-        widgetContainer = widgetContainer2
-        widgetContainer2 = tmp
-        widgetContainer.translationX = 0f
-        widgetContainer2.translationX = 0f
-        widgetContainer2.removeAllViews()
-        adjWidgetPage = -1
-        renderWidgets()
-    }
-}
 
     private fun setupResizeFrame() {
         resizeFrame.onClickListener = { endResizeMode() }
@@ -824,23 +825,14 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
         return luminance < 0.5
     }
 
-    /**
-     * Render pubblico "forzato": invalida la cache e ricrea i widget.
-     * Da usare quando un'azione cambia davvero gli slot (add/remove/resize/drop).
-     */
     private fun renderWidgets() {
         lastWidgetSlotsHash = 0
         lastWidgetPage = -1
         renderWidgetsForPage(homeScreenGrid.getCurrentPage(), widgetContainer)
     }
 
-    /**
-     * Render "pigro": evita di ricreare i widget se nulla è cambiato.
-     * Da usare in onResume e in tutti i casi in cui non sai se serve.
-     */
     private fun renderWidgetsIfNeeded() {
         if (homeScreenGrid.width == 0 || homeScreenGrid.height == 0) {
-            // Layout non ancora misurato: rimanda
             widgetContainer.post { renderWidgetsIfNeeded() }
             return
         }
@@ -898,7 +890,6 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
                     showWidgetMenu(slot, info, cellW, cellH, hostView, page)
                 }
                 hostView.onIgnoreIntercepted = {
-                    // Non chiudere il popup qui. Si chiude con isOutsideTouchable = true.
                 }
             } catch (e: Exception) {
                 android.util.Log.e("WIDGET_DEBUG", "Errore render widget ${slot.appWidgetId}", e)
@@ -915,7 +906,6 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
         }
         homeScreenGrid.updateWidgetBounds(bounds)
 
-        // Aggiorna la cache solo per il container principale (quello visibile)
         if (container === widgetContainer) {
             lastWidgetSlotsHash = allWidgets.hashCode()
             lastWidgetPage = page
@@ -1084,6 +1074,9 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
             homeRecyclerView = homeScreenGrid,
             drawerOverlay = drawerOverlay,
             onDragStart = { source, pkg, widgetId, widthCells, heightCells, x, y ->
+                draggingShortcutId = PrefsSync.homeSlots(this).firstOrNull {
+                    it.packageName == pkg && it.shortcutId.isNotEmpty()
+                }?.shortcutId ?: ""
                 showDragOverlay(source, pkg, widgetId, widthCells, heightCells, x, y)
             },
             onDragMove = { x, y -> updateDragOverlay(x, y) },
@@ -1208,39 +1201,35 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
     }
 
     private fun handleDropOnDock(source: String, pkg: String, x: Float, y: Float) {
-    // Recupera lo shortcutId dell'elemento trascinato (se è una scorciatoia)
-    val draggedSlot = PrefsSync.homeSlots(this).firstOrNull {
-        it.packageName == pkg && it.shortcutId.isNotEmpty()
-    }
-    val shortcutId = draggedSlot?.shortcutId ?: ""
+        val shortcutId = draggingShortcutId
+        draggingShortcutId = ""
 
-    var closestIndex = 0
-    var closestDist = Float.MAX_VALUE
-    dockSlots.forEachIndexed { index, slot ->
-        val loc = IntArray(2)
-        slot.getLocationOnScreen(loc)
-        val cx = loc[0] + slot.width / 2f
-        val cy = loc[1] + slot.height / 2f
-        val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble()).toFloat()
-        if (dist < closestDist) { closestDist = dist; closestIndex = index }
-    }
-
-    lifecycleScope.launch {
-        if (source == DragController.SOURCE_DOCK) {
-            dockController.swapDockSlots(pkg, closestIndex)
-        } else {
-            dockController.addToDockAtPublic(pkg, closestIndex)
+        var closestIndex = 0
+        var closestDist = Float.MAX_VALUE
+        dockSlots.forEachIndexed { index, slot ->
+            val loc = IntArray(2)
+            slot.getLocationOnScreen(loc)
+            val cx = loc[0] + slot.width / 2f
+            val cy = loc[1] + slot.height / 2f
+            val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble()).toFloat()
+            if (dist < closestDist) { closestDist = dist; closestIndex = index }
         }
 
-        // Salva lo shortcutId nella dock
-        val dockShortcutIds = PrefsSync.dockShortcutIds(this@HomeActivity).toMutableList()
-        while (dockShortcutIds.size < 4) dockShortcutIds.add("")
-        dockShortcutIds[closestIndex] = shortcutId
-        PrefsSync.setDockShortcutIds(this@HomeActivity, dockShortcutIds)
+        lifecycleScope.launch {
+            if (source == DragController.SOURCE_DOCK) {
+                dockController.swapDockSlots(pkg, closestIndex)
+            } else {
+                dockController.addToDockAtPublic(pkg, closestIndex)
+            }
 
-        dockController.refresh()
+            val dockShortcutIds = PrefsSync.dockShortcutIds(this@HomeActivity).toMutableList()
+            while (dockShortcutIds.size < 4) dockShortcutIds.add("")
+            dockShortcutIds[closestIndex] = shortcutId
+            PrefsSync.setDockShortcutIds(this@HomeActivity, dockShortcutIds)
+
+            dockController.refresh()
+        }
     }
-}
 
     private fun handleWidgetDrop(widgetId: Int, x: Float, y: Float) {
         val pageIndex = homeScreenGrid.getCurrentPage()
@@ -1295,7 +1284,6 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
         drawerRecyclerView.adapter = drawerAdapter
         drawerOverlay.setOnClickListener { closeDrawer() }
 
-        // Imposta il colore del testo in base allo sfondo del cassetto
         lifecycleScope.launch {
             val color = Prefs.colorFlow(this@HomeActivity).first()
             val luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0
@@ -1561,56 +1549,53 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
     }
 
     private fun moveToCell(pkg: String, row: Int, col: Int, pageIndex: Int) {
-    val slots = PrefsSync.homeSlots(this).toMutableList()
+        val slots = PrefsSync.homeSlots(this).toMutableList()
 
-    // Trova lo slot originale (per preservare shortcutId, se presente)
-    val originalSlot = slots.firstOrNull { it.packageName == pkg }
+        val originalSlot = slots.firstOrNull { it.packageName == pkg }
 
-    val existingSlot = slots.firstOrNull {
-        it.page == pageIndex && it.row == row && it.col == col && it.packageName != pkg
-    }
-    val sourceSlot = slots.firstOrNull { it.packageName == pkg }
-
-    slots.removeAll { it.packageName == pkg }
-
-    if (existingSlot != null) {
-        if (sourceSlot != null) {
-            slots.removeAll { it.page == sourceSlot.page && it.row == sourceSlot.row && it.col == sourceSlot.col }
-            slots.add(existingSlot.copy(row = sourceSlot.row, col = sourceSlot.col, page = sourceSlot.page))
-        } else {
-            slots.removeAll { it.page == pageIndex && it.row == row && it.col == col }
+        val existingSlot = slots.firstOrNull {
+            it.page == pageIndex && it.row == row && it.col == col && it.packageName != pkg
         }
-    }
+        val sourceSlot = slots.firstOrNull { it.packageName == pkg }
 
-    // Preserva shortcutId se lo slot originale era una scorciatoia
-    val newSlot = HomeSlot(
-        packageName = pkg,
-        row = row,
-        col = col,
-        page = pageIndex,
-        shortcutId = originalSlot?.shortcutId ?: ""
-    )
-    slots.add(newSlot)
-    PrefsSync.setHomeSlots(this, slots)
+        slots.removeAll { it.packageName == pkg }
 
-    // Se l'elemento viene spostato dalla dock alla griglia, svuota lo shortcutId nella dock
-    val dockItems = PrefsSync.dockItems(this)
-    if (dockItems.contains(pkg)) {
-        PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
-        val dockShortcutIds = PrefsSync.dockShortcutIds(this).toMutableList()
-        while (dockShortcutIds.size < 4) dockShortcutIds.add("")
-        val dockIndex = dockItems.indexOf(pkg)
-        if (dockIndex != -1) {
-            dockShortcutIds[dockIndex] = ""
-            PrefsSync.setDockShortcutIds(this, dockShortcutIds)
+        if (existingSlot != null) {
+            if (sourceSlot != null) {
+                slots.removeAll { it.page == sourceSlot.page && it.row == sourceSlot.row && it.col == sourceSlot.col }
+                slots.add(existingSlot.copy(row = sourceSlot.row, col = sourceSlot.col, page = sourceSlot.page))
+            } else {
+                slots.removeAll { it.page == pageIndex && it.row == row && it.col == col }
+            }
         }
-        dockController.refresh()
-    }
 
-    homeScreenGrid.setGridSize(currentCols, currentRows)
-    homeScreenGrid.setPageCount(currentPageCount)
-    homeScreenGrid.setItems(PrefsSync.homeSlots(this))
-}
+        val newSlot = HomeSlot(
+            packageName = pkg,
+            row = row,
+            col = col,
+            page = pageIndex,
+            shortcutId = originalSlot?.shortcutId ?: ""
+        )
+        slots.add(newSlot)
+        PrefsSync.setHomeSlots(this, slots)
+
+        val dockItems = PrefsSync.dockItems(this)
+        if (dockItems.contains(pkg)) {
+            PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
+            val dockShortcutIds = PrefsSync.dockShortcutIds(this).toMutableList()
+            while (dockShortcutIds.size < 4) dockShortcutIds.add("")
+            val dockIndex = dockItems.indexOf(pkg)
+            if (dockIndex != -1) {
+                dockShortcutIds[dockIndex] = ""
+                PrefsSync.setDockShortcutIds(this, dockShortcutIds)
+            }
+            dockController.refresh()
+        }
+
+        homeScreenGrid.setGridSize(currentCols, currentRows)
+        homeScreenGrid.setPageCount(currentPageCount)
+        homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+    }
 
     private fun handleDropOnDrawer(pkg: String) {
         val slots = PrefsSync.homeSlots(this)
@@ -1776,12 +1761,10 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
         }
 
         lifecycleScope.launch {
-            // Una sola scansione delle app, riusata per drawer e home
             val apps = AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
             loadHomeApps()
             dockController.refresh()
             drawerAdapter.submitList(apps)
-            // Render pigro: non ricrea i widget se nulla è cambiato
             renderWidgetsIfNeeded()
         }
     }
