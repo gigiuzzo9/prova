@@ -226,56 +226,64 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
     }
 
     private fun setupGrid() {
-        homeScreenGrid.itemClickListener = { slot ->
-            if (slot.packageName.isNotEmpty()) {
-                AppRepository.launchApp(this, slot.packageName)
+    homeScreenGrid.itemClickListener = { slot ->
+        if (slot.shortcutId.isNotEmpty()) {
+            // È una scorciatoia: lanciala con LauncherApps
+            try {
+                val launcherApps = getSystemService(LAUNCHER_APPS_SERVICE) as LauncherApps
+                launcherApps.startShortcut(slot.packageName, slot.shortcutId, null, null, android.os.Process.myUserHandle())
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(this, "Impossibile avviare la scorciatoia", android.widget.Toast.LENGTH_SHORT).show()
             }
+        } else if (slot.packageName.isNotEmpty()) {
+            AppRepository.launchApp(this, slot.packageName)
         }
-        homeScreenGrid.itemLongClickListener = { slot, view ->
-            val app = AppCache.get(slot.packageName)
-            if (app != null) {
-                dragController.onLongPress(app, view, DragController.SOURCE_HOME, false)
-            }
+    }
+    homeScreenGrid.itemLongClickListener = { slot, view ->
+        val app = AppCache.get(slot.packageName)
+        if (app != null) {
+            dragController.onLongPress(app, view, DragController.SOURCE_HOME, false)
         }
-        homeScreenGrid.emptyCellLongClickListener = { view ->
-            showHomePopup(view)
-        }
+    }
+    homeScreenGrid.emptyCellLongClickListener = { view ->
+        showHomePopup(view)
+    }
 
-        homeScreenGrid.onSwipeOffsetChanged = { offset ->
-            widgetContainer.translationX = offset
+    homeScreenGrid.onSwipeOffsetChanged = { offset ->
+        widgetContainer.translationX = offset
 
-            val page = homeScreenGrid.getCurrentPage()
-            val adj = when {
-                offset > 0 && page > 0 -> page - 1
-                offset < 0 && page < currentPageCount - 1 -> page + 1
-                else -> -1
-            }
-            if (adj != -1) {
-                if (adjWidgetPage != adj) {
-                    adjWidgetPage = adj
-                    renderWidgetsForPage(adj, widgetContainer2)
-                }
-                val sign = if (offset > 0) -1 else 1
-                widgetContainer2.translationX = offset + sign * homeScreenGrid.width
-            } else {
-                widgetContainer2.translationX = 0f
-                widgetContainer2.removeAllViews()
-                adjWidgetPage = -1
-            }
+        val page = homeScreenGrid.getCurrentPage()
+        val adj = when {
+            offset > 0 && page > 0 -> page - 1
+            offset < 0 && page < currentPageCount - 1 -> page + 1
+            else -> -1
         }
-
-        homeScreenGrid.pageChangeListener = { page ->
-            pageIndicator.setCurrentPage(page)
-            val tmp = widgetContainer
-            widgetContainer = widgetContainer2
-            widgetContainer2 = tmp
-            widgetContainer.translationX = 0f
+        if (adj != -1) {
+            if (adjWidgetPage != adj) {
+                adjWidgetPage = adj
+                renderWidgetsForPage(adj, widgetContainer2)
+            }
+            val sign = if (offset > 0) -1 else 1
+            widgetContainer2.translationX = offset + sign * homeScreenGrid.width
+        } else {
             widgetContainer2.translationX = 0f
             widgetContainer2.removeAllViews()
             adjWidgetPage = -1
-            renderWidgets()
         }
     }
+
+    homeScreenGrid.pageChangeListener = { page ->
+        pageIndicator.setCurrentPage(page)
+        val tmp = widgetContainer
+        widgetContainer = widgetContainer2
+        widgetContainer2 = tmp
+        widgetContainer.translationX = 0f
+        widgetContainer2.translationX = 0f
+        widgetContainer2.removeAllViews()
+        adjWidgetPage = -1
+        renderWidgets()
+    }
+}
 
     private fun setupResizeFrame() {
         resizeFrame.onClickListener = { endResizeMode() }
