@@ -1547,37 +1547,48 @@ registerReceiver(reloadReceiver, reloadFilter, RECEIVER_NOT_EXPORTED)
     }
 
     private fun moveToCell(pkg: String, row: Int, col: Int, pageIndex: Int) {
-        val slots = PrefsSync.homeSlots(this).toMutableList()
+    val slots = PrefsSync.homeSlots(this).toMutableList()
 
-        val existingSlot = slots.firstOrNull {
-            it.page == pageIndex && it.row == row && it.col == col && it.packageName != pkg
-        }
-        val sourceSlot = slots.firstOrNull { it.packageName == pkg }
+    // Trova lo slot originale (per preservare shortcutId, se presente)
+    val originalSlot = slots.firstOrNull { it.packageName == pkg }
 
-        slots.removeAll { it.packageName == pkg }
-
-        if (existingSlot != null) {
-            if (sourceSlot != null) {
-                slots.removeAll { it.page == sourceSlot.page && it.row == sourceSlot.row && it.col == sourceSlot.col }
-                slots.add(existingSlot.copy(row = sourceSlot.row, col = sourceSlot.col, page = sourceSlot.page))
-            } else {
-                slots.removeAll { it.page == pageIndex && it.row == row && it.col == col }
-            }
-        }
-
-        slots.add(HomeSlot(pkg, row, col, pageIndex))
-        PrefsSync.setHomeSlots(this, slots)
-
-        val dockItems = PrefsSync.dockItems(this)
-        if (dockItems.contains(pkg)) {
-            PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
-            dockController.refresh()
-        }
-
-        homeScreenGrid.setGridSize(currentCols, currentRows)
-        homeScreenGrid.setPageCount(currentPageCount)
-        homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+    val existingSlot = slots.firstOrNull {
+        it.page == pageIndex && it.row == row && it.col == col && it.packageName != pkg
     }
+    val sourceSlot = slots.firstOrNull { it.packageName == pkg }
+
+    slots.removeAll { it.packageName == pkg }
+
+    if (existingSlot != null) {
+        if (sourceSlot != null) {
+            slots.removeAll { it.page == sourceSlot.page && it.row == sourceSlot.row && it.col == sourceSlot.col }
+            slots.add(existingSlot.copy(row = sourceSlot.row, col = sourceSlot.col, page = sourceSlot.page))
+        } else {
+            slots.removeAll { it.page == pageIndex && it.row == row && it.col == col }
+        }
+    }
+
+    // Preserva shortcutId se lo slot originale era una scorciatoia
+    val newSlot = HomeSlot(
+        packageName = pkg,
+        row = row,
+        col = col,
+        page = pageIndex,
+        shortcutId = originalSlot?.shortcutId ?: ""
+    )
+    slots.add(newSlot)
+    PrefsSync.setHomeSlots(this, slots)
+
+    val dockItems = PrefsSync.dockItems(this)
+    if (dockItems.contains(pkg)) {
+        PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
+        dockController.refresh()
+    }
+
+    homeScreenGrid.setGridSize(currentCols, currentRows)
+    homeScreenGrid.setPageCount(currentPageCount)
+    homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+}
 
     private fun handleDropOnDrawer(pkg: String) {
         val slots = PrefsSync.homeSlots(this)
