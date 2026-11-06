@@ -58,6 +58,16 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <!-- Activity per ricevere le richieste di creazione scorciatoie (Pin Shortcut) -->
+        <activity
+            android:name=".ShortcutReceiverActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".PackageChangeReceiver"
             android:exported="false">
@@ -71,4 +81,3 @@
         </receiver>
     </application>
 </manifest>
-
