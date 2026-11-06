@@ -299,8 +299,7 @@ class HomeScreenGrid @JvmOverloads constructor(
         val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
         val drawSize = iconSize - pad * 2
 
-        // Se è una scorciatoia, carica l'icona specifica della scorciatoia
-        val bitmap: Bitmap? = if (slot.shortcutId.isNotEmpty()) {
+        val bitmap = if (slot.shortcutId.isNotEmpty()) {
             loadShortcutIcon(slot.packageName, slot.shortcutId, drawSize * 3)
                 ?: AppCache.getIconBitmap(slot.packageName, drawSize * 3)
         } else {
