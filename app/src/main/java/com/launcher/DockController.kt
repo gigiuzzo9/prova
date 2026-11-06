@@ -1,5 +1,6 @@
 package com.simplylauncher
 
+import android.content.pm.LauncherApps
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -19,6 +20,7 @@ class DockController(
     fun refresh() {
         activity.lifecycleScope.launch {
             val dockItems = PrefsSync.dockItems(activity)
+            val dockShortcutIds = PrefsSync.dockShortcutIds(activity)
             val byPkg = HashMap<String, AppInfo>()
             dockItems.filter { it.isNotBlank() }.forEach { pkg ->
                 AppCache.get(pkg)?.let { byPkg[pkg] = it }
@@ -37,10 +39,11 @@ class DockController(
             slots.forEachIndexed { index, slot ->
                 slot.removeAllViews()
                 val pkg = dockItems.getOrNull(index)
+                val shortcutId = dockShortcutIds.getOrNull(index) ?: ""
                 val app = if (pkg.isNullOrBlank()) null else byPkg[pkg]
 
                 if (app != null) {
-                    // MODIFICA: carica il bitmap ad alta risoluzione (size * 3)
+                    // Carica il bitmap ad alta risoluzione
                     val bitmap = AppCache.getIconBitmap(app.packageName, size * 3)
                     val imageView = ImageView(activity)
                     if (bitmap != null) {
@@ -58,7 +61,18 @@ class DockController(
                     slot.addView(imageView)
                     slot.tag = app.packageName
                     slot.setOnClickListener {
-                        AppRepository.launchApp(activity, app.packageName)
+                        if (shortcutId.isNotEmpty()) {
+                            // È una scorciatoia: lanciala con LauncherApps
+                            try {
+                                val launcherApps = activity.getSystemService(android.content.Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+                                launcherApps.startShortcut(app.packageName, shortcutId, null, null, android.os.Process.myUserHandle())
+                            } catch (e: Exception) {
+                                android.widget.Toast.makeText(activity, "Impossibile avviare la scorciatoia", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            // App normale
+                            AppRepository.launchApp(activity, app.packageName)
+                        }
                     }
                     slot.setOnLongClickListener { view ->
                         onAppLongPressed(app, view)
