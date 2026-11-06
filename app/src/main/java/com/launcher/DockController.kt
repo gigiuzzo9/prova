@@ -95,8 +95,15 @@ class DockController(
     suspend fun swapDockSlots(pkg: String, slotIndex: Int) {
         val dockItems = PrefsSync.dockItems(activity).toMutableList()
         while (dockItems.size < 4) dockItems.add("")
+        val dockShortcutIds = PrefsSync.dockShortcutIds(activity).toMutableList()
+        while (dockShortcutIds.size < 4) dockShortcutIds.add("")
 
-        val fromIndex = dockItems.indexOf(pkg)
+        // Trova lo slot di partenza: prima per packageName, poi per shortcutId
+        var fromIndex = dockItems.indexOf(pkg)
+        if (fromIndex == -1) {
+            fromIndex = dockShortcutIds.indexOfFirst { it.isNotEmpty() }
+        }
+
         if (fromIndex != -1 && fromIndex != slotIndex) {
             val a = dockItems[fromIndex]
             val b = dockItems[slotIndex]
@@ -104,9 +111,6 @@ class DockController(
             dockItems[slotIndex] = a
             PrefsSync.setDockItems(activity, dockItems)
 
-            // Scambia anche gli shortcutId
-            val dockShortcutIds = PrefsSync.dockShortcutIds(activity).toMutableList()
-            while (dockShortcutIds.size < 4) dockShortcutIds.add("")
             val aId = dockShortcutIds[fromIndex]
             val bId = dockShortcutIds[slotIndex]
             dockShortcutIds[fromIndex] = bId
@@ -127,7 +131,6 @@ class DockController(
 
         dockItems.replaceAll { if (it == pkg) "" else it }
 
-        // Cerca lo shortcutId nella griglia PRIMA di rimuovere l'elemento
         val homeSlots = PrefsSync.homeSlots(activity)
         val originalSlot = homeSlots.firstOrNull { it.packageName == pkg }
         val actualShortcutId = shortcutId.ifEmpty { originalSlot?.shortcutId ?: "" }
@@ -150,7 +153,6 @@ class DockController(
 
         PrefsSync.setDockItems(activity, dockItems)
 
-        // Salva lo shortcutId nella dock
         val dockShortcutIds = PrefsSync.dockShortcutIds(activity).toMutableList()
         while (dockShortcutIds.size < 4) dockShortcutIds.add("")
         dockShortcutIds[slotIndex] = actualShortcutId
