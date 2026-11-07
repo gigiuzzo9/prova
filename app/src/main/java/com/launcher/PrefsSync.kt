@@ -210,6 +210,35 @@ object PrefsSync {
         prefs(context).edit().putString("custom_shortcut_icons", raw).apply()
     }
 
+    // --- Shortcut intents (fallback per browser che rimuovono le shortcut dinamiche) ---
+    // Chiave = uniqueKey (pkg | pkg|shortcutId | pkg|shortcutId|instanceId)
+    // Valore = Intent.toUri(Intent.URI_INTENT_SCHEME)
+    // Separatore di coppie: "||" ; separatore chiave/valore: "=" (il primo "=")
+
+    fun shortcutIntents(context: Context): Map<String, String> {
+        val raw = prefs(context).getString("shortcut_intents", "") ?: ""
+        if (raw.isEmpty()) return emptyMap()
+        return raw.split("||").filter { it.isNotBlank() }.mapNotNull {
+            val idx = it.indexOf('=')
+            if (idx <= 0) null
+            else it.substring(0, idx) to it.substring(idx + 1)
+        }.toMap()
+    }
+
+    fun setShortcutIntent(context: Context, uniqueKey: String, uri: String) {
+        val map = shortcutIntents(context).toMutableMap()
+        map[uniqueKey] = uri
+        val raw = map.entries.joinToString("||") { "${it.key}=${it.value}" }
+        prefs(context).edit().putString("shortcut_intents", raw).apply()
+    }
+
+    fun removeShortcutIntent(context: Context, uniqueKey: String) {
+        val map = shortcutIntents(context).toMutableMap()
+        map.remove(uniqueKey)
+        val raw = map.entries.joinToString("||") { "${it.key}=${it.value}" }
+        prefs(context).edit().putString("shortcut_intents", raw).apply()
+    }
+
     // --- Home labels ---
 
     fun hideAppLabels(context: Context): Boolean = prefs(context).getBoolean("hide_app_labels", false)
