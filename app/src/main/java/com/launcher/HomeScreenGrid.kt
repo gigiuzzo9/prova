@@ -176,9 +176,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         invalidateDrawing()
     }
 
-    /**
-     * Imposta lo slot in drag nascondendolo visivamente.
-     */
     fun setDraggingPackage(
         pkg: String?,
         page: Int,
@@ -253,16 +250,9 @@ class HomeScreenGrid @JvmOverloads constructor(
         } ?: HomeSlot("", cell.first, cell.second, currentPage)
     }
 
-    /**
-     * Carica l'icona dello slot con la priorità corretta:
-     * 1. icona custom (per app o per shortcut, con uniqueKey)
-     * 2. icona della shortcut (se è una shortcut)
-     * 3. icona dell'app
-     */
     private fun getIconBitmap(slot: HomeSlot): Bitmap? {
         if (iconSize <= 0) return null
 
-        // 1) Icona custom
         if (slot.isShortcut) {
             val customMap = PrefsSync.customShortcutIcons(context)
             val path = customMap[slot.uniqueKey]
@@ -289,13 +279,11 @@ class HomeScreenGrid @JvmOverloads constructor(
             }
         }
 
-        // 2) Icona della shortcut
         if (slot.isShortcut) {
             val shortcutBmp = loadShortcutIcon(slot.packageName, slot.shortcutId, iconSize)
             if (shortcutBmp != null) return shortcutBmp
         }
 
-        // 3) Icona dell'app
         return AppCache.getIconBitmap(slot.packageName, iconSize)
     }
 
@@ -398,9 +386,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Carica l'icona di una scorciatoia. Ritorna null se non disponibile.
-     */
     private fun loadShortcutIcon(packageName: String, shortcutId: String, sizePx: Int): Bitmap? {
         if (sizePx <= 0 || shortcutId.isEmpty()) return null
         return try {
