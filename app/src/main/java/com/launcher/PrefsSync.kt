@@ -48,6 +48,8 @@ object PrefsSync {
         val filtered = slots.filterNot { it.uniqueKey == uniqueKey }
         if (filtered.size == slots.size) return false
         setHomeSlots(context, filtered)
+        // Rimuovi anche l'eventuale intent associato
+        removeShortcutIntent(context, uniqueKey)
         return true
     }
 
@@ -125,6 +127,13 @@ object PrefsSync {
             setDockItems(context, items)
             setDockShortcutIds(context, ids)
             setDockInstanceIds(context, insts)
+            // Rimuovi anche l'intent della shortcut dal dock
+            val uniqueKey = when {
+                shortcutId.isEmpty() -> pkg
+                instanceId.isEmpty() -> "$pkg|$shortcutId"
+                else -> "$pkg|$shortcutId|$instanceId"
+            }
+            removeShortcutIntent(context, uniqueKey)
         }
         return removed
     }
@@ -195,6 +204,43 @@ object PrefsSync {
         map.remove(uniqueKey)
         val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
         prefs(context).edit().putString("custom_shortcut_icons", raw).apply()
+    }
+
+    // --- Intent delle scorciatoie (per fallback browser / deep-link) ---
+    // Mappa: uniqueKey -> intentUri (formato Intent.toUri(URI_INTENT_SCHEME))
+    // Usa JSON per non rompersi sui caratteri speciali.
+
+    fun shortcutIntents(context: Context): Map<String, String> {
+        val raw = prefs(context).getString("shortcut_intents", "") ?: ""
+        if (raw.isEmpty()) return emptyMap()
+        return try {
+            val json = org.json.JSONObject(raw)
+            val result = mutableMapOf<String, String>()
+            json.keys().forEach { k -> result[k] = json.optString(k) }
+            result
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun setShortcutIntent(context: Context, uniqueKey: String, intentUri: String) {
+        val map = shortcutIntents(context).toMutableMap()
+        map[uniqueKey] = intentUri
+        try {
+            val json = org.json.JSONObject()
+            map.forEach { (k, v) -> json.put(k, v) }
+            prefs(context).edit().putString("shortcut_intents", json.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun removeShortcutIntent(context: Context, uniqueKey: String) {
+        val map = shortcutIntents(context).toMutableMap()
+        if (map.remove(uniqueKey) == null) return
+        try {
+            val json = org.json.JSONObject()
+            map.forEach { (k, v) -> json.put(k, v) }
+            prefs(context).edit().putString("shortcut_intents", json.toString()).apply()
+        } catch (_: Exception) {}
     }
 
     // --- Home labels ---
