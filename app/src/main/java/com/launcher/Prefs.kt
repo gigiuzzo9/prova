@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONObject
 
 private val Context.dataStore by preferencesDataStore("launcher_prefs")
 
@@ -24,7 +25,27 @@ object Prefs {
     private val KEY_CUSTOM_LABELS = stringPreferencesKey("custom_labels")
     private val KEY_WIDGET_SLOTS = stringPreferencesKey("widget_slots")
 
-    // ---- Flow (usati da SettingsActivity, drawer background, ecc.) ----
+    // ---- Helper JSON per mappe ----
+
+    private fun mapToJson(map: Map<String, String>): String {
+        val json = JSONObject()
+        map.forEach { (k, v) -> json.put(k, v) }
+        return json.toString()
+    }
+
+    private fun jsonToMap(raw: String?): Map<String, String> {
+        if (raw.isNullOrEmpty()) return emptyMap()
+        return try {
+            val json = JSONObject(raw)
+            val result = mutableMapOf<String, String>()
+            json.keys().forEach { k -> result[k] = json.optString(k) }
+            result
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    // ---- Flow ----
 
     fun colorFlow(context: Context): Flow<Int> =
         context.dataStore.data.map { it[KEY_COLOR] ?: 0xFF000000.toInt() }
@@ -76,12 +97,7 @@ object Prefs {
 
     fun customLabelsFlow(context: Context): Flow<Map<String, String>> =
         context.dataStore.data.map { prefs ->
-            val raw = prefs[KEY_CUSTOM_LABELS] ?: ""
-            if (raw.isEmpty()) emptyMap()
-            else raw.split("|").filter { it.isNotBlank() }.associate {
-                val parts = it.split(":", limit = 2)
-                parts[0] to (parts.getOrNull(1) ?: "")
-            }
+            jsonToMap(prefs[KEY_CUSTOM_LABELS])
         }
 
     // ---- Scritture (doppia scrittura: DataStore + PrefsSync) ----
@@ -138,15 +154,11 @@ object Prefs {
     }
 
     suspend fun setCustomLabel(context: Context, packageName: String, label: String) {
+        // Scrive in JSON sia su DataStore sia su PrefsSync
         context.dataStore.edit { prefs ->
-            val raw = prefs[KEY_CUSTOM_LABELS] ?: ""
-            val map = if (raw.isEmpty()) mutableMapOf()
-            else raw.split("|").filter { it.isNotBlank() }.associate {
-                val parts = it.split(":", limit = 2)
-                parts[0] to (parts.getOrNull(1) ?: "")
-            }.toMutableMap()
+            val map = jsonToMap(prefs[KEY_CUSTOM_LABELS]).toMutableMap()
             map[packageName] = label
-            prefs[KEY_CUSTOM_LABELS] = map.entries.joinToString("|") { "${it.key}:${it.value}" }
+            prefs[KEY_CUSTOM_LABELS] = mapToJson(map)
         }
         PrefsSync.setCustomLabel(context, packageName, label)
     }
