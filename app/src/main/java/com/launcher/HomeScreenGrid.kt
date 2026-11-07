@@ -176,12 +176,29 @@ class HomeScreenGrid @JvmOverloads constructor(
         invalidateDrawing()
     }
 
-    fun setDraggingPackage(pkg: String?, page: Int) {
+    /**
+     * Imposta lo slot in drag nascondendolo visivamente.
+     * @param pkg package dello slot trascinato
+     * @param shortcutId shortcutId REALE (vuoto per app normale)
+     * @param instanceId istanza della scorciatoia (vuoto se unica)
+     * @param page pagina in cui si trova lo slot
+     */
+    fun setDraggingPackage(
+        pkg: String?,
+        page: Int,
+        shortcutId: String = "",
+        instanceId: String = ""
+    ) {
         draggingItem = if (pkg == null) {
             null
         } else {
-            items.firstOrNull { it.packageName == pkg && it.page == page }
-                ?: HomeSlot(pkg, -1, -1, page)
+            val uniqueKey = when {
+                shortcutId.isEmpty() -> pkg
+                instanceId.isEmpty() -> "$pkg|$shortcutId"
+                else -> "$pkg|$shortcutId|$instanceId"
+            }
+            items.firstOrNull { it.uniqueKey == uniqueKey && it.page == page }
+                ?: HomeSlot(pkg, -1, -1, page, shortcutId, instanceId)
         }
         invalidateDrawing()
     }
@@ -240,9 +257,15 @@ class HomeScreenGrid @JvmOverloads constructor(
         } ?: HomeSlot("", cell.first, cell.second, currentPage)
     }
 
-    private fun getIconBitmap(pkg: String): Bitmap? {
+    private fun getIconBitmap(slot: HomeSlot): Bitmap? {
         if (iconSize <= 0) return null
-        return AppCache.getIconBitmap(pkg, iconSize)
+        // Scorciatoia: usa icona shortcut (con fallback su app se non disponibile)
+        if (slot.isShortcut) {
+            // Prima prova la cache di AppCache (icona app) — poi prova la shortcut
+            val shortcutBmp = loadShortcutIcon(slot.packageName, slot.shortcutId, iconSize)
+            if (shortcutBmp != null) return shortcutBmp
+        }
+        return AppCache.getIconBitmap(slot.packageName, iconSize)
     }
 
     private val smoothingRunnable = object : Runnable {
@@ -283,8 +306,10 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private fun drawPage(canvas: Canvas, page: Int, offsetX: Float) {
+        val dragged = draggingItem
         items.filter { it.page == page && it.packageName.isNotEmpty() }.forEach { slot ->
-            if (draggingItem?.packageName == slot.packageName && draggingItem?.page == slot.page) {
+            // Salta SOLO lo slot effettivamente in drag (match per uniqueKey + page)
+            if (dragged != null && dragged.page == slot.page && dragged.uniqueKey == slot.uniqueKey) {
                 return@forEach
             }
             val cell = cells[Pair(slot.row, slot.col)] ?: return@forEach
@@ -293,55 +318,60 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect, offsetX: Float) {
-    val app = AppCache.get(slot.packageName) ?: return
+        val app = AppCache.get(slot.packageName) ?: return
 
-    val isCustom = PrefsSync.customIcons(context).containsKey(slot.packageName)
-    val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
-    val drawSize = iconSize - pad * 2
+        // Icona personalizzata: solo per app normali (le shortcut hanno già la loro)
+        val isCustom = !slot.isShortcut && PrefsSync.customIcons(context).containsKey(slot.packageName)
+        val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
+        val drawSize = iconSize - pad * 2
 
-    // Usa sempre l'icona dell'app (o quella personalizzata) per evitare il bordo nero
-    val bitmap: Bitmap? = AppCache.getIconBitmap(slot.packageName, drawSize * 3)
+        // Usa l'icona giusta: shortcut se applicabile, altrimenti app
+        val bitmap: Bitmap? = getIconBitmap(slot)
+        if (bitmap == null) return
 
-    if (bitmap == null) return
+        val hideLabels = PrefsSync.hideAppLabels(context)
+        val hasLabel = app.label.isNotEmpty() && !hideLabels
 
-    val hideLabels = PrefsSync.hideAppLabels(context)
-    val hasLabel = app.label.isNotEmpty() && !hideLabels
+        val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
+        val iconTop = if (hasLabel) {
+            cell.top.toFloat() + iconMargin.toFloat() + pad
+        } else {
+            cell.top.toFloat() + (cell.height() - iconSize) / 2f + pad
+        }
 
-    val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
-    val iconTop = if (hasLabel) {
-        cell.top.toFloat() + iconMargin.toFloat() + pad
-    } else {
-        cell.top.toFloat() + (cell.height() - iconSize) / 2f + pad
+        val dstRect = Rect(
+            iconLeft.toInt(),
+            iconTop.toInt(),
+            (iconLeft + drawSize).toInt(),
+            (iconTop + drawSize).toInt()
+        )
+
+        val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        canvas.drawBitmap(bitmap, null, dstRect, iconPaint)
+
+        if (hasLabel) {
+            val textWidth = cell.width() - 2 * labelSideMargin
+            val layout = StaticLayout.Builder
+                .obtain(app.label, 0, app.label.length, textPaint, textWidth)
+                .setMaxLines(1)
+                .setEllipsize(TextUtils.TruncateAt.END)
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                .build()
+
+            val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
+            canvas.save()
+            canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
+            layout.draw(canvas)
+            canvas.restore()
+        }
     }
 
-    val dstRect = Rect(
-        iconLeft.toInt(),
-        iconTop.toInt(),
-        (iconLeft + drawSize).toInt(),
-        (iconTop + drawSize).toInt()
-    )
-
-    val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    canvas.drawBitmap(bitmap, null, dstRect, iconPaint)
-
-    if (hasLabel) {
-        val textWidth = cell.width() - 2 * labelSideMargin
-        val layout = StaticLayout.Builder
-            .obtain(app.label, 0, app.label.length, textPaint, textWidth)
-            .setMaxLines(1)
-            .setEllipsize(TextUtils.TruncateAt.END)
-            .setAlignment(Layout.Alignment.ALIGN_CENTER)
-            .build()
-
-        val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
-        canvas.save()
-        canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
-        layout.draw(canvas)
-        canvas.restore()
-    }
-}
-
+    /**
+     * Carica l'icona di una scorciatoia. Ritorna null se non disponibile.
+     * Usa shortcutId REALE (quello di ShortcutInfo.id).
+     */
     private fun loadShortcutIcon(packageName: String, shortcutId: String, sizePx: Int): Bitmap? {
+        if (sizePx <= 0 || shortcutId.isEmpty()) return null
         return try {
             val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as android.content.pm.LauncherApps
             val query = android.content.pm.LauncherApps.ShortcutQuery().apply {
@@ -383,7 +413,7 @@ class HomeScreenGrid @JvmOverloads constructor(
             }
         }
 
-        val bitmap = getIconBitmap(dragged.packageName) ?: return
+        val bitmap = getIconBitmap(dragged) ?: return
         val cx = draggingCoords.first - iconSize / 2f
         val cy = draggingCoords.second - iconSize / 1.2f
         canvas.drawBitmap(bitmap, cx, cy, null)
