@@ -1531,7 +1531,7 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    // Usa draggingShortcutId per distinguere le scorciatoie
+    // Salva lo shortcutId e resetta subito (per non usarlo due volte)
     val shortcutId = draggingShortcutId
     draggingShortcutId = ""
 
