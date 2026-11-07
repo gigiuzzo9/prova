@@ -35,12 +35,14 @@ class DockController(
             val density = activity.resources.displayMetrics.density
             val size = (62 * density).toInt()
             val customIcons = PrefsSync.customIcons(activity)
+            val customShortcutIcons = PrefsSync.customShortcutIcons(activity)
 
             slots.forEachIndexed { index, slot ->
                 slot.removeAllViews()
                 val pkg = dockItems.getOrNull(index)
                 val shortcutId = dockShortcutIds.getOrNull(index) ?: ""
                 val app = if (pkg.isNullOrBlank()) null else byPkg[pkg]
+                val uniqueKey = if (shortcutId.isNotEmpty()) "$pkg|$shortcutId" else pkg
 
                 if (app != null) {
                     val bitmap = AppCache.getIconBitmap(app.packageName, size * 3)
@@ -49,7 +51,13 @@ class DockController(
                         imageView.setImageBitmap(bitmap)
                     }
 
-                    if (customIcons.containsKey(app.packageName)) {
+                    // Usa l'icona personalizzata della scorciatoia o quella dell'app
+                    val hasCustom = if (shortcutId.isNotEmpty()) {
+                        customShortcutIcons.containsKey(uniqueKey)
+                    } else {
+                        customIcons.containsKey(app.packageName)
+                    }
+                    if (hasCustom) {
                         val pad = (size * 0.035f).toInt()
                         imageView.setPadding(pad, pad, pad, pad)
                     }
@@ -58,7 +66,7 @@ class DockController(
                         gravity = Gravity.CENTER
                     }
                     slot.addView(imageView)
-                    slot.tag = app.packageName
+                    slot.tag = uniqueKey
                     slot.setOnClickListener {
                         if (shortcutId.isNotEmpty()) {
                             try {
@@ -87,8 +95,8 @@ class DockController(
     fun setDraggingPackage(pkg: String?) {
         slots.forEach { slot ->
             val iv = slot.getChildAt(0) as? ImageView ?: return@forEach
-            val slotPkg = slot.tag as? String
-            iv.alpha = if (slotPkg != null && slotPkg == pkg) 0f else 1f
+            val slotKey = slot.tag as? String
+            iv.alpha = if (slotKey != null && (slotKey == pkg || slotKey.startsWith("$pkg|"))) 0f else 1f
         }
     }
 
@@ -132,10 +140,16 @@ class DockController(
         dockItems.replaceAll { if (it == pkg) "" else it }
 
         val homeSlots = PrefsSync.homeSlots(activity)
-        val originalSlot = homeSlots.firstOrNull { it.packageName == pkg }
+        val originalSlot = homeSlots.firstOrNull {
+            if (shortcutId.isNotEmpty()) it.packageName == pkg && it.shortcutId == shortcutId
+            else it.packageName == pkg
+        }
         val actualShortcutId = shortcutId.ifEmpty { originalSlot?.shortcutId ?: "" }
 
-        val filtered = homeSlots.filter { it.packageName != pkg }
+        val filtered = homeSlots.filter {
+            if (actualShortcutId.isNotEmpty()) !(it.packageName == pkg && it.shortcutId == actualShortcutId)
+            else it.packageName != pkg
+        }
         if (filtered.size != homeSlots.size) {
             PrefsSync.setHomeSlots(activity, filtered)
             activity.removeAppFromGridOnly(pkg)
