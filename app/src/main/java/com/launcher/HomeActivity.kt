@@ -1282,34 +1282,37 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun handleDropOnDock(
-        source: String,
-        pkg: String,
-        shortcutId: String,
-        instanceId: String,
-        x: Float,
-        y: Float
-    ) {
-        var closestIndex = 0
-        var closestDist = Float.MAX_VALUE
-        dockSlots.forEachIndexed { index, slot ->
-            val loc = IntArray(2)
-            slot.getLocationOnScreen(loc)
-            val cx = loc[0] + slot.width / 2f
-            val cy = loc[1] + slot.height / 2f
-            val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble()).toFloat()
-            if (dist < closestDist) { closestDist = dist; closestIndex = index }
-        }
-
-        lifecycleScope.launch {
-            if (source == DragController.SOURCE_DOCK) {
-                dockController.swapDockSlots(pkg, closestIndex, shortcutId, instanceId)
-            } else {
-                dockController.addToDockAtPublic(pkg, closestIndex, shortcutId, instanceId)
-            }
-
-            dockController.refresh()
-        }
+    source: String,
+    pkg: String,
+    shortcutId: String,
+    instanceId: String,
+    x: Float,
+    y: Float
+) {
+    var closestIndex = 0
+    var closestDist = Float.MAX_VALUE
+    dockSlots.forEachIndexed { index, slot ->
+        val loc = IntArray(2)
+        slot.getLocationOnScreen(loc)
+        val cx = loc[0] + slot.width / 2f
+        val cy = loc[1] + slot.height / 2f
+        val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble()).toFloat()
+        if (dist < closestDist) { closestDist = dist; closestIndex = index }
     }
+
+    lifecycleScope.launch {
+        if (source == DragController.SOURCE_DOCK) {
+            dockController.swapDockSlots(pkg, closestIndex, shortcutId, instanceId)
+        } else {
+            dockController.addToDockAtPublic(pkg, closestIndex, shortcutId, instanceId)
+        }
+
+        dockController.refresh()
+        // Riallinea la griglia: se lo slot è stato rimosso dalla home,
+        // va tolto subito dalla vista (senza aspettare un altro evento).
+        loadHomeApps()
+    }
+}
 
     private fun handleWidgetDrop(widgetId: Int, x: Float, y: Float) {
         val pageIndex = homeScreenGrid.getCurrentPage()
