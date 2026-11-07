@@ -26,6 +26,11 @@ object ShortcutLauncher {
         }
     }
 
+    private fun isHttpUrl(uri: Uri?): Boolean {
+        val scheme = uri?.scheme?.lowercase() ?: return false
+        return scheme == "http" || scheme == "https"
+    }
+
     fun launch(
         context: Context,
         packageName: String,
@@ -45,7 +50,7 @@ object ShortcutLauncher {
 
         val savedIntentUri = PrefsSync.shortcutIntents(context)[uniqueKey]
 
-        // 1) Prova a parsare l'intent salvato
+        // 1) Prova a parsare l'Intent salvato
         var parsedIntent: Intent? = null
         if (!savedIntentUri.isNullOrEmpty()) {
             try {
@@ -53,33 +58,68 @@ object ShortcutLauncher {
             } catch (_: Exception) {}
         }
 
-        // 2) È un collegamento browser? (action=VIEW + data http/https)
-        val isBrowserLink = parsedIntent != null &&
+        // 2) È un collegamento web? (action=VIEW + data http/https)
+        val isWebLink = parsedIntent != null &&
                 parsedIntent.action == Intent.ACTION_VIEW &&
-                parsedIntent.data?.scheme?.let { it == "http" || it == "https" } == true
+                isHttpUrl(parsedIntent.data)
 
-        // 3) Se è un browser link, usa SOLO l'intent salvato
-        if (isBrowserLink) {
+        if (isWebLink) {
+            // 2a) Prova con l'Intent salvato
             try {
                 parsedIntent!!.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                parsedIntent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                 context.startActivity(parsedIntent)
                 return
-            } catch (e: Exception) {
-                if (showErrorToast) {
-                    debug(context, "ERRORE BROWSER LINK", "${e.javaClass.simpleName}: ${e.message}")
-                }
-                return
+            } catch (_: Exception) {}
+
+            // 2b) Fallback: apri direttamente l'URL con ACTION_VIEW
+            val url = parsedIntent.data
+            if (url != null) {
+                try {
+                    val browserIntent = Intent(Intent.ACTION_VIEW, url).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                    }
+                    context.startActivity(browserIntent)
+                    return
+                } catch (_: Exception) {}
             }
+
+            // 2c) Ultimo tentativo: estrai la stringa URL e apri
+            val urlString = url?.toString()
+            if (!urlString.isNullOrEmpty()) {
+                try {
+                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(urlString)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(browserIntent)
+                    return
+                } catch (_: Exception) {}
+            }
+
+            if (showErrorToast) {
+                debug(context, "ERRORE LINK WEB", "Impossibile aprire: ${url ?: savedIntentUri}")
+            }
+            return
         }
 
-        // 4) Se è una shortcut normale, prova startShortcut
+        // 3) Scorciatoia normale → prova startShortcut
         try {
             val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
             launcherApps.startShortcut(packageName, shortcutId, null, null, Process.myUserHandle())
             return
         } catch (_: Exception) {}
 
-        // 5) Fallback: apri l'app
+        // 4) Fallback: se l'Intent salvato è avviabile, usalo
+        if (parsedIntent != null) {
+            try {
+                parsedIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(parsedIntent)
+                return
+            } catch (_: Exception) {}
+        }
+
+        // 5) Ultimo fallback: apri l'app
         try {
             val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
             if (launchIntent != null) {
