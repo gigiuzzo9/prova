@@ -103,7 +103,9 @@ class HomeActivity : AppCompatActivity() {
     private var lastWidgetSlotsHash = 0
     private var lastWidgetPage = -1
 
+    // Identità completa dello slot in drag (app o scorciatoia, con istanza)
     private var draggingShortcutId: String = ""
+    private var draggingInstanceId: String = ""
 
     private val REQUEST_BIND_WIDGET = 101
     private val REQUEST_CONFIGURE_WIDGET = 102
@@ -233,10 +235,16 @@ class HomeActivity : AppCompatActivity() {
             if (slot.shortcutId.isNotEmpty()) {
                 try {
                     val launcherApps = getSystemService(LAUNCHER_APPS_SERVICE) as LauncherApps
-                    launcherApps.startShortcut(slot.packageName, slot.shortcutId, null, null, android.os.Process.myUserHandle())
+                    launcherApps.startShortcut(
+                        slot.packageName,
+                        slot.shortcutId,
+                        null,
+                        null,
+                        android.os.Process.myUserHandle()
+                    )
                 } catch (e: Exception) {
                     android.util.Log.e("SHORTCUT", "Errore startShortcut", e)
-                    android.widget.Toast.makeText(this, "Errore: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Errore: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             } else if (slot.packageName.isNotEmpty()) {
                 AppRepository.launchApp(this, slot.packageName)
@@ -245,7 +253,14 @@ class HomeActivity : AppCompatActivity() {
         homeScreenGrid.itemLongClickListener = { slot, view ->
             val app = AppCache.get(slot.packageName)
             if (app != null) {
-                dragController.onLongPress(app, view, DragController.SOURCE_HOME, false)
+                dragController.onLongPress(
+                    app,
+                    view,
+                    DragController.SOURCE_HOME,
+                    false,
+                    shortcutId = slot.shortcutId,
+                    instanceId = slot.instanceId
+                )
             }
         }
         homeScreenGrid.emptyCellLongClickListener = { view ->
@@ -405,14 +420,14 @@ class HomeActivity : AppCompatActivity() {
                         val cropX = (srcBitmap.width - cropW) / 2
                         val cropY = (srcBitmap.height - cropH) / 2
 
-                        val cropped = android.graphics.Bitmap.createBitmap(
+                        val cropped = Bitmap.createBitmap(
                             srcBitmap, cropX, cropY, cropW, cropH
                         )
-                        val scaled = android.graphics.Bitmap.createScaledBitmap(
+                        val scaled = Bitmap.createScaledBitmap(
                             cropped, targetW, targetH, true
                         )
 
-                        val visibleCrop = android.graphics.Rect(0, 0, scaled.width, scaled.height)
+                        val visibleCrop = Rect(0, 0, scaled.width, scaled.height)
                         wm.setBitmap(scaled, visibleCrop, true, WallpaperManager.FLAG_SYSTEM)
 
                         Toast.makeText(this, "Sfondo impostato", Toast.LENGTH_SHORT).show()
@@ -1086,50 +1101,64 @@ class HomeActivity : AppCompatActivity() {
             activity = this,
             homeRecyclerView = homeScreenGrid,
             drawerOverlay = drawerOverlay,
-            onDragStart = { source, pkg, widgetId, widthCells, heightCells, x, y ->
-                draggingShortcutId = PrefsSync.homeSlots(this).firstOrNull {
-                    it.packageName == pkg && it.shortcutId.isNotEmpty()
-                }?.shortcutId ?: ""
+            onDragStart = { source, pkg, shortcutId, instanceId, widgetId, widthCells, heightCells, x, y ->
+                // Identità dello slot in drag: presa direttamente dal DragController
+                draggingShortcutId = shortcutId
+                draggingInstanceId = instanceId
                 showDragOverlay(source, pkg, widgetId, widthCells, heightCells, x, y)
             },
             onDragMove = { x, y -> updateDragOverlay(x, y) },
-            onDropOnHome = { source, pkg, widgetId, x, y ->
+            onDropOnHome = { source, pkg, shortcutId, instanceId, widgetId, x, y ->
                 hideDragOverlay()
                 if (source == DragController.SOURCE_WIDGET) {
                     handleWidgetDrop(widgetId, x, y)
                     true
                 } else {
-                    handleDropOnHome(source, pkg, x, y)
+                    handleDropOnHome(source, pkg, shortcutId, instanceId, x, y)
                 }
             },
-            onDropOnDrawer = { pkg ->
+            onDropOnDrawer = { pkg, shortcutId, instanceId ->
                 hideDragOverlay()
-                handleDropOnDrawer(pkg)
+                handleDropOnDrawer(pkg, shortcutId, instanceId)
             },
-            onDropOnDock = { source, pkg, x, y ->
+            onDropOnDock = { source, pkg, shortcutId, instanceId, x, y ->
                 hideDragOverlay()
-                handleDropOnDock(source, pkg, x, y)
+                handleDropOnDock(source, pkg, shortcutId, instanceId, x, y)
             },
-            onDragEnd = { hideDragOverlay() },
+            onDragEnd = {
+                hideDragOverlay()
+                draggingShortcutId = ""
+                draggingInstanceId = ""
+            },
             onVisualDragStart = { source, pkg ->
-                setDraggingApp(pkg, source)
+                setDraggingApp(pkg, source, draggingShortcutId, draggingInstanceId)
             },
             onVisualDragEnd = { source, pkg ->
-                homeScreenGrid.post { setDraggingApp(null, source) }
+                homeScreenGrid.post { setDraggingApp(null, source, "", "") }
             }
         )
     }
 
-    private fun setDraggingApp(pkg: String?, source: String) {
+    private fun setDraggingApp(
+        pkg: String?,
+        source: String,
+        shortcutId: String = "",
+        instanceId: String = ""
+    ) {
         when (source) {
             DragController.SOURCE_HOME -> {
-                homeScreenGrid.setDraggingPackage(pkg, homeScreenGrid.getCurrentPage())
+                homeScreenGrid.setDraggingPackage(
+                    pkg,
+                    homeScreenGrid.getCurrentPage(),
+                    shortcutId,
+                    instanceId
+                )
             }
             DragController.SOURCE_DRAWER -> {
                 drawerAdapter.setDraggingPackage(pkg)
             }
             DragController.SOURCE_DOCK -> {
-                dockController.setDraggingPackage(pkg)
+                dockController.setDraggingPackage(pkg, shortcutId, instanceId)
             }
         }
     }
@@ -1213,10 +1242,14 @@ class HomeActivity : AppCompatActivity() {
                 y >= loc[1] && y <= loc[1] + drawerOverlay.height
     }
 
-    private fun handleDropOnDock(source: String, pkg: String, x: Float, y: Float) {
-        val shortcutId = draggingShortcutId
-        draggingShortcutId = ""
-
+    private fun handleDropOnDock(
+        source: String,
+        pkg: String,
+        shortcutId: String,
+        instanceId: String,
+        x: Float,
+        y: Float
+    ) {
         var closestIndex = 0
         var closestDist = Float.MAX_VALUE
         dockSlots.forEachIndexed { index, slot ->
@@ -1230,9 +1263,9 @@ class HomeActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             if (source == DragController.SOURCE_DOCK) {
-                dockController.swapDockSlots(pkg, closestIndex)
+                dockController.swapDockSlots(pkg, closestIndex, shortcutId, instanceId)
             } else {
-                dockController.addToDockAtPublic(pkg, closestIndex, shortcutId)
+                dockController.addToDockAtPublic(pkg, closestIndex, shortcutId, instanceId)
             }
 
             dockController.refresh()
@@ -1256,8 +1289,15 @@ class HomeActivity : AppCompatActivity() {
         dockController = DockController(
             activity = this,
             slots = dockSlots,
-            onAppLongPressed = { app, view ->
-                dragController.onLongPress(app, view, DragController.SOURCE_DOCK, false)
+            onAppLongPressed = { app, view, shortcutId, instanceId ->
+                dragController.onLongPress(
+                    app,
+                    view,
+                    DragController.SOURCE_DOCK,
+                    false,
+                    shortcutId = shortcutId,
+                    instanceId = instanceId
+                )
             }
         )
         dockController.setup()
@@ -1286,7 +1326,14 @@ class HomeActivity : AppCompatActivity() {
                 closeDrawer()
             },
             onLongPress = { app, view ->
-                dragController.onLongPress(app, view, DragController.SOURCE_DRAWER, true)
+                dragController.onLongPress(
+                    app,
+                    view,
+                    DragController.SOURCE_DRAWER,
+                    true,
+                    shortcutId = "",
+                    instanceId = ""
+                )
             }
         )
         drawerRecyclerView.adapter = drawerAdapter
@@ -1325,10 +1372,18 @@ class HomeActivity : AppCompatActivity() {
         }
         contextMenuView.onRemove = {
             currentApp?.let { app ->
-                val homeSlots = PrefsSync.homeSlots(this)
-                val dockItems = PrefsSync.dockItems(this)
-                PrefsSync.setHomeSlots(this, homeSlots.filter { it.packageName != app.packageName })
-                PrefsSync.setDockItems(this, dockItems.map { if (it == app.packageName) "" else it })
+                val key = when {
+                    draggingShortcutId.isEmpty() -> app.packageName
+                    draggingInstanceId.isEmpty() -> "${app.packageName}|$draggingShortcutId"
+                    else -> "${app.packageName}|$draggingShortcutId|$draggingInstanceId"
+                }
+                PrefsSync.removeHomeSlotByKey(this, key)
+                PrefsSync.removeDockSlotByKey(
+                    this,
+                    app.packageName,
+                    draggingShortcutId,
+                    draggingInstanceId
+                )
                 loadHomeApps()
                 dockController.refresh()
             }
@@ -1336,7 +1391,7 @@ class HomeActivity : AppCompatActivity() {
         contextMenuView.onChangeIcon = {
             currentApp?.let { app ->
                 pendingIconPackage = app.packageName
-                pendingIconShortcutId = null
+                pendingIconShortcutId = draggingShortcutId.ifEmpty { null }
                 val hasCustomIcon = PrefsSync.customIcons(this).containsKey(app.packageName)
 
                 val builder = AlertDialog.Builder(this)
@@ -1360,7 +1415,10 @@ class HomeActivity : AppCompatActivity() {
                 builder.show()
             }
         }
-        contextMenuView.onDismiss = { currentApp = null; currentAnchor = null }
+        contextMenuView.onDismiss = {
+            currentApp = null
+            currentAnchor = null
+        }
     }
 
     private fun setupHomePopup() {
@@ -1506,119 +1564,131 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleDropOnHome(source: String, pkg: String, x: Float, y: Float): Boolean {
-    if (isDropInProgress) return false
-    isDropInProgress = true
-    val pageIndex = homeScreenGrid.getCurrentPage()
+    private fun handleDropOnHome(
+        source: String,
+        pkg: String,
+        shortcutId: String,
+        instanceId: String,
+        x: Float,
+        y: Float
+    ): Boolean {
+        if (isDropInProgress) return false
+        isDropInProgress = true
+        val pageIndex = homeScreenGrid.getCurrentPage()
 
-    val loc = IntArray(2)
-    homeScreenGrid.getLocationOnScreen(loc)
-    val localX = x - loc[0]
-    val localY = y - loc[1]
+        val loc = IntArray(2)
+        homeScreenGrid.getLocationOnScreen(loc)
+        val localX = x - loc[0]
+        val localY = y - loc[1]
 
-    val cellW = homeScreenGrid.width / currentCols
-    val cellH = homeScreenGrid.height / currentRows
-    val col = (localX / cellW).toInt().coerceIn(0, currentCols - 1)
-    val row = (localY / cellH).toInt().coerceIn(0, currentRows - 1)
+        val cellW = homeScreenGrid.width / currentCols
+        val cellH = homeScreenGrid.height / currentRows
+        val col = (localX / cellW).toInt().coerceIn(0, currentCols - 1)
+        val row = (localY / cellH).toInt().coerceIn(0, currentRows - 1)
 
-    val widgetSlots = PrefsSync.widgetSlots(this)
-    val widgetCells = mutableSetOf<Pair<Int, Int>>()
-    widgetSlots.filter { it.page == pageIndex }.forEach { w ->
-        for (r in w.row until w.row + w.heightCells) {
-            for (c in w.col until w.col + w.widthCells) {
-                widgetCells.add(r to c)
-            }
-        }
-    }
-
-    // Salva lo shortcutId e resetta subito (per non usarlo due volte)
-    val shortcutId = draggingShortcutId
-    draggingShortcutId = ""
-
-    if (widgetCells.contains(row to col)) {
-        var found = false
-        val currentSlots = PrefsSync.homeSlots(this)
-        for (r in 0 until currentRows) {
-            for (c in 0 until currentCols) {
-                val occupiedBySlot = currentSlots.any {
-                    it.page == pageIndex && it.row == r && it.col == c &&
-                        !(it.packageName == pkg && it.shortcutId == shortcutId)
-                }
-                val occupiedByWidget = widgetCells.contains(r to c)
-                if (!occupiedBySlot && !occupiedByWidget) {
-                    moveToCell(pkg, shortcutId, r, c, pageIndex)
-                    found = true
-                    break
+        val widgetSlots = PrefsSync.widgetSlots(this)
+        val widgetCells = mutableSetOf<Pair<Int, Int>>()
+        widgetSlots.filter { it.page == pageIndex }.forEach { w ->
+            for (r in w.row until w.row + w.heightCells) {
+                for (c in w.col until w.col + w.widthCells) {
+                    widgetCells.add(r to c)
                 }
             }
-            if (found) break
         }
+
+        // uniqueKey dello slot trascinato
+        val movingKey = when {
+            shortcutId.isEmpty() -> pkg
+            instanceId.isEmpty() -> "$pkg|$shortcutId"
+            else -> "$pkg|$shortcutId|$instanceId"
+        }
+
+        if (widgetCells.contains(row to col)) {
+            // Cerca una cella libera per lo slot trascinato (escludendo se stesso)
+            var found = false
+            val currentSlots = PrefsSync.homeSlots(this)
+            for (r in 0 until currentRows) {
+                for (c in 0 until currentCols) {
+                    val occupiedBySlot = currentSlots.any {
+                        it.page == pageIndex && it.row == r && it.col == c &&
+                            it.uniqueKey != movingKey
+                    }
+                    val occupiedByWidget = widgetCells.contains(r to c)
+                    if (!occupiedBySlot && !occupiedByWidget) {
+                        moveToCell(pkg, shortcutId, instanceId, r, c, pageIndex)
+                        found = true
+                        break
+                    }
+                }
+                if (found) break
+            }
+            isDropInProgress = false
+            return true
+        }
+
+        moveToCell(pkg, shortcutId, instanceId, row, col, pageIndex)
         isDropInProgress = false
         return true
     }
 
-    moveToCell(pkg, shortcutId, row, col, pageIndex)
-    isDropInProgress = false
-    return true
-}
+    private fun moveToCell(
+        pkg: String,
+        shortcutId: String,
+        instanceId: String,
+        row: Int,
+        col: Int,
+        pageIndex: Int
+    ) {
+        val slots = PrefsSync.homeSlots(this).toMutableList()
 
-private fun moveToCell(pkg: String, shortcutId: String, row: Int, col: Int, pageIndex: Int) {
-    val slots = PrefsSync.homeSlots(this).toMutableList()
-
-    val movingKey = if (shortcutId.isNotEmpty()) "$pkg|$shortcutId" else pkg
-
-    // Rimuovi SOLO lo slot originale (per uniqueKey)
-    val originalSlot = slots.firstOrNull { it.uniqueKey == movingKey }
-    if (originalSlot != null) {
-        slots.remove(originalSlot)
-    } else {
-        val samePkg = slots.filter { it.packageName == pkg }
-        if (samePkg.size == 1) {
-            slots.remove(samePkg[0])
+        val movingKey = when {
+            shortcutId.isEmpty() -> pkg
+            instanceId.isEmpty() -> "$pkg|$shortcutId"
+            else -> "$pkg|$shortcutId|$instanceId"
         }
-    }
 
-    // Rimuovi lo slot che occupa la destinazione (se c'è), senza spostarlo
-    slots.removeAll {
-        it.page == pageIndex && it.row == row && it.col == col && it.uniqueKey != movingKey
-    }
+        // Rimuovi SOLO lo slot originale identificato per uniqueKey
+        slots.removeAll { it.uniqueKey == movingKey }
 
-    // Aggiungi il nuovo slot nella destinazione
-    slots.add(
-        HomeSlot(
-            packageName = pkg,
-            row = row,
-            col = col,
-            page = pageIndex,
-            shortcutId = shortcutId
+        // Rimuovi l'eventuale occupante della cella destinazione
+        slots.removeAll {
+            it.page == pageIndex && it.row == row && it.col == col && it.uniqueKey != movingKey
+        }
+
+        // Aggiungi il nuovo slot nella destinazione
+        slots.add(
+            HomeSlot(
+                packageName = pkg,
+                row = row,
+                col = col,
+                page = pageIndex,
+                shortcutId = shortcutId,
+                instanceId = instanceId
+            )
         )
-    )
-    PrefsSync.setHomeSlots(this, slots)
+        PrefsSync.setHomeSlots(this, slots)
 
-    // Rimuovi dalla dock se presente
-    val dockItems = PrefsSync.dockItems(this)
-    if (dockItems.contains(pkg)) {
-        PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
-        val dockShortcutIds = PrefsSync.dockShortcutIds(this).toMutableList()
-        while (dockShortcutIds.size < 4) dockShortcutIds.add("")
-        val dockIndex = dockItems.indexOf(pkg)
-        if (dockIndex != -1) {
-            dockShortcutIds[dockIndex] = ""
-            PrefsSync.setDockShortcutIds(this, dockShortcutIds)
-        }
+        // Rimuovi dalla dock SOLO la tripla esatta (pkg, shortcutId, instanceId)
+        PrefsSync.removeDockSlotByKey(this, pkg, shortcutId, instanceId)
+
+        homeScreenGrid.setGridSize(currentCols, currentRows)
+        homeScreenGrid.setPageCount(currentPageCount)
+        homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+
         dockController.refresh()
     }
 
-    homeScreenGrid.setGridSize(currentCols, currentRows)
-    homeScreenGrid.setPageCount(currentPageCount)
-    homeScreenGrid.setItems(PrefsSync.homeSlots(this))
-}
+    private fun handleDropOnDrawer(pkg: String, shortcutId: String, instanceId: String) {
+        // Rimuovi SOLO lo slot trascinato dalla home
+        val key = when {
+            shortcutId.isEmpty() -> pkg
+            instanceId.isEmpty() -> "$pkg|$shortcutId"
+            else -> "$pkg|$shortcutId|$instanceId"
+        }
+        PrefsSync.removeHomeSlotByKey(this, key)
+        // Rimuovi dalla dock SOLO la tripla esatta
+        PrefsSync.removeDockSlotByKey(this, pkg, shortcutId, instanceId)
 
-    private fun handleDropOnDrawer(pkg: String) {
-        val slots = PrefsSync.homeSlots(this)
-        PrefsSync.setHomeSlots(this, slots.filter { it.packageName != pkg })
-        val dockItems = PrefsSync.dockItems(this)
-        PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
         homeScreenGrid.setItems(PrefsSync.homeSlots(this))
         dockController.refresh()
     }
