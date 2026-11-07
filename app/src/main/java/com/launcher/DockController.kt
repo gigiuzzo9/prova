@@ -36,6 +36,8 @@ class DockController(
 
             val density = activity.resources.displayMetrics.density
             val size = (62 * density).toInt()
+            val customIcons = PrefsSync.customIcons(activity)
+            val customShortcutIcons = PrefsSync.customShortcutIcons(activity)
 
             slots.forEachIndexed { index, slot ->
                 slot.removeAllViews()
@@ -45,31 +47,41 @@ class DockController(
                 val app = if (pkg.isNullOrBlank()) null else byPkg[pkg]
 
                 if (app != null) {
-                    val uniqueKey = PrefsSync.iconKeyFor(app.packageName, shortcutId, instanceId)
+                    val uniqueKey = when {
+                        shortcutId.isEmpty() -> app.packageName
+                        instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
+                        else -> "${app.packageName}|$shortcutId|$instanceId"
+                    }
 
-                    // Icona: priorità a custom (mappa unica) > shortcut > app
-                    val customPath = PrefsSync.getCustomIconPath(
-                        activity, app.packageName, shortcutId, instanceId
-                    )
-                    val customBmp = if (customPath != null) {
-                        val f = java.io.File(customPath)
-                        if (f.exists()) android.graphics.BitmapFactory.decodeFile(customPath) else null
-                    } else null
-
-                    val bitmap: android.graphics.Bitmap? = customBmp
-                        ?: if (shortcutId.isNotEmpty()) {
-                            loadShortcutIconBitmap(app.packageName, shortcutId, size * 3)
-                                ?: AppCache.getIconBitmap(app.packageName, size * 3)
-                        } else {
-                            AppCache.getIconBitmap(app.packageName, size * 3)
-                        }
+                    val bitmap: android.graphics.Bitmap? = if (shortcutId.isNotEmpty()) {
+                        val customPath = customShortcutIcons[uniqueKey]
+                        val customBmp = if (customPath != null) {
+                            val f = java.io.File(customPath)
+                            if (f.exists()) android.graphics.BitmapFactory.decodeFile(customPath) else null
+                        } else null
+                        customBmp
+                            ?: loadShortcutIconBitmap(app.packageName, shortcutId, size * 3)
+                            ?: AppCache.getIconBitmap(app.packageName, size * 3)
+                    } else {
+                        val customPath = customIcons[app.packageName]
+                        val customBmp = if (customPath != null) {
+                            val f = java.io.File(customPath)
+                            if (f.exists()) android.graphics.BitmapFactory.decodeFile(customPath) else null
+                        } else null
+                        customBmp ?: AppCache.getIconBitmap(app.packageName, size * 3)
+                    }
 
                     val imageView = ImageView(activity)
                     if (bitmap != null) {
                         imageView.setImageBitmap(bitmap)
                     }
 
-                    if (customPath != null) {
+                    val hasCustom = if (shortcutId.isNotEmpty()) {
+                        customShortcutIcons.containsKey(uniqueKey)
+                    } else {
+                        customIcons.containsKey(app.packageName)
+                    }
+                    if (hasCustom) {
                         val pad = (size * 0.035f).toInt()
                         imageView.setPadding(pad, pad, pad, pad)
                     }
@@ -116,7 +128,11 @@ class DockController(
     }
 
     fun setDraggingPackage(pkg: String?, shortcutId: String = "", instanceId: String = "") {
-        val targetKey: String? = if (pkg == null) null else PrefsSync.iconKeyFor(pkg, shortcutId, instanceId)
+        val targetKey: String? = if (pkg == null) null else when {
+            shortcutId.isEmpty() -> pkg
+            instanceId.isEmpty() -> "$pkg|$shortcutId"
+            else -> "$pkg|$shortcutId|$instanceId"
+        }
         slots.forEach { slot ->
             val iv = slot.getChildAt(0) as? ImageView ?: return@forEach
             val slotKey = slot.tag as? String
