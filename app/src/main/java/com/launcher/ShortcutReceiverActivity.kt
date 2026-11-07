@@ -3,6 +3,7 @@ package com.simplylauncher
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.os.Bundle
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 
 class ShortcutReceiverActivity : AppCompatActivity() {
@@ -18,6 +19,28 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                 val packageName = shortcutInfo.`package`
                 val realShortcutId = shortcutInfo.id
 
+                // ===== LOG DIAGNOSTICO =====
+                Log.d("PIN_DEBUG", "=== SHORTCUT PINNATA ===")
+                Log.d("PIN_DEBUG", "pkg=$packageName id=$realShortcutId")
+                Log.d("PIN_DEBUG", "intent=${shortcutInfo.intent}")
+                Log.d("PIN_DEBUG", "intent action=${shortcutInfo.intent?.action}")
+                Log.d("PIN_DEBUG", "intent data=${shortcutInfo.intent?.data}")
+                Log.d("PIN_DEBUG", "intent flags=${shortcutInfo.intent?.flags}")
+                Log.d("PIN_DEBUG", "intent extras=${shortcutInfo.intent?.extras?.keySet()}")
+                shortcutInfo.intent?.extras?.keySet()?.forEach { key ->
+                    Log.d("PIN_DEBUG", "  extra[$key]=${shortcutInfo.intent?.extras?.get(key)}")
+                }
+                Log.d("PIN_DEBUG", "intents count=${shortcutInfo.intents?.size}")
+                shortcutInfo.intents?.forEachIndexed { i, it ->
+                    Log.d("PIN_DEBUG", "  intents[$i] action=${it.action} data=${it.data} extras=${it.extras?.keySet()}")
+                    it.extras?.keySet()?.forEach { key ->
+                        Log.d("PIN_DEBUG", "    intents[$i].extra[$key]=${it.extras?.get(key)}")
+                    }
+                }
+                Log.d("PIN_DEBUG", "categories=${shortcutInfo.categories}")
+                Log.d("PIN_DEBUG", "longLabel=${shortcutInfo.longLabel} shortLabel=${shortcutInfo.shortLabel}")
+                // ===== FINE LOG =====
+
                 val existingSlots = PrefsSync.homeSlots(this)
                 val sameShortcutExists = existingSlots.any {
                     it.packageName == packageName && it.shortcutId == realShortcutId
@@ -28,18 +51,23 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     ""
                 }
 
-                // Salva l'Intent originale della shortcut (utile per i collegamenti browser
-                // e per fallback quando LauncherApps.startShortcut fallisce)
+                // Salva l'Intent originale (prova sia intent che intents[0])
                 val uniqueKey = when {
                     instanceId.isEmpty() -> "$packageName|$realShortcutId"
                     else -> "$packageName|$realShortcutId|$instanceId"
                 }
                 val originalIntent = shortcutInfo.intent
+                    ?: shortcutInfo.intents?.firstOrNull()
                 if (originalIntent != null) {
                     try {
                         val intentUri = originalIntent.toUri(Intent.URI_INTENT_SCHEME)
                         PrefsSync.setShortcutIntent(this, uniqueKey, intentUri)
-                    } catch (_: Exception) {}
+                        Log.d("PIN_DEBUG", "Salvato intent per $uniqueKey: $intentUri")
+                    } catch (e: Exception) {
+                        Log.e("PIN_DEBUG", "Errore salvataggio intent: ${e.message}", e)
+                    }
+                } else {
+                    Log.e("PIN_DEBUG", "NESSUNA INTENT per $uniqueKey")
                 }
 
                 placeShortcutOnFirstFreeCell(packageName, realShortcutId, instanceId)
