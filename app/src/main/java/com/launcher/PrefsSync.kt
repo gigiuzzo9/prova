@@ -40,9 +40,21 @@ object PrefsSync {
             .apply()
     }
 
-    /** Cerca uno slot per chiave univoca (packageName o packageName|shortcutId). */
+    /** Cerca uno slot per chiave univoca (packageName o packageName|shortcutId[|instanceId]). */
     fun findSlotByUniqueKey(context: Context, uniqueKey: String): HomeSlot? =
         homeSlots(context).firstOrNull { it.uniqueKey == uniqueKey }
+
+    /**
+     * Rimuove lo slot con la chiave univoca indicata.
+     * Ritorna true se qualcosa è stato rimosso.
+     */
+    fun removeHomeSlotByKey(context: Context, uniqueKey: String): Boolean {
+        val slots = homeSlots(context)
+        val filtered = slots.filterNot { it.uniqueKey == uniqueKey }
+        if (filtered.size == slots.size) return false
+        setHomeSlots(context, filtered)
+        return true
+    }
 
     // --- Widget slots ---
 
@@ -77,6 +89,57 @@ object PrefsSync {
         val normalized = ids.toMutableList()
         while (normalized.size < 4) normalized.add("")
         prefs(context).edit().putString("dock_shortcut_ids", normalized.joinToString(",")).apply()
+    }
+
+    // --- Dock instance IDs (distingue istanze multiple della stessa scorciatoia) ---
+
+    fun dockInstanceIds(context: Context): List<String> {
+        val raw = prefs(context).getString("dock_instance_ids", "") ?: ""
+        return if (raw.isEmpty()) emptyList() else raw.split(",")
+    }
+
+    fun setDockInstanceIds(context: Context, ids: List<String>) {
+        val normalized = ids.toMutableList()
+        while (normalized.size < 4) normalized.add("")
+        prefs(context).edit().putString("dock_instance_ids", normalized.joinToString(",")).apply()
+    }
+
+    /**
+     * Rimuove dalla dock lo slot identificato da (pkg, shortcutId, instanceId).
+     * Ritorna true se qualcosa è stato rimosso.
+     */
+    fun removeDockSlotByKey(
+        context: Context,
+        pkg: String,
+        shortcutId: String,
+        instanceId: String
+    ): Boolean {
+        val items = dockItems(context).toMutableList()
+        while (items.size < 4) items.add("")
+        val ids = dockShortcutIds(context).toMutableList()
+        while (ids.size < 4) ids.add("")
+        val insts = dockInstanceIds(context).toMutableList()
+        while (insts.size < 4) insts.add("")
+
+        var removed = false
+        for (i in items.indices) {
+            if (items[i] == pkg &&
+                (ids.getOrNull(i) ?: "") == shortcutId &&
+                (insts.getOrNull(i) ?: "") == instanceId
+            ) {
+                items[i] = ""
+                ids[i] = ""
+                insts[i] = ""
+                removed = true
+                break
+            }
+        }
+        if (removed) {
+            setDockItems(context, items)
+            setDockShortcutIds(context, ids)
+            setDockInstanceIds(context, insts)
+        }
+        return removed
     }
 
     // --- Custom labels ---
@@ -122,7 +185,7 @@ object PrefsSync {
         prefs(context).edit().putString("custom_icons", raw).apply()
     }
 
-    // --- Custom Icons per le scorciatoie (chiave = packageName|shortcutId) ---
+    // --- Custom Icons per le scorciatoie (chiave = uniqueKey = pkg|shortcutId[|instanceId]) ---
 
     fun customShortcutIcons(context: Context): Map<String, String> {
         val raw = prefs(context).getString("custom_shortcut_icons", "") ?: ""
