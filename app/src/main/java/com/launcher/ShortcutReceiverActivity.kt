@@ -18,8 +18,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                 val packageName = shortcutInfo.`package`
                 val realShortcutId = shortcutInfo.id
 
-                // Se esiste già uno slot con la stessa (pkg, shortcutId), generiamo
-                // un instanceId per distinguere questa nuova istanza.
                 val existingSlots = PrefsSync.homeSlots(this)
                 val sameShortcutExists = existingSlots.any {
                     it.packageName == packageName && it.shortcutId == realShortcutId
@@ -30,33 +28,13 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     ""
                 }
 
-                val placed = placeShortcutOnFirstFreeCell(packageName, realShortcutId, instanceId)
-                if (placed) {
-                    // Salva l'Intent originale come fallback per il click,
-                    // in caso la shortcut dinamica sparisca (browser che la rimuove).
-                    val originalIntent = shortcutInfo.intent
-                    if (originalIntent != null) {
-                        val uniqueKey = when {
-                            instanceId.isEmpty() -> "${packageName}|${realShortcutId}"
-                            else -> "${packageName}|${realShortcutId}|${instanceId}"
-                        }
-                        PrefsSync.setShortcutIntent(
-                            this,
-                            uniqueKey,
-                            originalIntent.toUri(Intent.URI_INTENT_SCHEME)
-                        )
-                    }
-                    sendBroadcast(Intent("com.simplylauncher.RELOAD"))
-                }
+                placeShortcutOnFirstFreeCell(packageName, realShortcutId, instanceId)
+                sendBroadcast(Intent("com.simplylauncher.RELOAD"))
             }
         }
         finish()
     }
 
-    /**
-     * Cerca la prima cella libera (slot + widget) a partire da pagina 0.
-     * Ritorna true se lo slot è stato piazzato e salvato.
-     */
     private fun placeShortcutOnFirstFreeCell(
         packageName: String,
         shortcutId: String,
@@ -67,7 +45,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         val slots = PrefsSync.homeSlots(this).toMutableList()
         val widgets = PrefsSync.widgetSlots(this)
 
-        // Celle occupate per pagina (slot + widget)
         val occupiedByPage = HashMap<Int, MutableSet<Pair<Int, Int>>>()
         fun occupied(page: Int): MutableSet<Pair<Int, Int>> =
             occupiedByPage.getOrPut(page) { mutableSetOf() }
@@ -100,7 +77,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             if (targetRow == -1) {
                 page++
                 if (page >= 20) {
-                    // Nessuno spazio entro 20 pagine: rinuncia
                     return false
                 }
             }
