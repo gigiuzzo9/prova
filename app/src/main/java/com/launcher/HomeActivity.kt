@@ -67,6 +67,7 @@ class HomeActivity : AppCompatActivity() {
     private var currentAnchor: View? = null
     private var pendingIconPackage: String? = null
     private var pendingIconShortcutId: String? = null
+    private var pendingIconInstanceId: String = ""
 
     private lateinit var homePopupMenu: HomePopupMenu
 
@@ -103,7 +104,6 @@ class HomeActivity : AppCompatActivity() {
     private var lastWidgetSlotsHash = 0
     private var lastWidgetPage = -1
 
-    // Identità completa dello slot in drag (app o scorciatoia, con istanza)
     private var draggingShortcutId: String = ""
     private var draggingInstanceId: String = ""
 
@@ -231,97 +231,94 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupGrid() {
-    homeScreenGrid.itemClickListener = { slot ->
-        if (slot.shortcutId.isNotEmpty()) {
-            val launched = try {
-                val launcherApps = getSystemService(LAUNCHER_APPS_SERVICE) as LauncherApps
-                launcherApps.startShortcut(
-                    slot.packageName,
-                    slot.shortcutId,
-                    null,
-                    null,
-                    android.os.Process.myUserHandle()
-                )
-                true
-            } catch (e: Exception) {
-                android.util.Log.e("SHORTCUT", "startShortcut fallito, provo fallback", e)
-                false
-            }
-            if (!launched) {
-                // fallback: Intent salvato al pin
-                val savedUri = PrefsSync.shortcutIntents(this)[slot.uniqueKey]
-                if (savedUri != null) {
-                    try {
-                        val intent = Intent.parseUri(savedUri, Intent.URI_INTENT_SCHEME)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        startActivity(intent)
-                    } catch (e: Exception) {
+        homeScreenGrid.itemClickListener = { slot ->
+            if (slot.shortcutId.isNotEmpty()) {
+                val launched = try {
+                    val launcherApps = getSystemService(LAUNCHER_APPS_SERVICE) as LauncherApps
+                    launcherApps.startShortcut(
+                        slot.packageName,
+                        slot.shortcutId,
+                        null,
+                        null,
+                        android.os.Process.myUserHandle()
+                    )
+                    true
+                } catch (e: Exception) {
+                    android.util.Log.e("SHORTCUT", "startShortcut fallito, provo fallback", e)
+                    false
+                }
+                if (!launched) {
+                    val savedUri = PrefsSync.shortcutIntents(this)[slot.uniqueKey]
+                    if (savedUri != null) {
+                        try {
+                            val intent = Intent.parseUri(savedUri, Intent.URI_INTENT_SCHEME)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "Scorciatoia non più disponibile", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
                         Toast.makeText(this, "Scorciatoia non più disponibile", Toast.LENGTH_SHORT).show()
                     }
-                } else {
-                    Toast.makeText(this, "Scorciatoia non più disponibile", Toast.LENGTH_SHORT).show()
                 }
+            } else if (slot.packageName.isNotEmpty()) {
+                AppRepository.launchApp(this, slot.packageName)
             }
-        } else if (slot.packageName.isNotEmpty()) {
-            AppRepository.launchApp(this, slot.packageName)
         }
-    }
-    homeScreenGrid.itemLongClickListener = { slot, view ->
-        val app = AppCache.get(slot.packageName)
-        if (app != null) {
-            // Imposta subito l'identità dello slot, così il context menu
-            // sa su quale scorciatoia/istanza agire.
-            draggingShortcutId = slot.shortcutId
-            draggingInstanceId = slot.instanceId
-            dragController.onLongPress(
-                app,
-                view,
-                DragController.SOURCE_HOME,
-                false,
-                shortcutId = slot.shortcutId,
-                instanceId = slot.instanceId
-            )
-        }
-    }
-    homeScreenGrid.emptyCellLongClickListener = { view ->
-        showHomePopup(view)
-    }
-
-    homeScreenGrid.onSwipeOffsetChanged = { offset ->
-        widgetContainer.translationX = offset
-
-        val page = homeScreenGrid.getCurrentPage()
-        val adj = when {
-            offset > 0 && page > 0 -> page - 1
-            offset < 0 && page < currentPageCount - 1 -> page + 1
-            else -> -1
-        }
-        if (adj != -1) {
-            if (adjWidgetPage != adj) {
-                adjWidgetPage = adj
-                renderWidgetsForPage(adj, widgetContainer2)
+        homeScreenGrid.itemLongClickListener = { slot, view ->
+            val app = AppCache.get(slot.packageName)
+            if (app != null) {
+                draggingShortcutId = slot.shortcutId
+                draggingInstanceId = slot.instanceId
+                dragController.onLongPress(
+                    app,
+                    view,
+                    DragController.SOURCE_HOME,
+                    false,
+                    shortcutId = slot.shortcutId,
+                    instanceId = slot.instanceId
+                )
             }
-            val sign = if (offset > 0) -1 else 1
-            widgetContainer2.translationX = offset + sign * homeScreenGrid.width
-        } else {
+        }
+        homeScreenGrid.emptyCellLongClickListener = { view ->
+            showHomePopup(view)
+        }
+
+        homeScreenGrid.onSwipeOffsetChanged = { offset ->
+            widgetContainer.translationX = offset
+
+            val page = homeScreenGrid.getCurrentPage()
+            val adj = when {
+                offset > 0 && page > 0 -> page - 1
+                offset < 0 && page < currentPageCount - 1 -> page + 1
+                else -> -1
+            }
+            if (adj != -1) {
+                if (adjWidgetPage != adj) {
+                    adjWidgetPage = adj
+                    renderWidgetsForPage(adj, widgetContainer2)
+                }
+                val sign = if (offset > 0) -1 else 1
+                widgetContainer2.translationX = offset + sign * homeScreenGrid.width
+            } else {
+                widgetContainer2.translationX = 0f
+                widgetContainer2.removeAllViews()
+                adjWidgetPage = -1
+            }
+        }
+
+        homeScreenGrid.pageChangeListener = { page ->
+            pageIndicator.setCurrentPage(page)
+            val tmp = widgetContainer
+            widgetContainer = widgetContainer2
+            widgetContainer2 = tmp
+            widgetContainer.translationX = 0f
             widgetContainer2.translationX = 0f
             widgetContainer2.removeAllViews()
             adjWidgetPage = -1
+            renderWidgets()
         }
     }
-
-    homeScreenGrid.pageChangeListener = { page ->
-        pageIndicator.setCurrentPage(page)
-        val tmp = widgetContainer
-        widgetContainer = widgetContainer2
-        widgetContainer2 = tmp
-        widgetContainer.translationX = 0f
-        widgetContainer2.translationX = 0f
-        widgetContainer2.removeAllViews()
-        adjWidgetPage = -1
-        renderWidgets()
-    }
-}
 
     private fun setupResizeFrame() {
         resizeFrame.onClickListener = { endResizeMode() }
@@ -388,12 +385,12 @@ class HomeActivity : AppCompatActivity() {
             REQUEST_PICK_ICON -> {
                 if (resultCode == RESULT_OK && data?.data != null) {
                     pendingIconPackage?.let { pkg ->
-                        val shortcutId = pendingIconShortcutId
-                        saveCustomIcon(pkg, shortcutId, data.data!!)
+                        saveCustomIcon(pkg, pendingIconShortcutId, pendingIconInstanceId, data.data!!)
                     }
                 }
                 pendingIconPackage = null
                 pendingIconShortcutId = null
+                pendingIconInstanceId = ""
             }
             REQUEST_PICK_WALLPAPER -> {
                 if (resultCode == RESULT_OK && data?.data != null) {
@@ -501,23 +498,19 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveCustomIcon(packageName: String, shortcutIdCombined: String?, uri: Uri) {
+    private fun saveCustomIcon(
+        packageName: String,
+        shortcutId: String?,
+        instanceId: String,
+        uri: Uri
+    ) {
         try {
             val iconsDir = File(filesDir, "custom_icons")
             if (!iconsDir.exists()) iconsDir.mkdirs()
 
-            // shortcutIdCombined = "shortcutId" oppure "shortcutId|instanceId"
-            val isShortcut = shortcutIdCombined != null && shortcutIdCombined.isNotEmpty()
-            val realShortcutId: String
-            val realInstanceId: String
-            if (isShortcut) {
-                val parts = shortcutIdCombined!!.split("|", limit = 2)
-                realShortcutId = parts[0]
-                realInstanceId = parts.getOrElse(1) { "" }
-            } else {
-                realShortcutId = ""
-                realInstanceId = ""
-            }
+            val isShortcut = shortcutId != null && shortcutId.isNotEmpty()
+            val realShortcutId = shortcutId ?: ""
+            val realInstanceId = instanceId
 
             val uniqueKey = when {
                 !isShortcut -> packageName
@@ -1298,37 +1291,35 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun handleDropOnDock(
-    source: String,
-    pkg: String,
-    shortcutId: String,
-    instanceId: String,
-    x: Float,
-    y: Float
-) {
-    var closestIndex = 0
-    var closestDist = Float.MAX_VALUE
-    dockSlots.forEachIndexed { index, slot ->
-        val loc = IntArray(2)
-        slot.getLocationOnScreen(loc)
-        val cx = loc[0] + slot.width / 2f
-        val cy = loc[1] + slot.height / 2f
-        val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble()).toFloat()
-        if (dist < closestDist) { closestDist = dist; closestIndex = index }
-    }
-
-    lifecycleScope.launch {
-        if (source == DragController.SOURCE_DOCK) {
-            dockController.swapDockSlots(pkg, closestIndex, shortcutId, instanceId)
-        } else {
-            dockController.addToDockAtPublic(pkg, closestIndex, shortcutId, instanceId)
+        source: String,
+        pkg: String,
+        shortcutId: String,
+        instanceId: String,
+        x: Float,
+        y: Float
+    ) {
+        var closestIndex = 0
+        var closestDist = Float.MAX_VALUE
+        dockSlots.forEachIndexed { index, slot ->
+            val loc = IntArray(2)
+            slot.getLocationOnScreen(loc)
+            val cx = loc[0] + slot.width / 2f
+            val cy = loc[1] + slot.height / 2f
+            val dist = Math.hypot((x - cx).toDouble(), (y - cy).toDouble()).toFloat()
+            if (dist < closestDist) { closestDist = dist; closestIndex = index }
         }
 
-        dockController.refresh()
-        // Riallinea la griglia: se lo slot è stato rimosso dalla home,
-        // va tolto subito dalla vista (senza aspettare un altro evento).
-        loadHomeApps()
+        lifecycleScope.launch {
+            if (source == DragController.SOURCE_DOCK) {
+                dockController.swapDockSlots(pkg, closestIndex, shortcutId, instanceId)
+            } else {
+                dockController.addToDockAtPublic(pkg, closestIndex, shortcutId, instanceId)
+            }
+
+            dockController.refresh()
+            loadHomeApps()
+        }
     }
-}
 
     private fun handleWidgetDrop(widgetId: Int, x: Float, y: Float) {
         val pageIndex = homeScreenGrid.getCurrentPage()
@@ -1348,7 +1339,6 @@ class HomeActivity : AppCompatActivity() {
             activity = this,
             slots = dockSlots,
             onAppLongPressed = { app, view, shortcutId, instanceId ->
-                // Imposta l'identità dello slot per il context menu
                 draggingShortcutId = shortcutId
                 draggingInstanceId = instanceId
                 dragController.onLongPress(
@@ -1412,92 +1402,83 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupContextMenu() {
-    contextMenuView = AppContextMenuView(this)
-    contextMenuView.onMove = { contextMenuView.dismiss() }
-    contextMenuView.onUninstall = { _, _ ->
-        currentApp?.let { app ->
-            val intent = Intent(Intent.ACTION_DELETE).apply {
-                data = android.net.Uri.fromParts("package", app.packageName, null)
-            }
-            startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
-        }
-    }
-    contextMenuView.onRename = { _, _ ->
-        currentApp?.let { app ->
-            RenameDialog.show(this, app) {
-                AppRepository.invalidateCache()
-                AppRepository.loadInstalledAppsWithCustomLabels(this)
-                homeScreenGrid.setItems(PrefsSync.homeSlots(this))
-                val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
-                drawerAdapter.submitList(apps)
+        contextMenuView = AppContextMenuView(this)
+        contextMenuView.onMove = { contextMenuView.dismiss() }
+        contextMenuView.onUninstall = { _, _ ->
+            currentApp?.let { app ->
+                val intent = Intent(Intent.ACTION_DELETE).apply {
+                    data = android.net.Uri.fromParts("package", app.packageName, null)
+                }
+                startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
             }
         }
-    }
-    contextMenuView.onRemove = { shortcutId, instanceId ->
-        currentApp?.let { app ->
-            val key = when {
-                shortcutId.isEmpty() -> app.packageName
-                instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
-                else -> "${app.packageName}|$shortcutId|$instanceId"
+        contextMenuView.onRename = { _, _ ->
+            currentApp?.let { app ->
+                RenameDialog.show(this, app) {
+                    AppRepository.invalidateCache()
+                    AppRepository.loadInstalledAppsWithCustomLabels(this)
+                    homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+                    val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
+                    drawerAdapter.submitList(apps)
+                }
             }
-            PrefsSync.removeHomeSlotByKey(this, key)
-            PrefsSync.removeDockSlotByKey(this, app.packageName, shortcutId, instanceId)
-            loadHomeApps()
-            dockController.refresh()
         }
-    }
-    contextMenuView.onChangeIcon = { shortcutId, instanceId ->
-        android.widget.Toast.makeText(
-            this,
-            "SID=[$shortcutId] IID=[$instanceId]",
-            Toast.LENGTH_LONG
-        ).show()
-
-        currentApp?.let { app ->
-            pendingIconPackage = app.packageName
-            pendingIconShortcutId = when {
-                shortcutId.isEmpty() -> null
-                instanceId.isEmpty() -> shortcutId
-                else -> "$shortcutId|$instanceId"
+        contextMenuView.onRemove = { shortcutId, instanceId ->
+            currentApp?.let { app ->
+                val key = when {
+                    shortcutId.isEmpty() -> app.packageName
+                    instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
+                    else -> "${app.packageName}|$shortcutId|$instanceId"
+                }
+                PrefsSync.removeHomeSlotByKey(this, key)
+                PrefsSync.removeDockSlotByKey(this, app.packageName, shortcutId, instanceId)
+                loadHomeApps()
+                dockController.refresh()
             }
+        }
+        contextMenuView.onChangeIcon = { shortcutId, instanceId ->
+            currentApp?.let { app ->
+                pendingIconPackage = app.packageName
+                pendingIconShortcutId = if (shortcutId.isEmpty()) null else shortcutId
+                pendingIconInstanceId = instanceId
 
-            val uniqueKey = when {
-                shortcutId.isEmpty() -> app.packageName
-                instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
-                else -> "${app.packageName}|$shortcutId|$instanceId"
-            }
-            val hasCustomIcon = if (shortcutId.isEmpty()) {
-                PrefsSync.customIcons(this).containsKey(app.packageName)
-            } else {
-                PrefsSync.customShortcutIcons(this).containsKey(uniqueKey)
-            }
+                val uniqueKey = when {
+                    shortcutId.isEmpty() -> app.packageName
+                    instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
+                    else -> "${app.packageName}|$shortcutId|$instanceId"
+                }
+                val hasCustomIcon = if (shortcutId.isEmpty()) {
+                    PrefsSync.customIcons(this).containsKey(app.packageName)
+                } else {
+                    PrefsSync.customShortcutIcons(this).containsKey(uniqueKey)
+                }
 
-            val builder = AlertDialog.Builder(this)
-                .setTitle("Cambia icona")
-                .setMessage("Per un risultato migliore, usa un'immagine PNG con sfondo trasparente, di dimensioni 512x512 pixel.")
-                .setPositiveButton("Scegli immagine") { _, _ ->
-                    val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                        type = "image/*"
-                        addCategory(Intent.CATEGORY_OPENABLE)
+                val builder = AlertDialog.Builder(this)
+                    .setTitle("Cambia icona")
+                    .setMessage("Per un risultato migliore, usa un'immagine PNG con sfondo trasparente, di dimensioni 512x512 pixel.")
+                    .setPositiveButton("Scegli immagine") { _, _ ->
+                        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                            type = "image/*"
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                        }
+                        startActivityForResult(intent, REQUEST_PICK_ICON)
                     }
-                    startActivityForResult(intent, REQUEST_PICK_ICON)
-                }
-                .setNegativeButton("Annulla", null)
+                    .setNegativeButton("Annulla", null)
 
-            if (hasCustomIcon) {
-                builder.setNeutralButton("Ripristina") { _, _ ->
-                    restoreCustomIcon(app.packageName, shortcutId, instanceId)
+                if (hasCustomIcon) {
+                    builder.setNeutralButton("Ripristina") { _, _ ->
+                        restoreCustomIcon(app.packageName, shortcutId, instanceId)
+                    }
                 }
+
+                builder.show()
             }
-
-            builder.show()
+        }
+        contextMenuView.onDismiss = {
+            currentApp = null
+            currentAnchor = null
         }
     }
-    contextMenuView.onDismiss = {
-        currentApp = null
-        currentAnchor = null
-    }
-}
 
     private fun setupHomePopup() {
         homePopupMenu = HomePopupMenu(this)
@@ -1563,15 +1544,21 @@ class HomeActivity : AppCompatActivity() {
         homePopupMenu.show(anchor, showRemovePage = currentPageCount > 1)
     }
 
-    fun showContextMenuForDrag(app: AppInfo, anchor: View, fromDrawer: Boolean) {
+    fun showContextMenuForDrag(
+        app: AppInfo,
+        anchor: View,
+        fromDrawer: Boolean,
+        shortcutId: String = "",
+        instanceId: String = ""
+    ) {
         currentApp = app
         currentAnchor = anchor
         contextMenuView.show(
             anchor,
             showRemove = !fromDrawer,
             drawerIsWhite = fromDrawer && (currentDrawerColor == Color.WHITE),
-            shortcutId = draggingShortcutId,
-            instanceId = draggingInstanceId
+            shortcutId = shortcutId,
+            instanceId = instanceId
         )
     }
 
