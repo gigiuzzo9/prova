@@ -16,48 +16,41 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             val shortcutInfo = request.shortcutInfo
             if (shortcutInfo != null && request.accept()) {
                 val packageName = shortcutInfo.`package`
-                val shortcutId = shortcutInfo.id
+                // Genera un ID univoco per questa istanza (non usare shortcutInfo.id)
+                val uniqueId = "shortcut_${System.currentTimeMillis()}_${(0..9999).random()}"
 
-                // Controlla se la scorciatoia è un URL (browser)
-                val isUrlShortcut = shortcutId.startsWith("http://") || shortcutId.startsWith("https://")
-
-                // Controlla se esiste già uno slot con lo stesso packageName e shortcutId
                 val slots = PrefsSync.homeSlots(this).toMutableList()
-                val existing = slots.any {
-                    it.packageName == packageName && it.shortcutId == shortcutId
+
+                // Trova la prima cella libera
+                val occupied = mutableSetOf<Pair<Int, Int>>()
+                slots.forEach { occupied.add(it.row to it.col) }
+
+                var foundRow = 0
+                var foundCol = 0
+                var found = false
+                for (r in 0 until 6) {
+                    for (c in 0 until 4) {
+                        if (!occupied.contains(r to c)) {
+                            foundRow = r
+                            foundCol = c
+                            found = true
+                            break
+                        }
+                    }
+                    if (found) break
                 }
 
-                if (!existing) {
-                    val occupied = mutableSetOf<Pair<Int, Int>>()
-                    slots.forEach { occupied.add(it.row to it.col) }
-
-                    var foundRow = 0
-                    var foundCol = 0
-                    var found = false
-                    for (r in 0 until 6) {
-                        for (c in 0 until 4) {
-                            if (!occupied.contains(r to c)) {
-                                foundRow = r
-                                foundCol = c
-                                found = true
-                                break
-                            }
-                        }
-                        if (found) break
-                    }
-
-                    if (found) {
-                        val newSlot = HomeSlot(
-                            packageName = packageName,
-                            row = foundRow,
-                            col = foundCol,
-                            page = 0,
-                            shortcutId = shortcutId
-                        )
-                        slots.add(newSlot)
-                        PrefsSync.setHomeSlots(this, slots)
-                        sendBroadcast(Intent("com.simplylauncher.RELOAD"))
-                    }
+                if (found) {
+                    val newSlot = HomeSlot(
+                        packageName = packageName,
+                        row = foundRow,
+                        col = foundCol,
+                        page = 0,
+                        shortcutId = uniqueId
+                    )
+                    slots.add(newSlot)
+                    PrefsSync.setHomeSlots(this, slots)
+                    sendBroadcast(Intent("com.simplylauncher.RELOAD"))
                 }
             }
         }
