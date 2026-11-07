@@ -51,7 +51,6 @@ class DockController(
                         imageView.setImageBitmap(bitmap)
                     }
 
-                    // Usa l'icona personalizzata della scorciatoia o quella dell'app
                     val hasCustom = if (shortcutId.isNotEmpty()) {
                         customShortcutIcons.containsKey(uniqueKey)
                     } else {
@@ -106,7 +105,6 @@ class DockController(
         val dockShortcutIds = PrefsSync.dockShortcutIds(activity).toMutableList()
         while (dockShortcutIds.size < 4) dockShortcutIds.add("")
 
-        // Trova lo slot di partenza: prima per packageName, poi per shortcutId
         var fromIndex = dockItems.indexOf(pkg)
         if (fromIndex == -1) {
             fromIndex = dockShortcutIds.indexOfFirst { it.isNotEmpty() }
@@ -146,13 +144,13 @@ class DockController(
         }
         val actualShortcutId = shortcutId.ifEmpty { originalSlot?.shortcutId ?: "" }
 
+        // Rimuovi SOLO lo slot con packageName + shortcutId (non tutti quelli con quel package)
         val filtered = homeSlots.filter {
             if (actualShortcutId.isNotEmpty()) !(it.packageName == pkg && it.shortcutId == actualShortcutId)
             else it.packageName != pkg
         }
         if (filtered.size != homeSlots.size) {
             PrefsSync.setHomeSlots(activity, filtered)
-            activity.removeAppFromGridOnly(pkg)
         }
 
         val previousOccupant = dockItems[slotIndex]
