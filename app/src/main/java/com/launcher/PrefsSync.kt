@@ -2,13 +2,56 @@ package com.simplylauncher
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.json.JSONObject
 
 object PrefsSync {
 
     private const val PREF_NAME = "launcher_prefs_sync"
 
+    // Chiave flag per la pulizia una-tantum del vecchio formato mappe
+    private const val KEY_MAPS_FORMAT_V2 = "maps_format_v2"
+    private const val KEY_MAPS_MIGRATED = "maps_migrated_to_json"
+
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+
+    /**
+     * Pulizia una-tantum: il vecchio formato usava "|" tra entry e ":" tra chiave/valore,
+     * ma le chiavi delle shortcut contengono "|" → dati corrotti.
+     * Alla prima esecuzione con questo codice cancelliamo le vecchie mappe.
+     * Gli utenti riapplicano le icone una volta sola.
+     */
+    private fun ensureMapsFormat(context: Context) {
+        val p = prefs(context)
+        if (p.getBoolean(KEY_MAPS_MIGRATED, false)) return
+        p.edit()
+            .remove("custom_labels")
+            .remove("custom_icons")
+            .remove("custom_shortcut_icons")
+            .putBoolean(KEY_MAPS_MIGRATED, true)
+            .putBoolean(KEY_MAPS_FORMAT_V2, true)
+            .apply()
+    }
+
+    // ---- Helper JSON per mappe ----
+
+    private fun mapToJson(map: Map<String, String>): String {
+        val json = JSONObject()
+        map.forEach { (k, v) -> json.put(k, v) }
+        return json.toString()
+    }
+
+    private fun jsonToMap(raw: String?): Map<String, String> {
+        if (raw.isNullOrEmpty()) return emptyMap()
+        return try {
+            val json = JSONObject(raw)
+            val result = mutableMapOf<String, String>()
+            json.keys().forEach { k -> result[k] = json.optString(k) }
+            result
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
 
     // --- Grid ---
 
@@ -48,7 +91,6 @@ object PrefsSync {
         val filtered = slots.filterNot { it.uniqueKey == uniqueKey }
         if (filtered.size == slots.size) return false
         setHomeSlots(context, filtered)
-        // Rimuovi anche l'eventuale intent associato
         removeShortcutIntent(context, uniqueKey)
         return true
     }
@@ -127,7 +169,6 @@ object PrefsSync {
             setDockItems(context, items)
             setDockShortcutIds(context, ids)
             setDockInstanceIds(context, insts)
-            // Rimuovi anche l'intent della shortcut dal dock
             val uniqueKey = when {
                 shortcutId.isEmpty() -> pkg
                 instanceId.isEmpty() -> "$pkg|$shortcutId"
@@ -138,109 +179,77 @@ object PrefsSync {
         return removed
     }
 
-    // --- Custom labels ---
+    // --- Custom labels (JSON) ---
 
     fun customLabels(context: Context): Map<String, String> {
-        val raw = prefs(context).getString("custom_labels", "") ?: ""
-        if (raw.isEmpty()) return emptyMap()
-        return raw.split("|").filter { it.isNotBlank() }.associate {
-            val parts = it.split(":", limit = 2)
-            parts[0] to (parts.getOrNull(1) ?: "")
-        }
+        ensureMapsFormat(context)
+        return jsonToMap(prefs(context).getString("custom_labels", ""))
     }
 
     fun setCustomLabel(context: Context, packageName: String, label: String) {
+        ensureMapsFormat(context)
         val map = customLabels(context).toMutableMap()
         map[packageName] = label
-        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
-        prefs(context).edit().putString("custom_labels", raw).apply()
+        prefs(context).edit().putString("custom_labels", mapToJson(map)).apply()
     }
 
-    // --- Custom Icons (per app normali: chiave = packageName) ---
+    // --- Custom Icons (JSON, chiave = packageName) ---
 
     fun customIcons(context: Context): Map<String, String> {
-        val raw = prefs(context).getString("custom_icons", "") ?: ""
-        if (raw.isEmpty()) return emptyMap()
-        return raw.split("|").filter { it.isNotBlank() }.associate {
-            val parts = it.split(":", limit = 2)
-            parts[0] to (parts.getOrNull(1) ?: "")
-        }
+        ensureMapsFormat(context)
+        return jsonToMap(prefs(context).getString("custom_icons", ""))
     }
 
     fun setCustomIcon(context: Context, packageName: String, path: String) {
+        ensureMapsFormat(context)
         val map = customIcons(context).toMutableMap()
         map[packageName] = path
-        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
-        prefs(context).edit().putString("custom_icons", raw).apply()
+        prefs(context).edit().putString("custom_icons", mapToJson(map)).apply()
     }
 
     fun removeCustomIcon(context: Context, packageName: String) {
+        ensureMapsFormat(context)
         val map = customIcons(context).toMutableMap()
         map.remove(packageName)
-        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
-        prefs(context).edit().putString("custom_icons", raw).apply()
+        prefs(context).edit().putString("custom_icons", mapToJson(map)).apply()
     }
 
-    // --- Custom Icons per le scorciatoie (chiave = uniqueKey = pkg|shortcutId[|instanceId]) ---
+    // --- Custom Icons per shortcut (JSON, chiave = uniqueKey) ---
 
     fun customShortcutIcons(context: Context): Map<String, String> {
-        val raw = prefs(context).getString("custom_shortcut_icons", "") ?: ""
-        if (raw.isEmpty()) return emptyMap()
-        return raw.split("|").filter { it.isNotBlank() }.associate {
-            val parts = it.split(":", limit = 2)
-            parts[0] to (parts.getOrNull(1) ?: "")
-        }
+        ensureMapsFormat(context)
+        return jsonToMap(prefs(context).getString("custom_shortcut_icons", ""))
     }
 
     fun setCustomShortcutIcon(context: Context, uniqueKey: String, path: String) {
+        ensureMapsFormat(context)
         val map = customShortcutIcons(context).toMutableMap()
         map[uniqueKey] = path
-        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
-        prefs(context).edit().putString("custom_shortcut_icons", raw).apply()
+        prefs(context).edit().putString("custom_shortcut_icons", mapToJson(map)).apply()
     }
 
     fun removeCustomShortcutIcon(context: Context, uniqueKey: String) {
+        ensureMapsFormat(context)
         val map = customShortcutIcons(context).toMutableMap()
         map.remove(uniqueKey)
-        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
-        prefs(context).edit().putString("custom_shortcut_icons", raw).apply()
+        prefs(context).edit().putString("custom_shortcut_icons", mapToJson(map)).apply()
     }
 
-    // --- Intent delle scorciatoie (per fallback browser / deep-link) ---
-    // Mappa: uniqueKey -> intentUri (formato Intent.toUri(URI_INTENT_SCHEME))
-    // Usa JSON per non rompersi sui caratteri speciali.
+    // --- Intent delle shortcut (JSON) ---
 
-    fun shortcutIntents(context: Context): Map<String, String> {
-        val raw = prefs(context).getString("shortcut_intents", "") ?: ""
-        if (raw.isEmpty()) return emptyMap()
-        return try {
-            val json = org.json.JSONObject(raw)
-            val result = mutableMapOf<String, String>()
-            json.keys().forEach { k -> result[k] = json.optString(k) }
-            result
-        } catch (_: Exception) {
-            emptyMap()
-        }
-    }
+    fun shortcutIntents(context: Context): Map<String, String> =
+        jsonToMap(prefs(context).getString("shortcut_intents", ""))
 
     fun setShortcutIntent(context: Context, uniqueKey: String, intentUri: String) {
         val map = shortcutIntents(context).toMutableMap()
         map[uniqueKey] = intentUri
-        try {
-            val json = org.json.JSONObject()
-            map.forEach { (k, v) -> json.put(k, v) }
-            prefs(context).edit().putString("shortcut_intents", json.toString()).apply()
-        } catch (_: Exception) {}
+        prefs(context).edit().putString("shortcut_intents", mapToJson(map)).apply()
     }
 
     fun removeShortcutIntent(context: Context, uniqueKey: String) {
         val map = shortcutIntents(context).toMutableMap()
         if (map.remove(uniqueKey) == null) return
-        try {
-            val json = org.json.JSONObject()
-            map.forEach { (k, v) -> json.put(k, v) }
-            prefs(context).edit().putString("shortcut_intents", json.toString()).apply()
-        } catch (_: Exception) {}
+        prefs(context).edit().putString("shortcut_intents", mapToJson(map)).apply()
     }
 
     // --- Home labels ---
