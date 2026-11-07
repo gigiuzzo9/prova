@@ -7,46 +7,59 @@ package com.simplylauncher
  * @param row riga nella griglia (0-based)
  * @param col colonna nella griglia (0-based)
  * @param page pagina della home (0-based)
- * @param shortcutId se non vuoto, questo slot è una scorciatoia (ShortcutInfo.id)
+ * @param shortcutId se non vuoto, questo slot è una scorciatoia (ShortcutInfo.id REALE)
+ * @param instanceId se non vuoto, distingue più istanze della stessa scorciatoia
+ *                   (es. due pin della stessa shortcut). Vuoto = prima istanza.
  */
 data class HomeSlot(
     val packageName: String,
     val row: Int,
     val col: Int,
     val page: Int = 0,
-    val shortcutId: String = ""
+    val shortcutId: String = "",
+    val instanceId: String = ""
 ) {
     /**
      * Chiave univoca per identificare lo slot.
-     * Per le app normali è il packageName.
-     * Per le scorciatoie è "packageName|shortcutId", così due scorciatoie
-     * con lo stesso package ma shortcutId diverso sono distinte.
+     * - App normale: "packageName"
+     * - Scorciatoia singola: "packageName|shortcutId"
+     * - Scorciatoia multipla: "packageName|shortcutId|instanceId"
      */
     val uniqueKey: String
-        get() = if (shortcutId.isNotEmpty()) "$packageName|$shortcutId" else packageName
+        get() = when {
+            shortcutId.isEmpty() -> packageName
+            instanceId.isEmpty() -> "$packageName|$shortcutId"
+            else -> "$packageName|$shortcutId|$instanceId"
+        }
+
+    /** true se questo slot è una scorciatoia (ha shortcutId reale). */
+    val isShortcut: Boolean get() = shortcutId.isNotEmpty()
 
     companion object {
         /**
-         * Serializza una lista di HomeSlot in formato stringa.
-         * Formato: "pkg:row:col:page:shortcutId|pkg:row:col:page:shortcutId|..."
-         * (shortcutId è opzionale, se vuoto viene omesso per compatibilità).
+         * Serializza una lista di HomeSlot.
+         * Formato: "pkg:row:col:page:shortcutId:instanceId|..."
+         * I campi finali vuoti vengono omessi per compatibilità.
          */
         fun listToString(slots: List<HomeSlot>): String {
-            return slots.joinToString("|") {
-                if (it.shortcutId.isEmpty()) {
-                    "${it.packageName}:${it.row}:${it.col}:${it.page}"
-                } else {
-                    "${it.packageName}:${it.row}:${it.col}:${it.page}:${it.shortcutId}"
+            return slots.joinToString("|") { s ->
+                when {
+                    s.shortcutId.isEmpty() && s.page == 0 ->
+                        // vecchio formato a 3 parti
+                        "${s.packageName}:${s.row}:${s.col}"
+                    s.shortcutId.isEmpty() && s.instanceId.isEmpty() ->
+                        "${s.packageName}:${s.row}:${s.col}:${s.page}"
+                    s.instanceId.isEmpty() ->
+                        "${s.packageName}:${s.row}:${s.col}:${s.page}:${s.shortcutId}"
+                    else ->
+                        "${s.packageName}:${s.row}:${s.col}:${s.page}:${s.shortcutId}:${s.instanceId}"
                 }
             }
         }
 
         /**
          * Deserializza una stringa in lista di HomeSlot.
-         * Supporta:
-         * - vecchio formato (3 parti): pkg:row:col
-         * - formato con page (4 parti): pkg:row:col:page
-         * - formato con shortcutId (5 parti): pkg:row:col:page:shortcutId
+         * Supporta formati a 3, 4, 5 o 6 parti.
          */
         fun stringToList(raw: String): List<HomeSlot> {
             if (raw.isBlank()) return emptyList()
@@ -73,6 +86,15 @@ data class HomeSlot(
                         val page = parts[3].toIntOrNull() ?: 0
                         val shortcutId = parts[4]
                         HomeSlot(pkg, row, col, page, shortcutId)
+                    }
+                    6 -> {
+                        val pkg = parts[0]
+                        val row = parts[1].toIntOrNull() ?: return@mapNotNull null
+                        val col = parts[2].toIntOrNull() ?: return@mapNotNull null
+                        val page = parts[3].toIntOrNull() ?: 0
+                        val shortcutId = parts[4]
+                        val instanceId = parts[5]
+                        HomeSlot(pkg, row, col, page, shortcutId, instanceId)
                     }
                     else -> null
                 }
