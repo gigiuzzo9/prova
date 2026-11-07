@@ -493,21 +493,9 @@ class HomeActivity : AppCompatActivity() {
         val iconsDir = File(filesDir, "custom_icons")
         if (!iconsDir.exists()) iconsDir.mkdirs()
 
-        val isShortcut = shortcutId != null && shortcutId.isNotEmpty()
-        val realShortcutId = shortcutId ?: ""
-        val realInstanceId = instanceId
-
-        val uniqueKey = when {
-            !isShortcut -> packageName
-            realInstanceId.isEmpty() -> "${packageName}|$realShortcutId"
-            else -> "${packageName}|$realShortcutId|$realInstanceId"
-        }
-        val fileKey = if (isShortcut) {
-            if (realInstanceId.isEmpty()) "${packageName}_${realShortcutId}"
-            else "${packageName}_${realShortcutId}_${realInstanceId}"
-        } else {
-            packageName
-        }
+        val sid = shortcutId ?: ""
+        val key = PrefsSync.iconKeyFor(packageName, sid, instanceId)
+        val fileKey = key.replace("|", "_")
         val destFile = File(iconsDir, "$fileKey.png")
 
         contentResolver.openInputStream(uri)?.use { input ->
@@ -516,11 +504,7 @@ class HomeActivity : AppCompatActivity() {
             }
         }
 
-        if (isShortcut) {
-            PrefsSync.setCustomShortcutIcon(this, uniqueKey, destFile.absolutePath)
-        } else {
-            PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
-        }
+        PrefsSync.setCustomIconFor(this, packageName, sid, instanceId, destFile.absolutePath)
 
         AppRepository.invalidateCache()
 
@@ -536,43 +520,27 @@ class HomeActivity : AppCompatActivity() {
 }
 
     private fun restoreCustomIcon(packageName: String, shortcutId: String, instanceId: String) {
-        try {
-            val iconsDir = File(filesDir, "custom_icons")
-            val isShortcut = shortcutId.isNotEmpty()
+    try {
+        val iconsDir = File(filesDir, "custom_icons")
+        val key = PrefsSync.iconKeyFor(packageName, shortcutId, instanceId)
+        val fileKey = key.replace("|", "_")
+        val destFile = File(iconsDir, "$fileKey.png")
+        if (destFile.exists()) destFile.delete()
 
-            val uniqueKey = when {
-                !isShortcut -> packageName
-                instanceId.isEmpty() -> "${packageName}|$shortcutId"
-                else -> "${packageName}|$shortcutId|$instanceId"
-            }
-            val fileKey = if (isShortcut) {
-                if (instanceId.isEmpty()) "${packageName}_${shortcutId}"
-                else "${packageName}_${shortcutId}_${instanceId}"
-            } else {
-                packageName
-            }
-            val destFile = File(iconsDir, "$fileKey.png")
-            if (destFile.exists()) destFile.delete()
+        PrefsSync.removeCustomIconFor(this, packageName, shortcutId, instanceId)
 
-            if (isShortcut) {
-                PrefsSync.removeCustomShortcutIcon(this, uniqueKey)
-            } else {
-                PrefsSync.removeCustomIcon(this, packageName)
-            }
+        AppRepository.invalidateCache()
 
-            AppRepository.invalidateCache()
-
-            lifecycleScope.launch {
-                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-                loadHomeApps()
-                dockController.refresh()
-                loadDrawerApps()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Errore ripristino: ${e.message}", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+            loadHomeApps()
+            dockController.refresh()
+            loadDrawerApps()
         }
+    } catch (e: Exception) {
+        Toast.makeText(this, "Errore ripristino: ${e.message}", Toast.LENGTH_SHORT).show()
     }
-
+}
     private fun findFreeCellAndPlaceWidget() {
         if (pendingWidgetId == -1) return
         if (currentCols <= 0 || currentRows <= 0) {
