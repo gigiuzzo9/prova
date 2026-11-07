@@ -1206,56 +1206,101 @@ class HomeActivity : AppCompatActivity() {
     y: Float
 ) {
     if (source == DragController.SOURCE_WIDGET) {
-        // ... invariato ...
-    } else {
-        val sizePx = (56 * resources.displayMetrics.density).toInt()
-        dragOverlayView.layoutParams = FrameLayout.LayoutParams(sizePx, sizePx)
+        // Trova l'hostView del widget che stiamo trascinando
+        val hostView = findWidgetHostView(widgetId)
+        if (hostView != null && hostView.width > 0 && hostView.height > 0) {
+            val bmp = Bitmap.createBitmap(
+                hostView.width,
+                hostView.height,
+                Bitmap.Config.ARGB_8888
+            )
+            val canvas = android.graphics.Canvas(bmp)
+            hostView.draw(canvas)
+            dragOverlayView.layoutParams = FrameLayout.LayoutParams(
+                hostView.width,
+                hostView.height
+            )
+            dragOverlayView.setImageBitmap(bmp)
+            dragOverlayView.alpha = 0.85f
+        } else {
+            // Fallback: dimensione in base alle celle
+            val cellW = homeScreenGrid.width / currentCols
+            val cellH = homeScreenGrid.height / currentRows
+            val w = (cellW * widthCells).coerceAtLeast(1)
+            val h = (cellH * heightCells).coerceAtLeast(1)
+            dragOverlayView.layoutParams = FrameLayout.LayoutParams(w, h)
+            dragOverlayView.setImageDrawable(null)
+            dragOverlayView.setBackgroundColor(0x33000000)
+        }
+        dragOverlayView.visibility = View.VISIBLE
+        updateDragOverlay(x, y)
+        return
+    }
 
-        // Prova prima l'icona custom (shortcut o app), poi fallback su AppCache
-        val bitmap: android.graphics.Bitmap? = run {
-            val shortcutId = draggingShortcutId
-            val instanceId = draggingInstanceId
+    // Ramo app normale
+    val sizePx = (56 * resources.displayMetrics.density).toInt()
+    dragOverlayView.layoutParams = FrameLayout.LayoutParams(sizePx, sizePx)
+    dragOverlayView.alpha = 1f
+    dragOverlayView.setBackgroundColor(Color.TRANSPARENT)
 
-            if (shortcutId.isNotEmpty()) {
-                val uniqueKey = when {
-                    instanceId.isEmpty() -> "$pkg|$shortcutId"
-                    else -> "$pkg|$shortcutId|$instanceId"
-                }
-                val customPath = PrefsSync.customShortcutIcons(this)[uniqueKey]
-                if (customPath != null) {
-                    val f = java.io.File(customPath)
-                    if (f.exists()) {
-                        val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
-                        if (bmp != null) {
-                            return@run android.graphics.Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true)
-                        }
-                    }
-                }
-            } else {
-                val customPath = PrefsSync.customIcons(this)[pkg]
-                if (customPath != null) {
-                    val f = java.io.File(customPath)
-                    if (f.exists()) {
-                        val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
-                        if (bmp != null) {
-                            return@run android.graphics.Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true)
-                        }
+    val bitmap: android.graphics.Bitmap? = run {
+        val shortcutId = draggingShortcutId
+        val instanceId = draggingInstanceId
+
+        if (shortcutId.isNotEmpty()) {
+            val uniqueKey = when {
+                instanceId.isEmpty() -> "$pkg|$shortcutId"
+                else -> "$pkg|$shortcutId|$instanceId"
+            }
+            val customPath = PrefsSync.customShortcutIcons(this)[uniqueKey]
+            if (customPath != null) {
+                val f = java.io.File(customPath)
+                if (f.exists()) {
+                    val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
+                    if (bmp != null) {
+                        return@run android.graphics.Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true)
                     }
                 }
             }
-            // Fallback: icona di sistema
-            AppCache.getIconBitmap(pkg, sizePx)
-        }
-
-        if (bitmap != null) {
-            dragOverlayView.setImageBitmap(bitmap)
         } else {
-            dragOverlayView.setImageDrawable(null)
+            val customPath = PrefsSync.customIcons(this)[pkg]
+            if (customPath != null) {
+                val f = java.io.File(customPath)
+                if (f.exists()) {
+                    val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
+                    if (bmp != null) {
+                        return@run android.graphics.Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true)
+                    }
+                }
+            }
         }
+        AppCache.getIconBitmap(pkg, sizePx)
+    }
+
+    if (bitmap != null) {
+        dragOverlayView.setImageBitmap(bitmap)
+    } else {
+        dragOverlayView.setImageDrawable(null)
     }
 
     dragOverlayView.visibility = View.VISIBLE
     updateDragOverlay(x, y)
+}
+
+/**
+ * Cerca la view del widget attualmente mostrato con quell'appWidgetId.
+ * Prima in widgetContainer, poi in widgetContainer2 (quello della pagina adiacente).
+ */
+private fun findWidgetHostView(appWidgetId: Int): LauncherAppWidgetHostView? {
+    for (container in listOf(widgetContainer, widgetContainer2)) {
+        for (i in 0 until container.childCount) {
+            val child = container.getChildAt(i)
+            if (child is LauncherAppWidgetHostView && child.tag == appWidgetId) {
+                return child
+            }
+        }
+    }
+    return null
 }
 
     private fun updateDragOverlay(x: Float, y: Float) {
