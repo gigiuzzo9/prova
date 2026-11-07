@@ -1,28 +1,29 @@
 package com.simplylauncher
 
+import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
-import android.os.Handler
-import android.os.Looper
 import android.os.Process
 import android.widget.Toast
 
 object ShortcutLauncher {
 
-    private fun showDebug(context: Context, title: String, message: String) {
-        Handler(Looper.getMainLooper()).post {
-            try {
+    private fun debug(context: Context, title: String, message: String) {
+        // Se è Activity → AlertDialog (persistente, serve OK)
+        if (context is Activity) {
+            context.runOnUiThread {
                 AlertDialog.Builder(context)
                     .setTitle(title)
                     .setMessage(message)
                     .setPositiveButton("OK", null)
+                    .setCancelable(false)
                     .show()
-            } catch (_: Exception) {
-                // se il context non è un Activity, fallback su Toast lungo
-                Toast.makeText(context.applicationContext, "$title\n$message", Toast.LENGTH_LONG).show()
             }
+        } else {
+            // Fallback: Toast lunghissimo (non ideale ma visibile)
+            Toast.makeText(context.applicationContext, "$title\n$message", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -33,7 +34,15 @@ object ShortcutLauncher {
         instanceId: String = "",
         showErrorToast: Boolean = true
     ) {
+        // LOG SUBITO: se non vedi questo dialog, launch() non viene chiamato
+        debug(
+            context,
+            "DEBUG 0 — launch() invocato",
+            "pkg=$packageName\nid=$shortcutId\ninst=$instanceId\ncontext=${context.javaClass.name}"
+        )
+
         if (shortcutId.isEmpty()) {
+            debug(context, "DEBUG — shortcutId VUOTO", "Chiamo AppRepository.launchApp")
             AppRepository.launchApp(context, packageName)
             return
         }
@@ -44,81 +53,46 @@ object ShortcutLauncher {
         }
 
         val savedIntentUri = PrefsSync.shortcutIntents(context)[uniqueKey]
+        debug(
+            context,
+            "DEBUG 1 — intent salvato",
+            "uniqueKey=$uniqueKey\nsavedIntentUri=${savedIntentUri ?: "(null)"}"
+        )
 
-        // ---- STEP 1: startShortcut (come il vecchio codice) ----
-        var step1Error: String? = null
+        // STEP 1: startShortcut
         try {
             val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
-            launcherApps.startShortcut(
-                packageName,
-                shortcutId,
-                null,
-                null,
-                Process.myUserHandle()
-            )
-            showDebug(
-                context,
-                "STEP 1 — startShortcut OK",
-                "pkg=$packageName\nid=$shortcutId\ninst=$instanceId\n\n" +
-                "Se il collegamento non parte comunque, il browser ha rifiutato l'avvio " +
-                "(shortcut non più valida nel sistema)."
-            )
+            launcherApps.startShortcut(packageName, shortcutId, null, null, Process.myUserHandle())
+            debug(context, "DEBUG 2 — startShortcut OK", "Nessuna eccezione. Se il link non parte, il browser ha rifiutato.")
             return
         } catch (e: Exception) {
-            step1Error = "${e.javaClass.simpleName}: ${e.message}"
+            debug(context, "DEBUG 2 — startShortcut FALLITO", "${e.javaClass.name}: ${e.message}")
         }
 
-        // ---- STEP 2: fallback con Intent salvato ----
-        var step2Error: String? = null
+        // STEP 2: fallback intent
         if (!savedIntentUri.isNullOrEmpty()) {
             try {
                 val intent = Intent.parseUri(savedIntentUri, Intent.URI_INTENT_SCHEME)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
-                showDebug(
-                    context,
-                    "STEP 2 — fallback OK",
-                    "Intent salvato:\n$savedIntentUri\n\n" +
-                    "STEP 1 era fallito con:\n$step1Error"
-                )
+                debug(context, "DEBUG 3 — fallback OK", savedIntentUri)
                 return
             } catch (e: Exception) {
-                step2Error = "${e.javaClass.simpleName}: ${e.message}"
+                debug(context, "DEBUG 3 — fallback FALLITO", "${e.javaClass.name}: ${e.message}")
             }
         }
 
-        // ---- STEP 3: apri l'app ----
-        var step3Error: String? = null
+        // STEP 3: apri app
         try {
             val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
             if (launchIntent != null) {
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(launchIntent)
-                showDebug(
-                    context,
-                    "STEP 3 — apertura app OK",
-                    "Ho aperto l'app '$packageName' ma NON il collegamento specifico.\n\n" +
-                    "STEP 1: $step1Error\n" +
-                    "STEP 2: ${step2Error ?: "nessun intent salvato"}\n" +
-                    "savedIntentUri=${savedIntentUri ?: "(null)"}"
-                )
+                debug(context, "DEBUG 4 — apro app", "Non il link, solo l'app.")
                 return
-            } else {
-                step3Error = "getLaunchIntentForPackage = null"
             }
-        } catch (e: Exception) {
-            step3Error = "${e.javaClass.simpleName}: ${e.message}"
-        }
+        } catch (_: Exception) {}
 
-        // ---- STEP 4: tutto fallito ----
-        showDebug(
-            context,
-            "TUTTI I TENTATIVI FALLITI",
-            "pkg=$packageName\nid=$shortcutId\ninst=$instanceId\n\n" +
-            "STEP 1 (startShortcut): $step1Error\n\n" +
-            "STEP 2 (fallback intent): ${step2Error ?: "nessun intent salvato"}\n\n" +
-            "savedIntentUri=${savedIntentUri ?: "(null)"}\n\n" +
-            "STEP 3 (apri app): $step3Error"
-        )
+        debug(context, "DEBUG 5 — TUTTO FALLITO", "Nessun metodo ha funzionato")
     }
 }
