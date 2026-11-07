@@ -11,7 +11,6 @@ import android.widget.Toast
 object ShortcutLauncher {
 
     private fun debug(context: Context, title: String, message: String) {
-        // Se è Activity → AlertDialog (persistente, serve OK)
         if (context is Activity) {
             context.runOnUiThread {
                 AlertDialog.Builder(context)
@@ -22,7 +21,6 @@ object ShortcutLauncher {
                     .show()
             }
         } else {
-            // Fallback: Toast lunghissimo (non ideale ma visibile)
             Toast.makeText(context.applicationContext, "$title\n$message", Toast.LENGTH_LONG).show()
         }
     }
@@ -34,15 +32,7 @@ object ShortcutLauncher {
         instanceId: String = "",
         showErrorToast: Boolean = true
     ) {
-        // LOG SUBITO: se non vedi questo dialog, launch() non viene chiamato
-        debug(
-            context,
-            "DEBUG 0 — launch() invocato",
-            "pkg=$packageName\nid=$shortcutId\ninst=$instanceId\ncontext=${context.javaClass.name}"
-        )
-
         if (shortcutId.isEmpty()) {
-            debug(context, "DEBUG — shortcutId VUOTO", "Chiamo AppRepository.launchApp")
             AppRepository.launchApp(context, packageName)
             return
         }
@@ -52,47 +42,87 @@ object ShortcutLauncher {
             else -> "$packageName|$shortcutId|$instanceId"
         }
 
-        val savedIntentUri = PrefsSync.shortcutIntents(context)[uniqueKey]
-        debug(
-            context,
-            "DEBUG 1 — intent salvato",
-            "uniqueKey=$uniqueKey\nsavedIntentUri=${savedIntentUri ?: "(null)"}"
-        )
+        // ---- DIAGNOSTICA: interroga il sistema sulla shortcut ----
+        val systemReport = StringBuilder()
 
-        // STEP 1: startShortcut
+        // 1) La shortcut esiste ancora nel LauncherApps?
         try {
             val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
-            launcherApps.startShortcut(packageName, shortcutId, null, null, Process.myUserHandle())
-            debug(context, "DEBUG 2 — startShortcut OK", "Nessuna eccezione. Se il link non parte, il browser ha rifiutato.")
-            return
+            val query = LauncherApps.ShortcutQuery().apply {
+                setPackage(packageName)
+                setQueryFlags(
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED
+                )
+            }
+            val shortcuts = launcherApps.getShortcuts(query, Process.myUserHandle())
+            val found = shortcuts?.firstOrNull { it.id == shortcutId }
+            if (found != null) {
+                systemReport.append("✓ Shortcut trovata nel sistema\n")
+                systemReport.append("  id=${found.id}\n")
+                systemReport.append("  intent=${found.intent}\n")
+                systemReport.append("  intents=${found.intents?.size ?: 0}\n")
+                systemReport.append("  isPinned=${if (android.os.Build.VERSION.SDK_INT >= 26) found.isPinned else "?"}\n")
+                systemReport.append("  isEnabled=${found.isEnabled}\n")
+                found.intents?.forEachIndexed { i, it ->
+                    systemReport.append("  intents[$i]=$it\n")
+                }
+            } else {
+                systemReport.append("✗ Shortcut NON trovata nel sistema\n")
+                systemReport.append("  Il browser l'ha rimossa? (aggiornamento, pulizia cache)\n")
+                systemReport.append("  Shortcuts disponibili per $packageName: ${shortcuts?.size ?: 0}\n")
+                shortcuts?.forEachIndexed { i, s ->
+                    systemReport.append("    [$i] id=${s.id} isPinned=${if (android.os.Build.VERSION.SDK_INT >= 26) s.isPinned else "?"}\n")
+                }
+            }
         } catch (e: Exception) {
-            debug(context, "DEBUG 2 — startShortcut FALLITO", "${e.javaClass.name}: ${e.message}")
+            systemReport.append("✗ Errore query LauncherApps: ${e.javaClass.simpleName}: ${e.message}\n")
         }
 
-        // STEP 2: fallback intent
+        // 2) Intent salvato
+        val savedIntentUri = PrefsSync.shortcutIntents(context)[uniqueKey]
+        systemReport.append("\nIntent salvato:\n")
+        systemReport.append(if (savedIntentUri.isNullOrEmpty()) "  (null/vuoto)\n" else "  $savedIntentUri\n")
+
+        // ---- PROVA AD APRIRE CON L'INTENT SALVATO ----
+        var launchResult = "non tentato"
         if (!savedIntentUri.isNullOrEmpty()) {
             try {
                 val intent = Intent.parseUri(savedIntentUri, Intent.URI_INTENT_SCHEME)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                debug(context, "DEBUG 3 — fallback OK", savedIntentUri)
-                return
+                // Verifica se c'è un handler
+                val resolveInfo = context.packageManager.resolveActivity(intent, 0)
+                if (resolveInfo == null) {
+                    launchResult = "nessuna Activity risolve l'intent"
+                } else {
+                    context.startActivity(intent)
+                    launchResult = "startActivity OK → ${resolveInfo.activityInfo.packageName}/${resolveInfo.activityInfo.name}"
+                    debug(context, "LANCIO CON INTENT SALVATO", "$systemReport\n\nRisultato: $launchResult")
+                    return
+                }
             } catch (e: Exception) {
-                debug(context, "DEBUG 3 — fallback FALLITO", "${e.javaClass.name}: ${e.message}")
+                launchResult = "ECCEZIONE: ${e.javaClass.simpleName}: ${e.message}"
             }
         }
 
-        // STEP 3: apri app
+        // ---- FALLBACK: startShortcut (per vedere cosa dice) ----
+        var shortcutError = "non tentato"
         try {
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(launchIntent)
-                debug(context, "DEBUG 4 — apro app", "Non il link, solo l'app.")
-                return
-            }
-        } catch (_: Exception) {}
+            val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+            launcherApps.startShortcut(packageName, shortcutId, null, null, Process.myUserHandle())
+            shortcutError = "OK (nessuna eccezione, ma il sistema potrebbe comunque rifiutare)"
+        } catch (e: Exception) {
+            shortcutError = "ECCEZIONE: ${e.javaClass.simpleName}: ${e.message}"
+        }
 
-        debug(context, "DEBUG 5 — TUTTO FALLITO", "Nessun metodo ha funzionato")
+        debug(
+            context,
+            "DIAGNOSTICA SHORTCUT",
+            "$systemReport\n" +
+            "Intent salvato: $launchResult\n" +
+            "startShortcut: $shortcutError\n\n" +
+            "uniqueKey=$uniqueKey"
+        )
     }
 }
