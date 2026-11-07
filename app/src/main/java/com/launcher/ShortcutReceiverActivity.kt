@@ -18,6 +18,9 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                 val packageName = shortcutInfo.`package`
                 val shortcutId = shortcutInfo.id
 
+                // Controlla se la scorciatoia è un URL (browser)
+                val isUrlShortcut = shortcutId.startsWith("http://") || shortcutId.startsWith("https://")
+
                 // Controlla se esiste già uno slot con lo stesso packageName e shortcutId
                 val slots = PrefsSync.homeSlots(this).toMutableList()
                 val existing = slots.any {
@@ -25,7 +28,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                 }
 
                 if (!existing) {
-                    // Trova la prima cella libera
                     val occupied = mutableSetOf<Pair<Int, Int>>()
                     slots.forEach { occupied.add(it.row to it.col) }
 
