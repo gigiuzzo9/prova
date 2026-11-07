@@ -1412,86 +1412,92 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupContextMenu() {
-        contextMenuView = AppContextMenuView(this)
-        contextMenuView.onMove = { contextMenuView.dismiss() }
-        contextMenuView.onUninstall = { _, _ ->
-            currentApp?.let { app ->
-                val intent = Intent(Intent.ACTION_DELETE).apply {
-                    data = android.net.Uri.fromParts("package", app.packageName, null)
-                }
-                startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
+    contextMenuView = AppContextMenuView(this)
+    contextMenuView.onMove = { contextMenuView.dismiss() }
+    contextMenuView.onUninstall = { _, _ ->
+        currentApp?.let { app ->
+            val intent = Intent(Intent.ACTION_DELETE).apply {
+                data = android.net.Uri.fromParts("package", app.packageName, null)
             }
-        }
-        contextMenuView.onRename = { _, _ ->
-            currentApp?.let { app ->
-                RenameDialog.show(this, app) {
-                    AppRepository.invalidateCache()
-                    AppRepository.loadInstalledAppsWithCustomLabels(this)
-                    homeScreenGrid.setItems(PrefsSync.homeSlots(this))
-                    val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
-                    drawerAdapter.submitList(apps)
-                }
-            }
-        }
-        contextMenuView.onRemove = { shortcutId, instanceId ->
-            currentApp?.let { app ->
-                val key = when {
-                    shortcutId.isEmpty() -> app.packageName
-                    instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
-                    else -> "${app.packageName}|$shortcutId|$instanceId"
-                }
-                PrefsSync.removeHomeSlotByKey(this, key)
-                PrefsSync.removeDockSlotByKey(this, app.packageName, shortcutId, instanceId)
-                loadHomeApps()
-                dockController.refresh()
-            }
-        }
-        contextMenuView.onChangeIcon = { shortcutId, instanceId ->
-            currentApp?.let { app ->
-                pendingIconPackage = app.packageName
-                pendingIconShortcutId = when {
-                    shortcutId.isEmpty() -> null
-                    instanceId.isEmpty() -> shortcutId
-                    else -> "$shortcutId|$instanceId"
-                }
-
-                val uniqueKey = when {
-                    shortcutId.isEmpty() -> app.packageName
-                    instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
-                    else -> "${app.packageName}|$shortcutId|$instanceId"
-                }
-                val hasCustomIcon = if (shortcutId.isEmpty()) {
-                    PrefsSync.customIcons(this).containsKey(app.packageName)
-                } else {
-                    PrefsSync.customShortcutIcons(this).containsKey(uniqueKey)
-                }
-
-                val builder = AlertDialog.Builder(this)
-                    .setTitle("Cambia icona")
-                    .setMessage("Per un risultato migliore, usa un'immagine PNG con sfondo trasparente, di dimensioni 512x512 pixel.")
-                    .setPositiveButton("Scegli immagine") { _, _ ->
-                        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                            type = "image/*"
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                        }
-                        startActivityForResult(intent, REQUEST_PICK_ICON)
-                    }
-                    .setNegativeButton("Annulla", null)
-
-                if (hasCustomIcon) {
-                    builder.setNeutralButton("Ripristina") { _, _ ->
-                        restoreCustomIcon(app.packageName, shortcutId, instanceId)
-                    }
-                }
-
-                builder.show()
-            }
-        }
-        contextMenuView.onDismiss = {
-            currentApp = null
-            currentAnchor = null
+            startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
         }
     }
+    contextMenuView.onRename = { _, _ ->
+        currentApp?.let { app ->
+            RenameDialog.show(this, app) {
+                AppRepository.invalidateCache()
+                AppRepository.loadInstalledAppsWithCustomLabels(this)
+                homeScreenGrid.setItems(PrefsSync.homeSlots(this))
+                val apps = AppRepository.loadInstalledAppsWithCustomLabels(this)
+                drawerAdapter.submitList(apps)
+            }
+        }
+    }
+    contextMenuView.onRemove = { shortcutId, instanceId ->
+        currentApp?.let { app ->
+            val key = when {
+                shortcutId.isEmpty() -> app.packageName
+                instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
+                else -> "${app.packageName}|$shortcutId|$instanceId"
+            }
+            PrefsSync.removeHomeSlotByKey(this, key)
+            PrefsSync.removeDockSlotByKey(this, app.packageName, shortcutId, instanceId)
+            loadHomeApps()
+            dockController.refresh()
+        }
+    }
+    contextMenuView.onChangeIcon = { shortcutId, instanceId ->
+        android.widget.Toast.makeText(
+            this,
+            "SID=[$shortcutId] IID=[$instanceId]",
+            Toast.LENGTH_LONG
+        ).show()
+
+        currentApp?.let { app ->
+            pendingIconPackage = app.packageName
+            pendingIconShortcutId = when {
+                shortcutId.isEmpty() -> null
+                instanceId.isEmpty() -> shortcutId
+                else -> "$shortcutId|$instanceId"
+            }
+
+            val uniqueKey = when {
+                shortcutId.isEmpty() -> app.packageName
+                instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
+                else -> "${app.packageName}|$shortcutId|$instanceId"
+            }
+            val hasCustomIcon = if (shortcutId.isEmpty()) {
+                PrefsSync.customIcons(this).containsKey(app.packageName)
+            } else {
+                PrefsSync.customShortcutIcons(this).containsKey(uniqueKey)
+            }
+
+            val builder = AlertDialog.Builder(this)
+                .setTitle("Cambia icona")
+                .setMessage("Per un risultato migliore, usa un'immagine PNG con sfondo trasparente, di dimensioni 512x512 pixel.")
+                .setPositiveButton("Scegli immagine") { _, _ ->
+                    val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "image/*"
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                    }
+                    startActivityForResult(intent, REQUEST_PICK_ICON)
+                }
+                .setNegativeButton("Annulla", null)
+
+            if (hasCustomIcon) {
+                builder.setNeutralButton("Ripristina") { _, _ ->
+                    restoreCustomIcon(app.packageName, shortcutId, instanceId)
+                }
+            }
+
+            builder.show()
+        }
+    }
+    contextMenuView.onDismiss = {
+        currentApp = null
+        currentAnchor = null
+    }
+}
 
     private fun setupHomePopup() {
         homePopupMenu = HomePopupMenu(this)
