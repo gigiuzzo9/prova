@@ -2,6 +2,7 @@ package com.simplylauncher
 
 import android.content.Intent
 import android.content.pm.LauncherApps
+import android.net.Uri
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 
@@ -28,16 +29,28 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     ""
                 }
 
-                // Salva l'Intent originale della shortcut (utile per i collegamenti browser
-                // e per fallback quando LauncherApps.startShortcut fallisce)
                 val uniqueKey = when {
                     instanceId.isEmpty() -> "$packageName|$realShortcutId"
                     else -> "$packageName|$realShortcutId|$instanceId"
                 }
+
+                // ---- Estrai l'URL/Intent della scorciatoia ----
+                // shortcutInfo.intent può essere null per le scorciatoie web.
+                // Proviamo diverse fonti in ordine di affidabilità.
+                val url: String? = extractUrlFromShortcut(shortcutInfo)
+
+                // Salva l'Intent se disponibile
                 val originalIntent = shortcutInfo.intent
                 if (originalIntent != null) {
                     try {
                         val intentUri = originalIntent.toUri(Intent.URI_INTENT_SCHEME)
+                        PrefsSync.setShortcutIntent(this, uniqueKey, intentUri)
+                    } catch (_: Exception) {}
+                } else if (url != null) {
+                    // Nessun Intent ma abbiamo l'URL: costruiamo un Intent VIEW e salviamolo
+                    try {
+                        val syntheticIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                        val intentUri = syntheticIntent.toUri(Intent.URI_INTENT_SCHEME)
                         PrefsSync.setShortcutIntent(this, uniqueKey, intentUri)
                     } catch (_: Exception) {}
                 }
@@ -47,6 +60,44 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             }
         }
         finish()
+    }
+
+    /**
+     * Prova a estrarre l'URL della scorciatoia da varie fonti:
+     * 1. shortcutInfo.intent (se presente)
+     * 2. extras (chiavi note usate dai browser)
+     * 3. longLabel/shortLabel (a volte contengono l'URL)
+     */
+    private fun extractUrlFromShortcut(shortcutInfo: android.content.pm.ShortcutInfo): String? {
+        // 1. Intent
+        val intentData = shortcutInfo.intent?.data
+        if (intentData != null && (intentData.scheme == "http" || intentData.scheme == "https")) {
+            return intentData.toString()
+        }
+
+        // 2. Extras note
+        val extras = shortcutInfo.extras
+        if (extras != null) {
+            val keys = listOf(
+                "url", "URL", "uri", "URI", "web_url", "webUrl",
+                "android.intent.extra.TEXT",
+                "com.android.browser.application_id"
+            )
+            for (key in keys) {
+                val value = extras.getString(key)
+                if (!value.isNullOrEmpty() && (value.startsWith("http://") || value.startsWith("https://"))) {
+                    return value
+                }
+            }
+        }
+
+        // 3. Label (fallback raro ma succede con alcuni browser)
+        val label = shortcutInfo.longLabel?.toString() ?: shortcutInfo.shortLabel?.toString()
+        if (!label.isNullOrEmpty() && (label.startsWith("http://") || label.startsWith("https://"))) {
+            return label
+        }
+
+        return null
     }
 
     private fun placeShortcutOnFirstFreeCell(
