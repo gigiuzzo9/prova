@@ -16,6 +16,15 @@ data class HomeSlot(
     val page: Int = 0,
     val shortcutId: String = ""
 ) {
+    /**
+     * Chiave univoca per identificare lo slot.
+     * Per le app normali è il packageName.
+     * Per le scorciatoie è "packageName|shortcutId", così due scorciatoie
+     * con lo stesso package ma shortcutId diverso sono distinte.
+     */
+    val uniqueKey: String
+        get() = if (shortcutId.isNotEmpty()) "$packageName|$shortcutId" else packageName
+
     companion object {
         /**
          * Serializza una lista di HomeSlot in formato stringa.
