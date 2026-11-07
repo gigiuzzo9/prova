@@ -178,10 +178,6 @@ class HomeScreenGrid @JvmOverloads constructor(
 
     /**
      * Imposta lo slot in drag nascondendolo visivamente.
-     * @param pkg package dello slot trascinato
-     * @param shortcutId shortcutId REALE (vuoto per app normale)
-     * @param instanceId istanza della scorciatoia (vuoto se unica)
-     * @param page pagina in cui si trova lo slot
      */
     fun setDraggingPackage(
         pkg: String?,
@@ -257,14 +253,49 @@ class HomeScreenGrid @JvmOverloads constructor(
         } ?: HomeSlot("", cell.first, cell.second, currentPage)
     }
 
+    /**
+     * Carica l'icona dello slot con la priorità corretta:
+     * 1. icona custom (per app o per shortcut, con uniqueKey)
+     * 2. icona della shortcut (se è una shortcut)
+     * 3. icona dell'app
+     */
     private fun getIconBitmap(slot: HomeSlot): Bitmap? {
         if (iconSize <= 0) return null
-        // Scorciatoia: usa icona shortcut (con fallback su app se non disponibile)
+
+        // 1) Icona custom
         if (slot.isShortcut) {
-            // Prima prova la cache di AppCache (icona app) — poi prova la shortcut
+            val customMap = PrefsSync.customShortcutIcons(context)
+            val path = customMap[slot.uniqueKey]
+            if (path != null) {
+                val file = java.io.File(path)
+                if (file.exists()) {
+                    val bmp = android.graphics.BitmapFactory.decodeFile(path)
+                    if (bmp != null) {
+                        return Bitmap.createScaledBitmap(bmp, iconSize, iconSize, true)
+                    }
+                }
+            }
+        } else {
+            val customMap = PrefsSync.customIcons(context)
+            val path = customMap[slot.packageName]
+            if (path != null) {
+                val file = java.io.File(path)
+                if (file.exists()) {
+                    val bmp = android.graphics.BitmapFactory.decodeFile(path)
+                    if (bmp != null) {
+                        return Bitmap.createScaledBitmap(bmp, iconSize, iconSize, true)
+                    }
+                }
+            }
+        }
+
+        // 2) Icona della shortcut
+        if (slot.isShortcut) {
             val shortcutBmp = loadShortcutIcon(slot.packageName, slot.shortcutId, iconSize)
             if (shortcutBmp != null) return shortcutBmp
         }
+
+        // 3) Icona dell'app
         return AppCache.getIconBitmap(slot.packageName, iconSize)
     }
 
@@ -308,7 +339,6 @@ class HomeScreenGrid @JvmOverloads constructor(
     private fun drawPage(canvas: Canvas, page: Int, offsetX: Float) {
         val dragged = draggingItem
         items.filter { it.page == page && it.packageName.isNotEmpty() }.forEach { slot ->
-            // Salta SOLO lo slot effettivamente in drag (match per uniqueKey + page)
             if (dragged != null && dragged.page == slot.page && dragged.uniqueKey == slot.uniqueKey) {
                 return@forEach
             }
@@ -320,12 +350,14 @@ class HomeScreenGrid @JvmOverloads constructor(
     private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect, offsetX: Float) {
         val app = AppCache.get(slot.packageName) ?: return
 
-        // Icona personalizzata: solo per app normali (le shortcut hanno già la loro)
-        val isCustom = !slot.isShortcut && PrefsSync.customIcons(context).containsKey(slot.packageName)
+        val isCustom = if (slot.isShortcut) {
+            PrefsSync.customShortcutIcons(context).containsKey(slot.uniqueKey)
+        } else {
+            PrefsSync.customIcons(context).containsKey(slot.packageName)
+        }
         val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
         val drawSize = iconSize - pad * 2
 
-        // Usa l'icona giusta: shortcut se applicabile, altrimenti app
         val bitmap: Bitmap? = getIconBitmap(slot)
         if (bitmap == null) return
 
@@ -368,7 +400,6 @@ class HomeScreenGrid @JvmOverloads constructor(
 
     /**
      * Carica l'icona di una scorciatoia. Ritorna null se non disponibile.
-     * Usa shortcutId REALE (quello di ShortcutInfo.id).
      */
     private fun loadShortcutIcon(packageName: String, shortcutId: String, sizePx: Int): Bitmap? {
         if (sizePx <= 0 || shortcutId.isEmpty()) return null
