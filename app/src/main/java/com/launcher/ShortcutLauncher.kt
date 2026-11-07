@@ -58,22 +58,23 @@ object ShortcutLauncher {
             } catch (_: Exception) {}
         }
 
-        // 2) È un collegamento web? (action=VIEW + data http/https)
-        val isWebLink = parsedIntent != null &&
-                parsedIntent.action == Intent.ACTION_VIEW &&
-                isHttpUrl(parsedIntent.data)
+        // 2) È un collegamento web?
+        val pi = parsedIntent
+        val isWebLink = pi != null &&
+                pi.action == Intent.ACTION_VIEW &&
+                isHttpUrl(pi.data)
 
-        if (isWebLink) {
+        if (isWebLink && pi != null) {
+            val url = pi.data
             // 2a) Prova con l'Intent salvato
             try {
-                parsedIntent!!.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                parsedIntent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                context.startActivity(parsedIntent)
+                pi.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                pi.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                context.startActivity(pi)
                 return
             } catch (_: Exception) {}
 
             // 2b) Fallback: apri direttamente l'URL con ACTION_VIEW
-            val url = parsedIntent.data
             if (url != null) {
                 try {
                     val browserIntent = Intent(Intent.ACTION_VIEW, url).apply {
@@ -103,7 +104,7 @@ object ShortcutLauncher {
             return
         }
 
-        // 3) Scorciatoia normale → prova startShortcut
+        // 3) Scorciatoia normale → startShortcut
         try {
             val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
             launcherApps.startShortcut(packageName, shortcutId, null, null, Process.myUserHandle())
@@ -111,10 +112,10 @@ object ShortcutLauncher {
         } catch (_: Exception) {}
 
         // 4) Fallback: se l'Intent salvato è avviabile, usalo
-        if (parsedIntent != null) {
+        if (pi != null) {
             try {
-                parsedIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(parsedIntent)
+                pi.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(pi)
                 return
             } catch (_: Exception) {}
         }
