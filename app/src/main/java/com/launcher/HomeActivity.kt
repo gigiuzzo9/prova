@@ -1197,51 +1197,66 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun showDragOverlay(
-        source: String,
-        pkg: String,
-        widgetId: Int,
-        widthCells: Int,
-        heightCells: Int,
-        x: Float,
-        y: Float
-    ) {
-        if (source == DragController.SOURCE_WIDGET) {
-            val cellW = homeScreenGrid.width / currentCols
-            val cellH = homeScreenGrid.height / currentRows
-            val widgetWidthPx = cellW * widthCells
-            val widgetHeightPx = cellH * heightCells
-            dragOverlayView.layoutParams = FrameLayout.LayoutParams(widgetWidthPx, widgetHeightPx)
+    source: String,
+    pkg: String,
+    widgetId: Int,
+    widthCells: Int,
+    heightCells: Int,
+    x: Float,
+    y: Float
+) {
+    if (source == DragController.SOURCE_WIDGET) {
+        // ... invariato ...
+    } else {
+        val sizePx = (56 * resources.displayMetrics.density).toInt()
+        dragOverlayView.layoutParams = FrameLayout.LayoutParams(sizePx, sizePx)
 
-            val hostView = (0 until widgetContainer.childCount)
-                .map { widgetContainer.getChildAt(it) }
-                .firstOrNull { it.tag == widgetId } as? LauncherAppWidgetHostView
+        // Prova prima l'icona custom (shortcut o app), poi fallback su AppCache
+        val bitmap: android.graphics.Bitmap? = run {
+            val shortcutId = draggingShortcutId
+            val instanceId = draggingInstanceId
 
-            if (hostView != null && hostView.width > 0 && hostView.height > 0) {
-                val bitmap = Bitmap.createBitmap(
-                    hostView.width,
-                    hostView.height,
-                    Bitmap.Config.ARGB_8888
-                )
-                val canvas = android.graphics.Canvas(bitmap)
-                hostView.draw(canvas)
-                dragOverlayView.setImageBitmap(bitmap)
+            if (shortcutId.isNotEmpty()) {
+                val uniqueKey = when {
+                    instanceId.isEmpty() -> "$pkg|$shortcutId"
+                    else -> "$pkg|$shortcutId|$instanceId"
+                }
+                val customPath = PrefsSync.customShortcutIcons(this)[uniqueKey]
+                if (customPath != null) {
+                    val f = java.io.File(customPath)
+                    if (f.exists()) {
+                        val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
+                        if (bmp != null) {
+                            return@run android.graphics.Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true)
+                        }
+                    }
+                }
             } else {
-                dragOverlayView.setImageDrawable(null)
+                val customPath = PrefsSync.customIcons(this)[pkg]
+                if (customPath != null) {
+                    val f = java.io.File(customPath)
+                    if (f.exists()) {
+                        val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
+                        if (bmp != null) {
+                            return@run android.graphics.Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true)
+                        }
+                    }
+                }
             }
-        } else {
-            val sizePx = (56 * resources.displayMetrics.density).toInt()
-            dragOverlayView.layoutParams = FrameLayout.LayoutParams(sizePx, sizePx)
-            val bitmap = AppCache.getIconBitmap(pkg, sizePx)
-            if (bitmap != null) {
-                dragOverlayView.setImageBitmap(bitmap)
-            } else {
-                dragOverlayView.setImageDrawable(null)
-            }
+            // Fallback: icona di sistema
+            AppCache.getIconBitmap(pkg, sizePx)
         }
 
-        dragOverlayView.visibility = View.VISIBLE
-        updateDragOverlay(x, y)
+        if (bitmap != null) {
+            dragOverlayView.setImageBitmap(bitmap)
+        } else {
+            dragOverlayView.setImageDrawable(null)
+        }
     }
+
+    dragOverlayView.visibility = View.VISIBLE
+    updateDragOverlay(x, y)
+}
 
     private fun updateDragOverlay(x: Float, y: Float) {
         if (dragOverlayView.visibility != View.VISIBLE) return
