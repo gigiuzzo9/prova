@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 class DockController(
     private val activity: HomeActivity,
     private val slots: List<FrameLayout>,
-    private val onAppLongPressed: (AppInfo, View) -> Unit
+    private val onAppLongPressed: (AppInfo, View, String, String) -> Unit
 ) {
 
     fun setup() {
@@ -21,6 +21,8 @@ class DockController(
         activity.lifecycleScope.launch {
             val dockItems = PrefsSync.dockItems(activity)
             val dockShortcutIds = PrefsSync.dockShortcutIds(activity)
+            val dockInstanceIds = PrefsSync.dockInstanceIds(activity)
+
             val byPkg = HashMap<String, AppInfo>()
             dockItems.filter { it.isNotBlank() }.forEach { pkg ->
                 AppCache.get(pkg)?.let { byPkg[pkg] = it }
@@ -41,11 +43,25 @@ class DockController(
                 slot.removeAllViews()
                 val pkg = dockItems.getOrNull(index)
                 val shortcutId = dockShortcutIds.getOrNull(index) ?: ""
+                val instanceId = dockInstanceIds.getOrNull(index) ?: ""
                 val app = if (pkg.isNullOrBlank()) null else byPkg[pkg]
-                val uniqueKey = if (shortcutId.isNotEmpty()) "$pkg|$shortcutId" else pkg
 
                 if (app != null) {
-                    val bitmap = AppCache.getIconBitmap(app.packageName, size * 3)
+                    // uniqueKey: pkg | pkg|shortcutId | pkg|shortcutId|instanceId
+                    val uniqueKey = when {
+                        shortcutId.isEmpty() -> app.packageName
+                        instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
+                        else -> "${app.packageName}|$shortcutId|$instanceId"
+                    }
+
+                    // Icona: se è una shortcut, prova l'icona della shortcut; fallback su app
+                    val bitmap = if (shortcutId.isNotEmpty()) {
+                        loadShortcutIconBitmap(app.packageName, shortcutId, size * 3)
+                            ?: AppCache.getIconBitmap(app.packageName, size * 3)
+                    } else {
+                        AppCache.getIconBitmap(app.packageName, size * 3)
+                    }
+
                     val imageView = ImageView(activity)
                     if (bitmap != null) {
                         imageView.setImageBitmap(bitmap)
@@ -66,20 +82,31 @@ class DockController(
                     }
                     slot.addView(imageView)
                     slot.tag = uniqueKey
+
                     slot.setOnClickListener {
                         if (shortcutId.isNotEmpty()) {
                             try {
                                 val launcherApps = activity.getSystemService(android.content.Context.LAUNCHER_APPS_SERVICE) as LauncherApps
-                                launcherApps.startShortcut(app.packageName, shortcutId, null, null, android.os.Process.myUserHandle())
+                                launcherApps.startShortcut(
+                                    app.packageName,
+                                    shortcutId,
+                                    null,
+                                    null,
+                                    android.os.Process.myUserHandle()
+                                )
                             } catch (e: Exception) {
-                                android.widget.Toast.makeText(activity, "Impossibile avviare la scorciatoia", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(
+                                    activity,
+                                    "Impossibile avviare la scorciatoia",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
                             }
                         } else {
                             AppRepository.launchApp(activity, app.packageName)
                         }
                     }
                     slot.setOnLongClickListener { view ->
-                        onAppLongPressed(app, view)
+                        onAppLongPressed(app, view, shortcutId, instanceId)
                         true
                     }
                 } else {
@@ -91,85 +118,153 @@ class DockController(
         }
     }
 
-    fun setDraggingPackage(pkg: String?) {
+    /**
+     * Nasconde (alpha = 0) solo lo slot effettivamente in drag.
+     * @param pkg package dello slot
+     * @param shortcutId shortcutId reale ("" per app)
+     * @param instanceId istanza ("" se unica)
+     */
+    fun setDraggingPackage(pkg: String?, shortcutId: String = "", instanceId: String = "") {
+        val targetKey: String? = if (pkg == null) null else when {
+            shortcutId.isEmpty() -> pkg
+            instanceId.isEmpty() -> "$pkg|$shortcutId"
+            else -> "$pkg|$shortcutId|$instanceId"
+        }
         slots.forEach { slot ->
             val iv = slot.getChildAt(0) as? ImageView ?: return@forEach
             val slotKey = slot.tag as? String
-            iv.alpha = if (slotKey != null && (slotKey == pkg || slotKey.startsWith("$pkg|"))) 0f else 1f
+            iv.alpha = if (targetKey != null && slotKey == targetKey) 0f else 1f
         }
     }
 
-    suspend fun swapDockSlots(pkg: String, slotIndex: Int) {
+    /**
+     * Scambia due slot della dock. Identifica lo slot di partenza per uniqueKey
+     * (pkg + shortcutId + instanceId), non per solo packageName.
+     */
+    suspend fun swapDockSlots(pkg: String, slotIndex: Int, shortcutId: String = "", instanceId: String = "") {
         val dockItems = PrefsSync.dockItems(activity).toMutableList()
         while (dockItems.size < 4) dockItems.add("")
         val dockShortcutIds = PrefsSync.dockShortcutIds(activity).toMutableList()
         while (dockShortcutIds.size < 4) dockShortcutIds.add("")
+        val dockInstanceIds = PrefsSync.dockInstanceIds(activity).toMutableList()
+        while (dockInstanceIds.size < 4) dockInstanceIds.add("")
 
-        var fromIndex = dockItems.indexOf(pkg)
-        if (fromIndex == -1) {
-            fromIndex = dockShortcutIds.indexOfFirst { it.isNotEmpty() }
+        // Trova l'indice di partenza confrontando la coppia completa (pkg, shortcutId, instanceId)
+        var fromIndex = -1
+        for (i in dockItems.indices) {
+            if (dockItems[i] == pkg &&
+                (dockShortcutIds.getOrNull(i) ?: "") == shortcutId &&
+                (dockInstanceIds.getOrNull(i) ?: "") == instanceId
+            ) {
+                fromIndex = i
+                break
+            }
         }
 
         if (fromIndex != -1 && fromIndex != slotIndex) {
-            val a = dockItems[fromIndex]
-            val b = dockItems[slotIndex]
-            dockItems[fromIndex] = b
-            dockItems[slotIndex] = a
-            PrefsSync.setDockItems(activity, dockItems)
+            // Scambia i tre array in parallelo
+            val aPkg = dockItems[fromIndex]; val bPkg = dockItems[slotIndex]
+            dockItems[fromIndex] = bPkg; dockItems[slotIndex] = aPkg
 
-            val aId = dockShortcutIds[fromIndex]
-            val bId = dockShortcutIds[slotIndex]
-            dockShortcutIds[fromIndex] = bId
-            dockShortcutIds[slotIndex] = aId
+            val aId = dockShortcutIds[fromIndex]; val bId = dockShortcutIds[slotIndex]
+            dockShortcutIds[fromIndex] = bId; dockShortcutIds[slotIndex] = aId
+
+            val aInst = dockInstanceIds[fromIndex]; val bInst = dockInstanceIds[slotIndex]
+            dockInstanceIds[fromIndex] = bInst; dockInstanceIds[slotIndex] = aInst
+
+            PrefsSync.setDockItems(activity, dockItems)
             PrefsSync.setDockShortcutIds(activity, dockShortcutIds)
+            PrefsSync.setDockInstanceIds(activity, dockInstanceIds)
 
             refresh()
         }
     }
 
-    suspend fun addToDockAtPublic(pkg: String, slotIndex: Int, shortcutId: String = "") {
-        addToDockAt(pkg, slotIndex, shortcutId)
+    suspend fun addToDockAtPublic(
+        pkg: String,
+        slotIndex: Int,
+        shortcutId: String = "",
+        instanceId: String = ""
+    ) {
+        addToDockAt(pkg, slotIndex, shortcutId, instanceId)
     }
 
-    private suspend fun addToDockAt(pkg: String, slotIndex: Int, shortcutId: String) {
+    private suspend fun addToDockAt(pkg: String, slotIndex: Int, shortcutId: String, instanceId: String) {
         val dockItems = PrefsSync.dockItems(activity).toMutableList()
         while (dockItems.size < 4) dockItems.add("")
+        val dockShortcutIds = PrefsSync.dockShortcutIds(activity).toMutableList()
+        while (dockShortcutIds.size < 4) dockShortcutIds.add("")
+        val dockInstanceIds = PrefsSync.dockInstanceIds(activity).toMutableList()
+        while (dockInstanceIds.size < 4) dockInstanceIds.add("")
 
-        dockItems.replaceAll { if (it == pkg) "" else it }
+        // Rimuovi eventuali duplicati esatti in dock (stessa tripla)
+        for (i in dockItems.indices) {
+            if (dockItems[i] == pkg &&
+                (dockShortcutIds.getOrNull(i) ?: "") == shortcutId &&
+                (dockInstanceIds.getOrNull(i) ?: "") == instanceId
+            ) {
+                dockItems[i] = ""
+                dockShortcutIds[i] = ""
+                dockInstanceIds[i] = ""
+            }
+        }
 
+        // Rimuovi lo slot corrispondente dalla home (SOLO la tripla esatta)
         val homeSlots = PrefsSync.homeSlots(activity)
-        val originalSlot = homeSlots.firstOrNull {
-            if (shortcutId.isNotEmpty()) it.packageName == pkg && it.shortcutId == shortcutId
-            else it.packageName == pkg
-        }
-        val actualShortcutId = shortcutId.ifEmpty { originalSlot?.shortcutId ?: "" }
-
-        // Rimuovi SOLO lo slot con packageName + shortcutId (non tutti quelli con quel package)
-        val filtered = homeSlots.filter {
-            if (actualShortcutId.isNotEmpty()) !(it.packageName == pkg && it.shortcutId == actualShortcutId)
-            else it.packageName != pkg
-        }
+        val filtered = homeSlots.filterNot { it.packageName == pkg && it.shortcutId == shortcutId && it.instanceId == instanceId }
         if (filtered.size != homeSlots.size) {
             PrefsSync.setHomeSlots(activity, filtered)
         }
 
-        val previousOccupant = dockItems[slotIndex]
-        dockItems[slotIndex] = pkg
+        // Inserisci in dock
+        val previousPkg = dockItems[slotIndex]
+        val previousId = dockShortcutIds[slotIndex]
+        val previousInst = dockInstanceIds[slotIndex]
 
-        if (previousOccupant.isNotBlank()) {
+        dockItems[slotIndex] = pkg
+        dockShortcutIds[slotIndex] = shortcutId
+        dockInstanceIds[slotIndex] = instanceId
+
+        // Se c'era un occupante, spostalo nel primo slot libero
+        if (previousPkg.isNotBlank()) {
             val freeIndex = dockItems.indexOfFirst { it.isBlank() }
             if (freeIndex != -1) {
-                dockItems[freeIndex] = previousOccupant
+                dockItems[freeIndex] = previousPkg
+                dockShortcutIds[freeIndex] = previousId
+                dockInstanceIds[freeIndex] = previousInst
             }
         }
 
         PrefsSync.setDockItems(activity, dockItems)
-
-        val dockShortcutIds = PrefsSync.dockShortcutIds(activity).toMutableList()
-        while (dockShortcutIds.size < 4) dockShortcutIds.add("")
-        dockShortcutIds[slotIndex] = actualShortcutId
         PrefsSync.setDockShortcutIds(activity, dockShortcutIds)
+        PrefsSync.setDockInstanceIds(activity, dockInstanceIds)
 
         refresh()
+    }
+
+    private fun loadShortcutIconBitmap(packageName: String, shortcutId: String, sizePx: Int): android.graphics.Bitmap? {
+        if (sizePx <= 0 || shortcutId.isEmpty()) return null
+        return try {
+            val launcherApps = activity.getSystemService(android.content.Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+            val query = LauncherApps.ShortcutQuery().apply {
+                setPackage(packageName)
+                setQueryFlags(
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED
+                )
+            }
+            val shortcuts = launcherApps.getShortcuts(query, android.os.Process.myUserHandle())
+            val shortcut = shortcuts?.firstOrNull { it.id == shortcutId } ?: return null
+            val density = activity.resources.displayMetrics.densityDpi
+            val drawable = launcherApps.getShortcutIconDrawable(shortcut, density) ?: return null
+            val bmp = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bmp)
+            drawable.setBounds(0, 0, sizePx, sizePx)
+            drawable.draw(canvas)
+            bmp
+        } catch (e: Exception) {
+            null
+        }
     }
 }
