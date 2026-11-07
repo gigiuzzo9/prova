@@ -40,14 +40,9 @@ object PrefsSync {
             .apply()
     }
 
-    /** Cerca uno slot per chiave univoca (packageName o packageName|shortcutId[|instanceId]). */
     fun findSlotByUniqueKey(context: Context, uniqueKey: String): HomeSlot? =
         homeSlots(context).firstOrNull { it.uniqueKey == uniqueKey }
 
-    /**
-     * Rimuove lo slot con la chiave univoca indicata.
-     * Ritorna true se qualcosa è stato rimosso.
-     */
     fun removeHomeSlotByKey(context: Context, uniqueKey: String): Boolean {
         val slots = homeSlots(context)
         val filtered = slots.filterNot { it.uniqueKey == uniqueKey }
@@ -78,8 +73,6 @@ object PrefsSync {
         prefs(context).edit().putString("dock_items", normalized.joinToString(",")).apply()
     }
 
-    // --- Dock shortcuts (per supportare le scorciatoie nella dock) ---
-
     fun dockShortcutIds(context: Context): List<String> {
         val raw = prefs(context).getString("dock_shortcut_ids", "") ?: ""
         return if (raw.isEmpty()) emptyList() else raw.split(",")
@@ -90,8 +83,6 @@ object PrefsSync {
         while (normalized.size < 4) normalized.add("")
         prefs(context).edit().putString("dock_shortcut_ids", normalized.joinToString(",")).apply()
     }
-
-    // --- Dock instance IDs (distingue istanze multiple della stessa scorciatoia) ---
 
     fun dockInstanceIds(context: Context): List<String> {
         val raw = prefs(context).getString("dock_instance_ids", "") ?: ""
@@ -104,10 +95,6 @@ object PrefsSync {
         prefs(context).edit().putString("dock_instance_ids", normalized.joinToString(",")).apply()
     }
 
-    /**
-     * Rimuove dalla dock lo slot identificato da (pkg, shortcutId, instanceId).
-     * Ritorna true se qualcosa è stato rimosso.
-     */
     fun removeDockSlotByKey(
         context: Context,
         pkg: String,
@@ -160,60 +147,100 @@ object PrefsSync {
         prefs(context).edit().putString("custom_labels", raw).apply()
     }
 
-    // --- Custom Icons (per app normali: chiave = packageName) ---
+    // --- Custom Icons (MAPPA UNICA per app e scorciatoie) ---
+    // Chiave:
+    //   app normale          -> "packageName"
+    //   scorciatoia singola  -> "packageName|shortcutId"
+    //   scorciatoia multipla -> "packageName|shortcutId|instanceId"
+    //
+    // Valore: path assoluto del PNG.
+    // Formato grezzo: "chiave:path|chiave2:path2|..." (split sul PRIMO ':' di ogni coppia)
 
     fun customIcons(context: Context): Map<String, String> {
         val raw = prefs(context).getString("custom_icons", "") ?: ""
         if (raw.isEmpty()) return emptyMap()
-        return raw.split("|").filter { it.isNotBlank() }.associate {
-            val parts = it.split(":", limit = 2)
-            parts[0] to (parts.getOrNull(1) ?: "")
-        }
+        return raw.split("|").filter { it.isNotBlank() }.mapNotNull {
+            val idx = it.indexOf(':')
+            if (idx <= 0) null
+            else it.substring(0, idx) to it.substring(idx + 1)
+        }.toMap()
     }
 
-    fun setCustomIcon(context: Context, packageName: String, path: String) {
+    /** Chiave univoca per un'icona custom (app o scorciatoia). */
+    fun iconKeyFor(pkg: String, shortcutId: String, instanceId: String): String = when {
+        shortcutId.isEmpty() -> pkg
+        instanceId.isEmpty() -> "$pkg|$shortcutId"
+        else -> "$pkg|$shortcutId|$instanceId"
+    }
+
+    /** Legge l'icona custom per uno slot (app o shortcut). Ritorna il path o null. */
+    fun getCustomIconPath(
+        context: Context,
+        pkg: String,
+        shortcutId: String,
+        instanceId: String
+    ): String? {
+        val key = iconKeyFor(pkg, shortcutId, instanceId)
+        return customIcons(context)[key]
+    }
+
+    /** Salva l'icona custom per uno slot (app o shortcut). */
+    fun setCustomIconFor(
+        context: Context,
+        pkg: String,
+        shortcutId: String,
+        instanceId: String,
+        path: String
+    ) {
         val map = customIcons(context).toMutableMap()
-        map[packageName] = path
+        map[iconKeyFor(pkg, shortcutId, instanceId)] = path
         val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
         prefs(context).edit().putString("custom_icons", raw).apply()
+    }
+
+    /** Rimuove l'icona custom per uno slot (app o shortcut). */
+    fun removeCustomIconFor(
+        context: Context,
+        pkg: String,
+        shortcutId: String,
+        instanceId: String
+    ) {
+        val map = customIcons(context).toMutableMap()
+        map.remove(iconKeyFor(pkg, shortcutId, instanceId))
+        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
+        prefs(context).edit().putString("custom_icons", raw).apply()
+    }
+
+    // --- Compat: vecchie API per app normali (mantengono la stessa mappa) ---
+
+    fun setCustomIcon(context: Context, packageName: String, path: String) {
+        setCustomIconFor(context, packageName, "", "", path)
     }
 
     fun removeCustomIcon(context: Context, packageName: String) {
+        removeCustomIconFor(context, packageName, "", "")
+    }
+
+    // --- Compat: vecchie API per scorciatoie (mantengono la stessa mappa) ---
+
+    fun customShortcutIcons(context: Context): Map<String, String> = customIcons(context)
+
+    fun setCustomShortcutIcon(context: Context, uniqueKey: String, path: String) {
+        // uniqueKey arriva già nel formato "pkg|sid[|iid]"
         val map = customIcons(context).toMutableMap()
-        map.remove(packageName)
+        map[uniqueKey] = path
         val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
         prefs(context).edit().putString("custom_icons", raw).apply()
     }
 
-    // --- Custom Icons per le scorciatoie (chiave = uniqueKey = pkg|shortcutId[|instanceId]) ---
-
-    fun customShortcutIcons(context: Context): Map<String, String> {
-        val raw = prefs(context).getString("custom_shortcut_icons", "") ?: ""
-        if (raw.isEmpty()) return emptyMap()
-        return raw.split("|").filter { it.isNotBlank() }.associate {
-            val parts = it.split(":", limit = 2)
-            parts[0] to (parts.getOrNull(1) ?: "")
-        }
-    }
-
-    fun setCustomShortcutIcon(context: Context, uniqueKey: String, path: String) {
-        val map = customShortcutIcons(context).toMutableMap()
-        map[uniqueKey] = path
-        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
-        prefs(context).edit().putString("custom_shortcut_icons", raw).apply()
-    }
-
     fun removeCustomShortcutIcon(context: Context, uniqueKey: String) {
-        val map = customShortcutIcons(context).toMutableMap()
+        val map = customIcons(context).toMutableMap()
         map.remove(uniqueKey)
         val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
-        prefs(context).edit().putString("custom_shortcut_icons", raw).apply()
+        prefs(context).edit().putString("custom_icons", raw).apply()
     }
 
     // --- Shortcut intents (fallback per browser che rimuovono le shortcut dinamiche) ---
-    // Chiave = uniqueKey (pkg | pkg|shortcutId | pkg|shortcutId|instanceId)
-    // Valore = Intent.toUri(Intent.URI_INTENT_SCHEME)
-    // Separatore di coppie: "||" ; separatore chiave/valore: "=" (il primo "=")
 
     fun shortcutIntents(context: Context): Map<String, String> {
         val raw = prefs(context).getString("shortcut_intents", "") ?: ""
