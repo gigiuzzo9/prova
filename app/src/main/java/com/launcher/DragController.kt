@@ -8,11 +8,36 @@ class DragController(
     private val activity: HomeActivity,
     private val homeRecyclerView: View,
     private val drawerOverlay: View,
-    private val onDragStart: (source: String, pkg: String, widgetId: Int, widthCells: Int, heightCells: Int, x: Float, y: Float) -> Unit,
+    private val onDragStart: (
+        source: String,
+        pkg: String,
+        shortcutId: String,
+        instanceId: String,
+        widgetId: Int,
+        widthCells: Int,
+        heightCells: Int,
+        x: Float,
+        y: Float
+    ) -> Unit,
     private val onDragMove: (x: Float, y: Float) -> Unit,
-    private val onDropOnHome: (source: String, pkg: String, widgetId: Int, x: Float, y: Float) -> Boolean,
-    private val onDropOnDrawer: (pkg: String) -> Unit,
-    private val onDropOnDock: (source: String, pkg: String, x: Float, y: Float) -> Unit,
+    private val onDropOnHome: (
+        source: String,
+        pkg: String,
+        shortcutId: String,
+        instanceId: String,
+        widgetId: Int,
+        x: Float,
+        y: Float
+    ) -> Boolean,
+    private val onDropOnDrawer: (pkg: String, shortcutId: String, instanceId: String) -> Unit,
+    private val onDropOnDock: (
+        source: String,
+        pkg: String,
+        shortcutId: String,
+        instanceId: String,
+        x: Float,
+        y: Float
+    ) -> Unit,
     private val onDragEnd: () -> Unit,
     private val onVisualDragStart: (source: String, pkg: String) -> Unit = { _, _ -> },
     private val onVisualDragEnd: (source: String, pkg: String) -> Unit = { _, _ -> }
@@ -35,15 +60,26 @@ class DragController(
     private var pendingAnchor: View? = null
     private var pendingSource: String? = null
     private var pendingFromDrawer = false
+    private var pendingShortcutId: String = ""
+    private var pendingInstanceId: String = ""
     private var pendingStartRawX = -1f
     private var pendingStartRawY = -1f
 
     private var isDragging = false
     private var dragSource: String? = null
     private var dragPkg: String? = null
+    private var dragShortcutId: String = ""
+    private var dragInstanceId: String = ""
     private var dragWidgetId: Int = -1
 
-    fun onLongPress(app: AppInfo, anchor: View, source: String, fromDrawer: Boolean) {
+    fun onLongPress(
+        app: AppInfo,
+        anchor: View,
+        source: String,
+        fromDrawer: Boolean,
+        shortcutId: String = "",
+        instanceId: String = ""
+    ) {
         if (isDragging) return
         pendingApp = app
         pendingWidget = null
@@ -51,6 +87,8 @@ class DragController(
         pendingAnchor = anchor
         pendingSource = source
         pendingFromDrawer = fromDrawer
+        pendingShortcutId = shortcutId
+        pendingInstanceId = instanceId
         pendingStartRawX = -1f
         pendingStartRawY = -1f
 
@@ -65,6 +103,8 @@ class DragController(
         pendingAnchor = anchor
         pendingSource = SOURCE_WIDGET
         pendingFromDrawer = false
+        pendingShortcutId = ""
+        pendingInstanceId = ""
         pendingStartRawX = -1f
         pendingStartRawY = -1f
     }
@@ -83,19 +123,21 @@ class DragController(
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     val source = dragSource ?: ""
                     val pkg = dragPkg ?: ""
+                    val shortcutId = dragShortcutId
+                    val instanceId = dragInstanceId
                     val widgetId = dragWidgetId
                     val x = event.rawX
                     val y = event.rawY
 
                     if (source == SOURCE_WIDGET) {
-                        onDropOnHome(source, pkg, widgetId, x, y)
+                        onDropOnHome(source, pkg, "", "", widgetId, x, y)
                     } else {
                         if (activity.isPointInDock(x, y)) {
-                            onDropOnDock(source, pkg, x, y)
+                            onDropOnDock(source, pkg, shortcutId, instanceId, x, y)
                         } else if (activity.isPointInDrawer(x, y)) {
-                            onDropOnDrawer(pkg)
+                            onDropOnDrawer(pkg, shortcutId, instanceId)
                         } else {
-                            onDropOnHome(source, pkg, widgetId, x, y)
+                            onDropOnHome(source, pkg, shortcutId, instanceId, widgetId, x, y)
                         }
                     }
 
@@ -104,6 +146,8 @@ class DragController(
                     isDragging = false
                     dragSource = null
                     dragPkg = null
+                    dragShortcutId = ""
+                    dragInstanceId = ""
                     dragWidgetId = -1
                     onDragEnd()
                     return true
@@ -139,6 +183,8 @@ class DragController(
                     val widget = pendingWidget
                     val widgetInfo = pendingWidgetInfo
                     val app = pendingApp
+                    val shortcutId = pendingShortcutId
+                    val instanceId = pendingInstanceId
 
                     isDragging = true
                     dragSource = source
@@ -149,6 +195,8 @@ class DragController(
                         onDragStart(
                             source,
                             "",
+                            "",
+                            "",
                             widget.appWidgetId,
                             widget.widthCells,
                             widget.heightCells,
@@ -157,6 +205,8 @@ class DragController(
                         )
                     } else if (app != null) {
                         dragPkg = app.packageName
+                        dragShortcutId = shortcutId
+                        dragInstanceId = instanceId
                         if (source == SOURCE_DRAWER) {
                             activity.onDragFromDrawerStarted()
                         }
@@ -164,6 +214,8 @@ class DragController(
                         onDragStart(
                             source,
                             app.packageName,
+                            shortcutId,
+                            instanceId,
                             -1,
                             0,
                             0,
@@ -192,6 +244,8 @@ class DragController(
         pendingAnchor = null
         pendingSource = null
         pendingFromDrawer = false
+        pendingShortcutId = ""
+        pendingInstanceId = ""
         pendingStartRawX = -1f
         pendingStartRawY = -1f
     }
