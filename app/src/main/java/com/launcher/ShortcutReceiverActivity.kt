@@ -30,18 +30,38 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     ""
                 }
 
-                placeShortcutOnFirstFreeCell(packageName, realShortcutId, instanceId)
-                sendBroadcast(Intent("com.simplylauncher.RELOAD"))
+                val placed = placeShortcutOnFirstFreeCell(packageName, realShortcutId, instanceId)
+                if (placed) {
+                    // Salva l'Intent originale come fallback per il click,
+                    // in caso la shortcut dinamica sparisca (browser che la rimuove).
+                    val originalIntent = shortcutInfo.intent
+                    if (originalIntent != null) {
+                        val uniqueKey = when {
+                            instanceId.isEmpty() -> "${packageName}|${realShortcutId}"
+                            else -> "${packageName}|${realShortcutId}|${instanceId}"
+                        }
+                        PrefsSync.setShortcutIntent(
+                            this,
+                            uniqueKey,
+                            originalIntent.toUri(Intent.URI_INTENT_SCHEME)
+                        )
+                    }
+                    sendBroadcast(Intent("com.simplylauncher.RELOAD"))
+                }
             }
         }
         finish()
     }
 
+    /**
+     * Cerca la prima cella libera (slot + widget) a partire da pagina 0.
+     * Ritorna true se lo slot è stato piazzato e salvato.
+     */
     private fun placeShortcutOnFirstFreeCell(
         packageName: String,
         shortcutId: String,
         instanceId: String
-    ) {
+    ): Boolean {
         val cols = PrefsSync.cols(this).coerceAtLeast(1)
         val rows = PrefsSync.rows(this).coerceAtLeast(1)
         val slots = PrefsSync.homeSlots(this).toMutableList()
@@ -61,7 +81,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             }
         }
 
-        // Prima pagina con una cella libera; se non c'è, ne creiamo una nuova
         var targetPage = 0
         var targetRow = -1
         var targetCol = -1
@@ -79,13 +98,10 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                 }
             }
             if (targetRow == -1) {
-                // se la pagina è "piena" ma non è quella di default, la consideriamo
-                // come pagina da creare
                 page++
-                // limite di sicurezza: 20 pagine
                 if (page >= 20) {
-                    // Rinuncia: non aggiungiamo la scorciatoia
-                    return
+                    // Nessuno spazio entro 20 pagine: rinuncia
+                    return false
                 }
             }
         }
@@ -104,5 +120,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         if (targetPage + 1 > PrefsSync.pageCount(this)) {
             PrefsSync.setPageCount(this, targetPage + 1)
         }
+        return true
     }
 }
