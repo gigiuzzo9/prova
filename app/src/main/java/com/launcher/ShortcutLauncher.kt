@@ -50,7 +50,7 @@ object ShortcutLauncher {
 
         val savedIntentUri = PrefsSync.shortcutIntents(context)[uniqueKey]
 
-        // 1) Prova a parsare l'Intent salvato
+        // 1) Parsing dell'Intent salvato
         var parsedIntent: Intent? = null
         if (!savedIntentUri.isNullOrEmpty()) {
             try {
@@ -58,50 +58,51 @@ object ShortcutLauncher {
             } catch (_: Exception) {}
         }
 
-        // 2) È un collegamento web?
-        val pi = parsedIntent
-        val isWebLink = pi != null &&
-                pi.action == Intent.ACTION_VIEW &&
-                isHttpUrl(pi.data)
+        // 2) Gestione link web — usando un blocco locale con non-null garantito
+        if (parsedIntent != null) {
+            val pi: Intent = parsedIntent  // smart cast qui funziona perché è locale
+            val isWebLink = pi.action == Intent.ACTION_VIEW && isHttpUrl(pi.data)
 
-        if (isWebLink && pi != null) {
-            val url = pi.data
-            // 2a) Prova con l'Intent salvato
-            try {
-                pi.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                pi.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                context.startActivity(pi)
+            if (isWebLink) {
+                val url = pi.data
+
+                // 2a) Prova con l'Intent salvato
+                try {
+                    pi.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    pi.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                    context.startActivity(pi)
+                    return
+                } catch (_: Exception) {}
+
+                // 2b) Fallback: apri direttamente l'URL
+                if (url != null) {
+                    try {
+                        val browserIntent = Intent(Intent.ACTION_VIEW, url).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                        }
+                        context.startActivity(browserIntent)
+                        return
+                    } catch (_: Exception) {}
+                }
+
+                // 2c) Ultimo tentativo: stringa URL
+                val urlString = url?.toString()
+                if (!urlString.isNullOrEmpty()) {
+                    try {
+                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(urlString)).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(browserIntent)
+                        return
+                    } catch (_: Exception) {}
+                }
+
+                if (showErrorToast) {
+                    debug(context, "ERRORE LINK WEB", "Impossibile aprire: ${url ?: savedIntentUri}")
+                }
                 return
-            } catch (_: Exception) {}
-
-            // 2b) Fallback: apri direttamente l'URL con ACTION_VIEW
-            if (url != null) {
-                try {
-                    val browserIntent = Intent(Intent.ACTION_VIEW, url).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                    }
-                    context.startActivity(browserIntent)
-                    return
-                } catch (_: Exception) {}
             }
-
-            // 2c) Ultimo tentativo: estrai la stringa URL e apri
-            val urlString = url?.toString()
-            if (!urlString.isNullOrEmpty()) {
-                try {
-                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(urlString)).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    context.startActivity(browserIntent)
-                    return
-                } catch (_: Exception) {}
-            }
-
-            if (showErrorToast) {
-                debug(context, "ERRORE LINK WEB", "Impossibile aprire: ${url ?: savedIntentUri}")
-            }
-            return
         }
 
         // 3) Scorciatoia normale → startShortcut
@@ -112,7 +113,8 @@ object ShortcutLauncher {
         } catch (_: Exception) {}
 
         // 4) Fallback: se l'Intent salvato è avviabile, usalo
-        if (pi != null) {
+        if (parsedIntent != null) {
+            val pi: Intent = parsedIntent
             try {
                 pi.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(pi)
