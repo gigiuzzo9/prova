@@ -152,9 +152,7 @@ object PrefsSync {
     //   app normale          -> "packageName"
     //   scorciatoia singola  -> "packageName|shortcutId"
     //   scorciatoia multipla -> "packageName|shortcutId|instanceId"
-    //
     // Valore: path assoluto del PNG.
-    // Formato grezzo: "chiave:path|chiave2:path2|..." (split sul PRIMO ':' di ogni coppia)
 
     fun customIcons(context: Context): Map<String, String> {
         val raw = prefs(context).getString("custom_icons", "") ?: ""
@@ -226,7 +224,6 @@ object PrefsSync {
     fun customShortcutIcons(context: Context): Map<String, String> = customIcons(context)
 
     fun setCustomShortcutIcon(context: Context, uniqueKey: String, path: String) {
-        // uniqueKey arriva già nel formato "pkg|sid[|iid]"
         val map = customIcons(context).toMutableMap()
         map[uniqueKey] = path
         val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
@@ -238,32 +235,6 @@ object PrefsSync {
         map.remove(uniqueKey)
         val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
         prefs(context).edit().putString("custom_icons", raw).apply()
-    }
-
-    // --- Shortcut intents (fallback per browser che rimuovono le shortcut dinamiche) ---
-
-    fun shortcutIntents(context: Context): Map<String, String> {
-        val raw = prefs(context).getString("shortcut_intents", "") ?: ""
-        if (raw.isEmpty()) return emptyMap()
-        return raw.split("||").filter { it.isNotBlank() }.mapNotNull {
-            val idx = it.indexOf('=')
-            if (idx <= 0) null
-            else it.substring(0, idx) to it.substring(idx + 1)
-        }.toMap()
-    }
-
-    fun setShortcutIntent(context: Context, uniqueKey: String, uri: String) {
-        val map = shortcutIntents(context).toMutableMap()
-        map[uniqueKey] = uri
-        val raw = map.entries.joinToString("||") { "${it.key}=${it.value}" }
-        prefs(context).edit().putString("shortcut_intents", raw).apply()
-    }
-
-    fun removeShortcutIntent(context: Context, uniqueKey: String) {
-        val map = shortcutIntents(context).toMutableMap()
-        map.remove(uniqueKey)
-        val raw = map.entries.joinToString("||") { "${it.key}=${it.value}" }
-        prefs(context).edit().putString("shortcut_intents", raw).apply()
     }
 
     // --- Home labels ---
