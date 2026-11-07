@@ -13,16 +13,23 @@ import android.widget.TextView
 
 class AppContextMenuView(private val ctx: Context) {
 
-    var onUninstall: (() -> Unit)? = null
-    var onRename: (() -> Unit)? = null
-    var onRemove: (() -> Unit)? = null
+    // Le callback ricevono shortcutId/instanceId dello slot su cui è stato aperto il menu
+    var onUninstall: ((shortcutId: String, instanceId: String) -> Unit)? = null
+    var onRename: ((shortcutId: String, instanceId: String) -> Unit)? = null
+    var onRemove: ((shortcutId: String, instanceId: String) -> Unit)? = null
     var onMove: (() -> Unit)? = null
-    var onChangeIcon: (() -> Unit)? = null
+    var onChangeIcon: ((shortcutId: String, instanceId: String) -> Unit)? = null
     var onDismiss: (() -> Unit)? = null
 
     private var popupWindow: PopupWindow? = null
 
-    fun show(anchor: View, showRemove: Boolean, drawerIsWhite: Boolean = false) {
+    fun show(
+        anchor: View,
+        showRemove: Boolean,
+        drawerIsWhite: Boolean = false,
+        shortcutId: String = "",
+        instanceId: String = ""
+    ) {
         dismiss()
 
         val bgColor = if (drawerIsWhite) Color.BLACK else Color.WHITE
@@ -50,26 +57,26 @@ class AppContextMenuView(private val ctx: Context) {
         if (showRemove) {
             addDividerIfNeeded()
             container.addView(createMenuItem(ctx.getString(R.string.menu_remove), textColor) {
-                onRemove?.invoke()
+                onRemove?.invoke(shortcutId, instanceId)
                 dismiss()
             })
         }
 
         addDividerIfNeeded()
         container.addView(createMenuItem(ctx.getString(R.string.menu_uninstall), textColor) {
-            onUninstall?.invoke()
+            onUninstall?.invoke(shortcutId, instanceId)
             dismiss()
         })
 
         addDividerIfNeeded()
         container.addView(createMenuItem(ctx.getString(R.string.menu_rename), textColor) {
-            onRename?.invoke()
+            onRename?.invoke(shortcutId, instanceId)
             dismiss()
         })
 
         addDividerIfNeeded()
         container.addView(createMenuItem("Cambia icona", textColor) {
-            onChangeIcon?.invoke()
+            onChangeIcon?.invoke(shortcutId, instanceId)
             dismiss()
         })
 
