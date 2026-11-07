@@ -147,94 +147,54 @@ object PrefsSync {
         prefs(context).edit().putString("custom_labels", raw).apply()
     }
 
-    // --- Custom Icons (MAPPA UNICA per app e scorciatoie) ---
-    // Chiave:
-    //   app normale          -> "packageName"
-    //   scorciatoia singola  -> "packageName|shortcutId"
-    //   scorciatoia multipla -> "packageName|shortcutId|instanceId"
-    // Valore: path assoluto del PNG.
+    // --- Custom Icons (per app normali: chiave = packageName) ---
 
     fun customIcons(context: Context): Map<String, String> {
         val raw = prefs(context).getString("custom_icons", "") ?: ""
         if (raw.isEmpty()) return emptyMap()
-        return raw.split("|").filter { it.isNotBlank() }.mapNotNull {
-            val idx = it.indexOf(':')
-            if (idx <= 0) null
-            else it.substring(0, idx) to it.substring(idx + 1)
-        }.toMap()
+        return raw.split("|").filter { it.isNotBlank() }.associate {
+            val parts = it.split(":", limit = 2)
+            parts[0] to (parts.getOrNull(1) ?: "")
+        }
     }
-
-    /** Chiave univoca per un'icona custom (app o scorciatoia). */
-    fun iconKeyFor(pkg: String, shortcutId: String, instanceId: String): String = when {
-        shortcutId.isEmpty() -> pkg
-        instanceId.isEmpty() -> "$pkg|$shortcutId"
-        else -> "$pkg|$shortcutId|$instanceId"
-    }
-
-    /** Legge l'icona custom per uno slot (app o shortcut). Ritorna il path o null. */
-    fun getCustomIconPath(
-        context: Context,
-        pkg: String,
-        shortcutId: String,
-        instanceId: String
-    ): String? {
-        val key = iconKeyFor(pkg, shortcutId, instanceId)
-        return customIcons(context)[key]
-    }
-
-    /** Salva l'icona custom per uno slot (app o shortcut). */
-    fun setCustomIconFor(
-        context: Context,
-        pkg: String,
-        shortcutId: String,
-        instanceId: String,
-        path: String
-    ) {
-        val map = customIcons(context).toMutableMap()
-        map[iconKeyFor(pkg, shortcutId, instanceId)] = path
-        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
-        prefs(context).edit().putString("custom_icons", raw).apply()
-    }
-
-    /** Rimuove l'icona custom per uno slot (app o shortcut). */
-    fun removeCustomIconFor(
-        context: Context,
-        pkg: String,
-        shortcutId: String,
-        instanceId: String
-    ) {
-        val map = customIcons(context).toMutableMap()
-        map.remove(iconKeyFor(pkg, shortcutId, instanceId))
-        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
-        prefs(context).edit().putString("custom_icons", raw).apply()
-    }
-
-    // --- Compat: vecchie API per app normali (mantengono la stessa mappa) ---
 
     fun setCustomIcon(context: Context, packageName: String, path: String) {
-        setCustomIconFor(context, packageName, "", "", path)
+        val map = customIcons(context).toMutableMap()
+        map[packageName] = path
+        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
+        prefs(context).edit().putString("custom_icons", raw).apply()
     }
 
     fun removeCustomIcon(context: Context, packageName: String) {
-        removeCustomIconFor(context, packageName, "", "")
-    }
-
-    // --- Compat: vecchie API per scorciatoie (mantengono la stessa mappa) ---
-
-    fun customShortcutIcons(context: Context): Map<String, String> = customIcons(context)
-
-    fun setCustomShortcutIcon(context: Context, uniqueKey: String, path: String) {
         val map = customIcons(context).toMutableMap()
-        map[uniqueKey] = path
+        map.remove(packageName)
         val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
         prefs(context).edit().putString("custom_icons", raw).apply()
+    }
+
+    // --- Custom Icons per le scorciatoie (chiave = uniqueKey = pkg|shortcutId[|instanceId]) ---
+
+    fun customShortcutIcons(context: Context): Map<String, String> {
+        val raw = prefs(context).getString("custom_shortcut_icons", "") ?: ""
+        if (raw.isEmpty()) return emptyMap()
+        return raw.split("|").filter { it.isNotBlank() }.associate {
+            val parts = it.split(":", limit = 2)
+            parts[0] to (parts.getOrNull(1) ?: "")
+        }
+    }
+
+    fun setCustomShortcutIcon(context: Context, uniqueKey: String, path: String) {
+        val map = customShortcutIcons(context).toMutableMap()
+        map[uniqueKey] = path
+        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
+        prefs(context).edit().putString("custom_shortcut_icons", raw).apply()
     }
 
     fun removeCustomShortcutIcon(context: Context, uniqueKey: String) {
-        val map = customIcons(context).toMutableMap()
+        val map = customShortcutIcons(context).toMutableMap()
         map.remove(uniqueKey)
         val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
-        prefs(context).edit().putString("custom_icons", raw).apply()
+        prefs(context).edit().putString("custom_shortcut_icons", raw).apply()
     }
 
     // --- Home labels ---
