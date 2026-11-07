@@ -18,14 +18,10 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                 val packageName = shortcutInfo.`package`
                 val shortcutId = shortcutInfo.id
 
-                // Usa l'Intent della scorciatoia per ottenere il packageName reale (se è un URL, usa il package della scorciatoia)
-                val shortcutIntent = launcherApps.getShortcutIntent(shortcutInfo, null, null)
-                val realPackageName = shortcutIntent?.`package` ?: packageName
-
                 // Controlla se esiste già uno slot con lo stesso packageName e shortcutId
                 val slots = PrefsSync.homeSlots(this).toMutableList()
                 val existing = slots.any {
-                    it.packageName == realPackageName && it.shortcutId == shortcutId
+                    it.packageName == packageName && it.shortcutId == shortcutId
                 }
 
                 if (!existing) {
@@ -50,7 +46,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
 
                     if (found) {
                         val newSlot = HomeSlot(
-                            packageName = realPackageName,
+                            packageName = packageName,
                             row = foundRow,
                             col = foundCol,
                             page = 0,
