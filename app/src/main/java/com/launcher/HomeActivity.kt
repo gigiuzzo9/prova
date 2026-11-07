@@ -66,6 +66,7 @@ class HomeActivity : AppCompatActivity() {
     private var currentApp: AppInfo? = null
     private var currentAnchor: View? = null
     private var pendingIconPackage: String? = null
+    private var pendingIconShortcutId: String? = null
 
     private lateinit var homePopupMenu: HomePopupMenu
 
@@ -352,10 +353,12 @@ class HomeActivity : AppCompatActivity() {
             REQUEST_PICK_ICON -> {
                 if (resultCode == RESULT_OK && data?.data != null) {
                     pendingIconPackage?.let { pkg ->
-                        saveCustomIcon(pkg, data.data!!)
+                        val shortcutId = pendingIconShortcutId
+                        saveCustomIcon(pkg, shortcutId, data.data!!)
                     }
                 }
                 pendingIconPackage = null
+                pendingIconShortcutId = null
             }
             REQUEST_PICK_WALLPAPER -> {
                 if (resultCode == RESULT_OK && data?.data != null) {
@@ -463,11 +466,17 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveCustomIcon(packageName: String, uri: Uri) {
+    private fun saveCustomIcon(packageName: String, shortcutId: String?, uri: Uri) {
         try {
             val iconsDir = File(filesDir, "custom_icons")
             if (!iconsDir.exists()) iconsDir.mkdirs()
-            val destFile = File(iconsDir, "$packageName.png")
+
+            val key = if (shortcutId != null && shortcutId.isNotEmpty()) {
+                "${packageName}_${shortcutId}"
+            } else {
+                packageName
+            }
+            val destFile = File(iconsDir, "$key.png")
 
             contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(destFile).use { output ->
@@ -475,7 +484,11 @@ class HomeActivity : AppCompatActivity() {
                 }
             }
 
-            PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
+            if (shortcutId != null && shortcutId.isNotEmpty()) {
+                PrefsSync.setCustomShortcutIcon(this, "$packageName|$shortcutId", destFile.absolutePath)
+            } else {
+                PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
+            }
 
             AppRepository.invalidateCache()
 
@@ -1219,13 +1232,8 @@ class HomeActivity : AppCompatActivity() {
             if (source == DragController.SOURCE_DOCK) {
                 dockController.swapDockSlots(pkg, closestIndex)
             } else {
-                dockController.addToDockAtPublic(pkg, closestIndex)
+                dockController.addToDockAtPublic(pkg, closestIndex, shortcutId)
             }
-
-            val dockShortcutIds = PrefsSync.dockShortcutIds(this@HomeActivity).toMutableList()
-            while (dockShortcutIds.size < 4) dockShortcutIds.add("")
-            dockShortcutIds[closestIndex] = shortcutId
-            PrefsSync.setDockShortcutIds(this@HomeActivity, dockShortcutIds)
 
             dockController.refresh()
         }
@@ -1328,6 +1336,7 @@ class HomeActivity : AppCompatActivity() {
         contextMenuView.onChangeIcon = {
             currentApp?.let { app ->
                 pendingIconPackage = app.packageName
+                pendingIconShortcutId = null
                 val hasCustomIcon = PrefsSync.customIcons(this).containsKey(app.packageName)
 
                 val builder = AlertDialog.Builder(this)
@@ -1549,61 +1558,60 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun moveToCell(pkg: String, row: Int, col: Int, pageIndex: Int) {
-    val slots = PrefsSync.homeSlots(this).toMutableList()
+        val slots = PrefsSync.homeSlots(this).toMutableList()
 
-    // Recupera lo shortcutId dallo slot originale (griglia) o dalla dock
-    val originalHomeSlot = slots.firstOrNull { it.packageName == pkg }
-    val originalDockIndex = PrefsSync.dockItems(this).indexOf(pkg)
-    val originalDockShortcutId = if (originalDockIndex != -1) {
-        PrefsSync.dockShortcutIds(this).getOrNull(originalDockIndex) ?: ""
-    } else ""
-    val shortcutId = originalHomeSlot?.shortcutId?.takeIf { it.isNotEmpty() }
-        ?: originalDockShortcutId
+        val originalHomeSlot = slots.firstOrNull { it.packageName == pkg }
+        val originalDockIndex = PrefsSync.dockItems(this).indexOf(pkg)
+        val originalDockShortcutId = if (originalDockIndex != -1) {
+            PrefsSync.dockShortcutIds(this).getOrNull(originalDockIndex) ?: ""
+        } else ""
+        val shortcutId = originalHomeSlot?.shortcutId?.takeIf { it.isNotEmpty() }
+            ?: originalDockShortcutId
 
-    val existingSlot = slots.firstOrNull {
-        it.page == pageIndex && it.row == row && it.col == col && it.packageName != pkg
-    }
-    val sourceSlot = slots.firstOrNull { it.packageName == pkg }
-
-    slots.removeAll { it.packageName == pkg }
-
-    if (existingSlot != null) {
-        if (sourceSlot != null) {
-            slots.removeAll { it.page == sourceSlot.page && it.row == sourceSlot.row && it.col == sourceSlot.col }
-            slots.add(existingSlot.copy(row = sourceSlot.row, col = sourceSlot.col, page = sourceSlot.page))
-        } else {
-            slots.removeAll { it.page == pageIndex && it.row == row && it.col == col }
+        val existingSlot = slots.firstOrNull {
+            it.page == pageIndex && it.row == row && it.col == col && it.packageName != pkg
         }
-    }
+        val sourceSlot = slots.firstOrNull { it.packageName == pkg }
 
-    val newSlot = HomeSlot(
-        packageName = pkg,
-        row = row,
-        col = col,
-        page = pageIndex,
-        shortcutId = shortcutId
-    )
-    slots.add(newSlot)
-    PrefsSync.setHomeSlots(this, slots)
+        slots.removeAll { it.packageName == pkg }
 
-    // Rimuovi dalla dock (e svuota il suo shortcutId)
-    val dockItems = PrefsSync.dockItems(this)
-    if (dockItems.contains(pkg)) {
-        PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
-        val dockShortcutIds = PrefsSync.dockShortcutIds(this).toMutableList()
-        while (dockShortcutIds.size < 4) dockShortcutIds.add("")
-        val dockIndex = dockItems.indexOf(pkg)
-        if (dockIndex != -1) {
-            dockShortcutIds[dockIndex] = ""
-            PrefsSync.setDockShortcutIds(this, dockShortcutIds)
+        if (existingSlot != null) {
+            if (sourceSlot != null) {
+                slots.removeAll { it.page == sourceSlot.page && it.row == sourceSlot.row && it.col == sourceSlot.col }
+                slots.add(existingSlot.copy(row = sourceSlot.row, col = sourceSlot.col, page = sourceSlot.page))
+            } else {
+                slots.removeAll { it.page == pageIndex && it.row == row && it.col == col }
+            }
         }
-        dockController.refresh()
+
+        val newSlot = HomeSlot(
+            packageName = pkg,
+            row = row,
+            col = col,
+            page = pageIndex,
+            shortcutId = shortcutId
+        )
+        slots.add(newSlot)
+        PrefsSync.setHomeSlots(this, slots)
+
+        val dockItems = PrefsSync.dockItems(this)
+        if (dockItems.contains(pkg)) {
+            PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
+            val dockShortcutIds = PrefsSync.dockShortcutIds(this).toMutableList()
+            while (dockShortcutIds.size < 4) dockShortcutIds.add("")
+            val dockIndex = dockItems.indexOf(pkg)
+            if (dockIndex != -1) {
+                dockShortcutIds[dockIndex] = ""
+                PrefsSync.setDockShortcutIds(this, dockShortcutIds)
+            }
+            dockController.refresh()
+        }
+
+        homeScreenGrid.setGridSize(currentCols, currentRows)
+        homeScreenGrid.setPageCount(currentPageCount)
+        homeScreenGrid.setItems(PrefsSync.homeSlots(this))
     }
 
-    homeScreenGrid.setGridSize(currentCols, currentRows)
-    homeScreenGrid.setPageCount(currentPageCount)
-    homeScreenGrid.setItems(PrefsSync.homeSlots(this))
-}
     private fun handleDropOnDrawer(pkg: String) {
         val slots = PrefsSync.homeSlots(this)
         PrefsSync.setHomeSlots(this, slots.filter { it.packageName != pkg })
