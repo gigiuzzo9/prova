@@ -1,5 +1,6 @@
 package com.simplylauncher
 
+import android.content.Intent
 import android.content.pm.LauncherApps
 import android.view.Gravity
 import android.view.View
@@ -38,6 +39,7 @@ class DockController(
             val size = (62 * density).toInt()
             val customIcons = PrefsSync.customIcons(activity)
             val customShortcutIcons = PrefsSync.customShortcutIcons(activity)
+            val shortcutIntents = PrefsSync.shortcutIntents(activity)
 
             slots.forEachIndexed { index, slot ->
                 slot.removeAllViews()
@@ -54,12 +56,23 @@ class DockController(
                         else -> "${app.packageName}|$shortcutId|$instanceId"
                     }
 
-                    // Icona: se è una shortcut, prova l'icona della shortcut; fallback su app
-                    val bitmap = if (shortcutId.isNotEmpty()) {
-                        loadShortcutIconBitmap(app.packageName, shortcutId, size * 3)
+                    // Icona: priorità a custom > shortcut > app
+                    val bitmap: android.graphics.Bitmap? = if (shortcutId.isNotEmpty()) {
+                        val customPath = customShortcutIcons[uniqueKey]
+                        val customBmp = if (customPath != null) {
+                            val f = java.io.File(customPath)
+                            if (f.exists()) android.graphics.BitmapFactory.decodeFile(customPath) else null
+                        } else null
+                        customBmp
+                            ?: loadShortcutIconBitmap(app.packageName, shortcutId, size * 3)
                             ?: AppCache.getIconBitmap(app.packageName, size * 3)
                     } else {
-                        AppCache.getIconBitmap(app.packageName, size * 3)
+                        val customPath = customIcons[app.packageName]
+                        val customBmp = if (customPath != null) {
+                            val f = java.io.File(customPath)
+                            if (f.exists()) android.graphics.BitmapFactory.decodeFile(customPath) else null
+                        } else null
+                        customBmp ?: AppCache.getIconBitmap(app.packageName, size * 3)
                     }
 
                     val imageView = ImageView(activity)
@@ -85,7 +98,7 @@ class DockController(
 
                     slot.setOnClickListener {
                         if (shortcutId.isNotEmpty()) {
-                            try {
+                            val launched = try {
                                 val launcherApps = activity.getSystemService(android.content.Context.LAUNCHER_APPS_SERVICE) as LauncherApps
                                 launcherApps.startShortcut(
                                     app.packageName,
@@ -94,12 +107,32 @@ class DockController(
                                     null,
                                     android.os.Process.myUserHandle()
                                 )
+                                true
                             } catch (e: Exception) {
-                                android.widget.Toast.makeText(
-                                    activity,
-                                    "Impossibile avviare la scorciatoia",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
+                                false
+                            }
+                            if (!launched) {
+                                // fallback: Intent salvato al pin
+                                val savedUri = shortcutIntents[uniqueKey]
+                                if (savedUri != null) {
+                                    try {
+                                        val intent = Intent.parseUri(savedUri, Intent.URI_INTENT_SCHEME)
+                                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        activity.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(
+                                            activity,
+                                            "Scorciatoia non più disponibile",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                } else {
+                                    android.widget.Toast.makeText(
+                                        activity,
+                                        "Scorciatoia non più disponibile",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
                             }
                         } else {
                             AppRepository.launchApp(activity, app.packageName)
@@ -149,7 +182,7 @@ class DockController(
         val dockInstanceIds = PrefsSync.dockInstanceIds(activity).toMutableList()
         while (dockInstanceIds.size < 4) dockInstanceIds.add("")
 
-        // Trova l'indice di partenza confrontando la coppia completa (pkg, shortcutId, instanceId)
+        // Trova l'indice di partenza confrontando la tripla completa
         var fromIndex = -1
         for (i in dockItems.indices) {
             if (dockItems[i] == pkg &&
@@ -214,6 +247,11 @@ class DockController(
         val filtered = homeSlots.filterNot { it.packageName == pkg && it.shortcutId == shortcutId && it.instanceId == instanceId }
         if (filtered.size != homeSlots.size) {
             PrefsSync.setHomeSlots(activity, filtered)
+            // Pulizia: se era una shortcut, rimuovi anche l'Intent salvato
+            if (shortcutId.isNotEmpty()) {
+                val key = if (instanceId.isEmpty()) "$pkg|$shortcutId" else "$pkg|$shortcutId|$instanceId"
+                PrefsSync.removeShortcutIntent(activity, key)
+            }
         }
 
         // Inserisci in dock
