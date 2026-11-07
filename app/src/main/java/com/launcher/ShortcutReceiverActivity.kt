@@ -28,6 +28,20 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     ""
                 }
 
+                // Salva l'Intent originale della shortcut (utile per i collegamenti browser
+                // e per fallback quando LauncherApps.startShortcut fallisce)
+                val uniqueKey = when {
+                    instanceId.isEmpty() -> "$packageName|$realShortcutId"
+                    else -> "$packageName|$realShortcutId|$instanceId"
+                }
+                val originalIntent = shortcutInfo.intent
+                if (originalIntent != null) {
+                    try {
+                        val intentUri = originalIntent.toUri(Intent.URI_INTENT_SCHEME)
+                        PrefsSync.setShortcutIntent(this, uniqueKey, intentUri)
+                    } catch (_: Exception) {}
+                }
+
                 placeShortcutOnFirstFreeCell(packageName, realShortcutId, instanceId)
                 sendBroadcast(Intent("com.simplylauncher.RELOAD"))
             }
