@@ -1565,51 +1565,37 @@ class HomeActivity : AppCompatActivity() {
 private fun moveToCell(pkg: String, shortcutId: String, row: Int, col: Int, pageIndex: Int) {
     val slots = PrefsSync.homeSlots(this).toMutableList()
 
-    // La chiave univoca dello slot che stiamo spostando
     val movingKey = if (shortcutId.isNotEmpty()) "$pkg|$shortcutId" else pkg
 
-    // Trova lo slot originale tramite uniqueKey (NON per packageName)
+    // Rimuovi SOLO lo slot originale (per uniqueKey)
     val originalSlot = slots.firstOrNull { it.uniqueKey == movingKey }
-    
-    // Rimuovi SOLO lo slot originale, non tutti quelli con lo stesso package
     if (originalSlot != null) {
         slots.remove(originalSlot)
     } else {
-        // Fallback: se non trovato (es. drag dalla dock), prova a cercare per packageName
-        // ma solo se c'è un solo slot con quel package
         val samePkg = slots.filter { it.packageName == pkg }
         if (samePkg.size == 1) {
             slots.remove(samePkg[0])
         }
-        // Se ce ne sono più di uno e non sappiamo quale, non rimuoviamo nulla (evita di cancellare la scorciatoia sbagliata)
     }
 
-    // Se c'è già uno slot nella destinazione, spostalo
-    val existingSlot = slots.firstOrNull {
+    // Rimuovi lo slot che occupa la destinazione (se c'è), senza spostarlo
+    slots.removeAll {
         it.page == pageIndex && it.row == row && it.col == col && it.uniqueKey != movingKey
     }
-    if (existingSlot != null) {
-        // Sposta lo slot esistente nella posizione dell'originale (se esiste)
-        if (originalSlot != null) {
-            slots.remove(existingSlot)
-            slots.add(existingSlot.copy(row = originalSlot.row, col = originalSlot.col, page = originalSlot.page))
-        } else {
-            slots.remove(existingSlot)
-        }
-    }
 
-    // Aggiungi il nuovo slot con il shortcutId corretto
-    val newSlot = HomeSlot(
-        packageName = pkg,
-        row = row,
-        col = col,
-        page = pageIndex,
-        shortcutId = shortcutId
+    // Aggiungi il nuovo slot nella destinazione
+    slots.add(
+        HomeSlot(
+            packageName = pkg,
+            row = row,
+            col = col,
+            page = pageIndex,
+            shortcutId = shortcutId
+        )
     )
-    slots.add(newSlot)
     PrefsSync.setHomeSlots(this, slots)
 
-    // Se l'elemento era nella dock, rimuovilo
+    // Rimuovi dalla dock se presente
     val dockItems = PrefsSync.dockItems(this)
     if (dockItems.contains(pkg)) {
         PrefsSync.setDockItems(this, dockItems.map { if (it == pkg) "" else it })
