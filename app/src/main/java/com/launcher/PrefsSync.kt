@@ -40,6 +40,10 @@ object PrefsSync {
             .apply()
     }
 
+    /** Cerca uno slot per chiave univoca (packageName o packageName|shortcutId). */
+    fun findSlotByUniqueKey(context: Context, uniqueKey: String): HomeSlot? =
+        homeSlots(context).firstOrNull { it.uniqueKey == uniqueKey }
+
     // --- Widget slots ---
 
     fun widgetSlotsRaw(context: Context): String = prefs(context).getString("widget_slots", "") ?: ""
@@ -93,7 +97,7 @@ object PrefsSync {
         prefs(context).edit().putString("custom_labels", raw).apply()
     }
 
-    // --- Custom Icons ---
+    // --- Custom Icons (per app normali: chiave = packageName) ---
 
     fun customIcons(context: Context): Map<String, String> {
         val raw = prefs(context).getString("custom_icons", "") ?: ""
@@ -116,6 +120,31 @@ object PrefsSync {
         map.remove(packageName)
         val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
         prefs(context).edit().putString("custom_icons", raw).apply()
+    }
+
+    // --- Custom Icons per le scorciatoie (chiave = packageName|shortcutId) ---
+
+    fun customShortcutIcons(context: Context): Map<String, String> {
+        val raw = prefs(context).getString("custom_shortcut_icons", "") ?: ""
+        if (raw.isEmpty()) return emptyMap()
+        return raw.split("|").filter { it.isNotBlank() }.associate {
+            val parts = it.split(":", limit = 2)
+            parts[0] to (parts.getOrNull(1) ?: "")
+        }
+    }
+
+    fun setCustomShortcutIcon(context: Context, uniqueKey: String, path: String) {
+        val map = customShortcutIcons(context).toMutableMap()
+        map[uniqueKey] = path
+        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
+        prefs(context).edit().putString("custom_shortcut_icons", raw).apply()
+    }
+
+    fun removeCustomShortcutIcon(context: Context, uniqueKey: String) {
+        val map = customShortcutIcons(context).toMutableMap()
+        map.remove(uniqueKey)
+        val raw = map.entries.joinToString("|") { "${it.key}:${it.value}" }
+        prefs(context).edit().putString("custom_shortcut_icons", raw).apply()
     }
 
     // --- Home labels ---
