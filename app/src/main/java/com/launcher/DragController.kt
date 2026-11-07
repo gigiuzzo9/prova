@@ -92,7 +92,7 @@ class DragController(
         pendingStartRawX = -1f
         pendingStartRawY = -1f
 
-        activity.showContextMenuForDrag(app, anchor, fromDrawer)
+        activity.showContextMenuForDrag(app, anchor, fromDrawer, shortcutId, instanceId)
     }
 
     fun onWidgetLongPress(slot: WidgetSlot, info: AppWidgetProviderInfo, anchor: View) {
