@@ -253,6 +253,10 @@ class HomeActivity : AppCompatActivity() {
         homeScreenGrid.itemLongClickListener = { slot, view ->
             val app = AppCache.get(slot.packageName)
             if (app != null) {
+                // Imposta subito l'identità dello slot, così il context menu
+                // sa su quale scorciatoia/istanza agire.
+                draggingShortcutId = slot.shortcutId
+                draggingInstanceId = slot.instanceId
                 dragController.onLongPress(
                     app,
                     view,
@@ -481,17 +485,36 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveCustomIcon(packageName: String, shortcutId: String?, uri: Uri) {
+    private fun saveCustomIcon(packageName: String, shortcutIdCombined: String?, uri: Uri) {
         try {
             val iconsDir = File(filesDir, "custom_icons")
             if (!iconsDir.exists()) iconsDir.mkdirs()
 
-            val key = if (shortcutId != null && shortcutId.isNotEmpty()) {
-                "${packageName}_${shortcutId}"
+            // shortcutIdCombined = "shortcutId" oppure "shortcutId|instanceId"
+            val isShortcut = shortcutIdCombined != null && shortcutIdCombined.isNotEmpty()
+            val realShortcutId: String
+            val realInstanceId: String
+            if (isShortcut) {
+                val parts = shortcutIdCombined!!.split("|", limit = 2)
+                realShortcutId = parts[0]
+                realInstanceId = parts.getOrElse(1) { "" }
+            } else {
+                realShortcutId = ""
+                realInstanceId = ""
+            }
+
+            val uniqueKey = when {
+                !isShortcut -> packageName
+                realInstanceId.isEmpty() -> "${packageName}|$realShortcutId"
+                else -> "${packageName}|$realShortcutId|$realInstanceId"
+            }
+            val fileKey = if (isShortcut) {
+                if (realInstanceId.isEmpty()) "${packageName}_${realShortcutId}"
+                else "${packageName}_${realShortcutId}_${realInstanceId}"
             } else {
                 packageName
             }
-            val destFile = File(iconsDir, "$key.png")
+            val destFile = File(iconsDir, "$fileKey.png")
 
             contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(destFile).use { output ->
@@ -499,8 +522,8 @@ class HomeActivity : AppCompatActivity() {
                 }
             }
 
-            if (shortcutId != null && shortcutId.isNotEmpty()) {
-                PrefsSync.setCustomShortcutIcon(this, "$packageName|$shortcutId", destFile.absolutePath)
+            if (isShortcut) {
+                PrefsSync.setCustomShortcutIcon(this, uniqueKey, destFile.absolutePath)
             } else {
                 PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
             }
@@ -518,13 +541,30 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    private fun restoreCustomIcon(packageName: String) {
+    private fun restoreCustomIcon(packageName: String, shortcutId: String, instanceId: String) {
         try {
             val iconsDir = File(filesDir, "custom_icons")
-            val destFile = File(iconsDir, "$packageName.png")
+            val isShortcut = shortcutId.isNotEmpty()
+
+            val uniqueKey = when {
+                !isShortcut -> packageName
+                instanceId.isEmpty() -> "${packageName}|$shortcutId"
+                else -> "${packageName}|$shortcutId|$instanceId"
+            }
+            val fileKey = if (isShortcut) {
+                if (instanceId.isEmpty()) "${packageName}_${shortcutId}"
+                else "${packageName}_${shortcutId}_${instanceId}"
+            } else {
+                packageName
+            }
+            val destFile = File(iconsDir, "$fileKey.png")
             if (destFile.exists()) destFile.delete()
 
-            PrefsSync.removeCustomIcon(this, packageName)
+            if (isShortcut) {
+                PrefsSync.removeCustomShortcutIcon(this, uniqueKey)
+            } else {
+                PrefsSync.removeCustomIcon(this, packageName)
+            }
 
             AppRepository.invalidateCache()
 
@@ -1102,7 +1142,6 @@ class HomeActivity : AppCompatActivity() {
             homeRecyclerView = homeScreenGrid,
             drawerOverlay = drawerOverlay,
             onDragStart = { source, pkg, shortcutId, instanceId, widgetId, widthCells, heightCells, x, y ->
-                // Identità dello slot in drag: presa direttamente dal DragController
                 draggingShortcutId = shortcutId
                 draggingInstanceId = instanceId
                 showDragOverlay(source, pkg, widgetId, widthCells, heightCells, x, y)
@@ -1290,6 +1329,9 @@ class HomeActivity : AppCompatActivity() {
             activity = this,
             slots = dockSlots,
             onAppLongPressed = { app, view, shortcutId, instanceId ->
+                // Imposta l'identità dello slot per il context menu
+                draggingShortcutId = shortcutId
+                draggingInstanceId = instanceId
                 dragController.onLongPress(
                     app,
                     view,
@@ -1326,6 +1368,8 @@ class HomeActivity : AppCompatActivity() {
                 closeDrawer()
             },
             onLongPress = { app, view ->
+                draggingShortcutId = ""
+                draggingInstanceId = ""
                 dragController.onLongPress(
                     app,
                     view,
@@ -1351,7 +1395,7 @@ class HomeActivity : AppCompatActivity() {
     private fun setupContextMenu() {
         contextMenuView = AppContextMenuView(this)
         contextMenuView.onMove = { contextMenuView.dismiss() }
-        contextMenuView.onUninstall = {
+        contextMenuView.onUninstall = { _, _ ->
             currentApp?.let { app ->
                 val intent = Intent(Intent.ACTION_DELETE).apply {
                     data = android.net.Uri.fromParts("package", app.packageName, null)
@@ -1359,7 +1403,7 @@ class HomeActivity : AppCompatActivity() {
                 startActivityForResult(intent, UNINSTALL_APP_REQUEST_CODE)
             }
         }
-        contextMenuView.onRename = {
+        contextMenuView.onRename = { _, _ ->
             currentApp?.let { app ->
                 RenameDialog.show(this, app) {
                     AppRepository.invalidateCache()
@@ -1370,29 +1414,38 @@ class HomeActivity : AppCompatActivity() {
                 }
             }
         }
-        contextMenuView.onRemove = {
+        contextMenuView.onRemove = { shortcutId, instanceId ->
             currentApp?.let { app ->
                 val key = when {
-                    draggingShortcutId.isEmpty() -> app.packageName
-                    draggingInstanceId.isEmpty() -> "${app.packageName}|$draggingShortcutId"
-                    else -> "${app.packageName}|$draggingShortcutId|$draggingInstanceId"
+                    shortcutId.isEmpty() -> app.packageName
+                    instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
+                    else -> "${app.packageName}|$shortcutId|$instanceId"
                 }
                 PrefsSync.removeHomeSlotByKey(this, key)
-                PrefsSync.removeDockSlotByKey(
-                    this,
-                    app.packageName,
-                    draggingShortcutId,
-                    draggingInstanceId
-                )
+                PrefsSync.removeDockSlotByKey(this, app.packageName, shortcutId, instanceId)
                 loadHomeApps()
                 dockController.refresh()
             }
         }
-        contextMenuView.onChangeIcon = {
+        contextMenuView.onChangeIcon = { shortcutId, instanceId ->
             currentApp?.let { app ->
                 pendingIconPackage = app.packageName
-                pendingIconShortcutId = draggingShortcutId.ifEmpty { null }
-                val hasCustomIcon = PrefsSync.customIcons(this).containsKey(app.packageName)
+                pendingIconShortcutId = when {
+                    shortcutId.isEmpty() -> null
+                    instanceId.isEmpty() -> shortcutId
+                    else -> "$shortcutId|$instanceId"
+                }
+
+                val uniqueKey = when {
+                    shortcutId.isEmpty() -> app.packageName
+                    instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
+                    else -> "${app.packageName}|$shortcutId|$instanceId"
+                }
+                val hasCustomIcon = if (shortcutId.isEmpty()) {
+                    PrefsSync.customIcons(this).containsKey(app.packageName)
+                } else {
+                    PrefsSync.customShortcutIcons(this).containsKey(uniqueKey)
+                }
 
                 val builder = AlertDialog.Builder(this)
                     .setTitle("Cambia icona")
@@ -1408,7 +1461,7 @@ class HomeActivity : AppCompatActivity() {
 
                 if (hasCustomIcon) {
                     builder.setNeutralButton("Ripristina") { _, _ ->
-                        restoreCustomIcon(app.packageName)
+                        restoreCustomIcon(app.packageName, shortcutId, instanceId)
                     }
                 }
 
@@ -1491,7 +1544,9 @@ class HomeActivity : AppCompatActivity() {
         contextMenuView.show(
             anchor,
             showRemove = !fromDrawer,
-            drawerIsWhite = fromDrawer && (currentDrawerColor == Color.WHITE)
+            drawerIsWhite = fromDrawer && (currentDrawerColor == Color.WHITE),
+            shortcutId = draggingShortcutId,
+            instanceId = draggingInstanceId
         )
     }
 
@@ -1596,7 +1651,6 @@ class HomeActivity : AppCompatActivity() {
             }
         }
 
-        // uniqueKey dello slot trascinato
         val movingKey = when {
             shortcutId.isEmpty() -> pkg
             instanceId.isEmpty() -> "$pkg|$shortcutId"
@@ -1604,7 +1658,6 @@ class HomeActivity : AppCompatActivity() {
         }
 
         if (widgetCells.contains(row to col)) {
-            // Cerca una cella libera per lo slot trascinato (escludendo se stesso)
             var found = false
             val currentSlots = PrefsSync.homeSlots(this)
             for (r in 0 until currentRows) {
@@ -1647,15 +1700,12 @@ class HomeActivity : AppCompatActivity() {
             else -> "$pkg|$shortcutId|$instanceId"
         }
 
-        // Rimuovi SOLO lo slot originale identificato per uniqueKey
         slots.removeAll { it.uniqueKey == movingKey }
 
-        // Rimuovi l'eventuale occupante della cella destinazione
         slots.removeAll {
             it.page == pageIndex && it.row == row && it.col == col && it.uniqueKey != movingKey
         }
 
-        // Aggiungi il nuovo slot nella destinazione
         slots.add(
             HomeSlot(
                 packageName = pkg,
@@ -1668,7 +1718,6 @@ class HomeActivity : AppCompatActivity() {
         )
         PrefsSync.setHomeSlots(this, slots)
 
-        // Rimuovi dalla dock SOLO la tripla esatta (pkg, shortcutId, instanceId)
         PrefsSync.removeDockSlotByKey(this, pkg, shortcutId, instanceId)
 
         homeScreenGrid.setGridSize(currentCols, currentRows)
@@ -1679,14 +1728,12 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun handleDropOnDrawer(pkg: String, shortcutId: String, instanceId: String) {
-        // Rimuovi SOLO lo slot trascinato dalla home
         val key = when {
             shortcutId.isEmpty() -> pkg
             instanceId.isEmpty() -> "$pkg|$shortcutId"
             else -> "$pkg|$shortcutId|$instanceId"
         }
         PrefsSync.removeHomeSlotByKey(this, key)
-        // Rimuovi dalla dock SOLO la tripla esatta
         PrefsSync.removeDockSlotByKey(this, pkg, shortcutId, instanceId)
 
         homeScreenGrid.setItems(PrefsSync.homeSlots(this))
