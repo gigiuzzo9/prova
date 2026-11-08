@@ -111,30 +111,43 @@ object ShortcutLauncher {
 
         // ─── RAMO BROWSER ───
         if (packageName in BROWSER_PACKAGES) {
-            // 1) Prova a estrarre l'URL e ad aprire con ACTION_VIEW, ma VINCOLATO al browser della shortcut
+            // Estrai URL dall'Intent salvato (se presente)
+            var url: String? = null
             if (!savedIntentUri.isNullOrEmpty()) {
                 val parsed: Intent? = try {
                     Intent.parseUri(savedIntentUri, Intent.URI_INTENT_SCHEME)
                 } catch (_: Exception) {
                     null
                 }
-
                 if (parsed != null) {
-                    val url = extractHttpUrl(parsed)
-                    if (url != null) {
-                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                            addCategory(Intent.CATEGORY_BROWSABLE)
-                            setPackage(packageName)   // <-- vincola al browser della shortcut
-                        }
-                        if (tryStart(context, browserIntent)) return
-                    }
+                    url = extractHttpUrl(parsed)
                 }
             }
 
-            // 2) Fallback: startShortcut() nativo (come fa Nova)
+            // ★ MODIFICA 1: Firefox / IceRaven usano l'azione VIEW_PWA
+            if (packageName == "org.mozilla.firefox" || packageName.contains("iceraven")) {
+                if (url != null) {
+                    val pwaIntent = Intent("mozilla.components.feature.pwa.VIEW_PWA").apply {
+                        setPackage(packageName)
+                        data = Uri.parse(url)
+                    }
+                    if (tryStart(context, pwaIntent)) return
+                }
+            }
+
+            // Tentativo con ACTION_VIEW vincolato al browser della shortcut
+            if (url != null) {
+                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                    setPackage(packageName)
+                }
+                if (tryStart(context, browserIntent)) return
+            }
+
+            // ★ MODIFICA 2: fallback a startShortcut() per i browser
             if (tryStartShortcut(context, packageName, shortcutId)) return
 
-            // 3) Fallback: intent salvato così com'è
+            // Fallback: intent salvato così com'è
             if (!savedIntentUri.isNullOrEmpty()) {
                 try {
                     val pi = Intent.parseUri(savedIntentUri, Intent.URI_INTENT_SCHEME)
@@ -142,7 +155,7 @@ object ShortcutLauncher {
                 } catch (_: Exception) {}
             }
 
-            // 4) Ultimo: apri la home del browser
+            // Ultimo: apri la home del browser
             try {
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
                 if (launchIntent != null && tryStart(context, launchIntent)) return
