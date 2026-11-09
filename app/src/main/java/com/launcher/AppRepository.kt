@@ -57,7 +57,8 @@ object AppRepository {
 
                 // Icona custom ha priorità
                 var icon: Drawable? = null
-                customIcons[pkg]?.let { customIconPath ->
+                val customIconPath: String? = customIcons[pkg]
+                if (customIconPath != null && customIconPath.isNotEmpty()) {
                     val file = File(customIconPath)
                     if (file.exists()) {
                         icon = Drawable.createFromPath(customIconPath)
