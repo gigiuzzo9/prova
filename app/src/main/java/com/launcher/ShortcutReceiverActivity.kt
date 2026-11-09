@@ -28,7 +28,13 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     ""
                 }
 
-                val uniqueKey = if (instanceId.isEmpty()) "$packageName|$realShortcutId" else "$packageName|$realShortcutId|$instanceId"
+                val uniqueKey = when {
+                    instanceId.isEmpty() -> "$packageName|$realShortcutId"
+                    else -> "$packageName|$realShortcutId|$instanceId"
+                }
+
+                // NON salviamo l'intent (è null per i launcher di terze parti).
+                // Salviamo una stringa vuota, così ShortcutLauncher userà startShortcut.
                 PrefsSync.setShortcutIntent(this, uniqueKey, "")
 
                 placeShortcutOnFirstFreeCell(packageName, realShortcutId, instanceId)
@@ -38,32 +44,65 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         finish()
     }
 
-    private fun placeShortcutOnFirstFreeCell(packageName: String, shortcutId: String, instanceId: String): Boolean {
+    private fun placeShortcutOnFirstFreeCell(
+        packageName: String,
+        shortcutId: String,
+        instanceId: String
+    ): Boolean {
         val cols = PrefsSync.cols(this).coerceAtLeast(1)
         val rows = PrefsSync.rows(this).coerceAtLeast(1)
         val slots = PrefsSync.homeSlots(this).toMutableList()
         val widgets = PrefsSync.widgetSlots(this)
-        val occupied = mutableSetOf<Pair<Int, Int>>()
 
-        slots.forEach { occupied.add(it.row to it.col) }
+        val occupiedByPage = HashMap<Int, MutableSet<Pair<Int, Int>>>()
+        fun occupied(page: Int): MutableSet<Pair<Int, Int>> =
+            occupiedByPage.getOrPut(page) { mutableSetOf() }
+
+        slots.forEach { occupied(it.page).add(it.row to it.col) }
         widgets.forEach { w ->
             for (r in w.row until w.row + w.heightCells) {
                 for (c in w.col until w.col + w.widthCells) {
-                    occupied.add(r to c)
+                    occupied(w.page).add(r to c)
                 }
             }
         }
 
-        var r = 0; var c = 0; var p = 0; var found = false
-        while (!found && p < 20) {
-            if (!occupied.contains(r to c)) { found = true }
-            else { c++; if (c >= cols) { c = 0; r++; if (r >= rows) { r = 0; p++ } } }
+        var targetPage = 0
+        var targetRow = -1
+        var targetCol = -1
+        var page = 0
+        while (targetRow == -1) {
+            val occ = occupied(page)
+            outer@ for (r in 0 until rows) {
+                for (c in 0 until cols) {
+                    if (!occ.contains(r to c)) {
+                        targetPage = page
+                        targetRow = r
+                        targetCol = c
+                        break@outer
+                    }
+                }
+            }
+            if (targetRow == -1) {
+                page++
+                if (page >= 20) return false
+            }
         }
-        if (!found) return false
 
-        slots.add(HomeSlot(packageName, r, c, p, shortcutId, instanceId))
+        val newSlot = HomeSlot(
+            packageName = packageName,
+            row = targetRow,
+            col = targetCol,
+            page = targetPage,
+            shortcutId = shortcutId,
+            instanceId = instanceId
+        )
+        slots.add(newSlot)
         PrefsSync.setHomeSlots(this, slots)
-        if (p + 1 > PrefsSync.pageCount(this)) PrefsSync.setPageCount(this, p + 1)
+
+        if (targetPage + 1 > PrefsSync.pageCount(this)) {
+            PrefsSync.setPageCount(this, targetPage + 1)
+        }
         return true
     }
 }
