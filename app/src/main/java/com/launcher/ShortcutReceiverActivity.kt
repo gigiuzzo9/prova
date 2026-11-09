@@ -3,7 +3,6 @@ package com.simplylauncher
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.os.Bundle
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class ShortcutReceiverActivity : AppCompatActivity() {
@@ -15,11 +14,9 @@ class ShortcutReceiverActivity : AppCompatActivity() {
 
         if (request != null && request.requestType == LauncherApps.PinItemRequest.REQUEST_TYPE_SHORTCUT) {
             
-            // IL SEGRETO È QUI: request.show() obbliga Android a mostrare
-            // la finestra di conferma standard, identica a quella di Nova!
+            // request.show() obbliga Android a mostrare la finestra di conferma standard
             request.show(this) { accepted ->
                 if (accepted) {
-                    // L'utente ha cliccato "Aggiungi"
                     val shortcutInfo = request.shortcutInfo
                     if (shortcutInfo != null) {
                         val packageName = shortcutInfo.`package`
@@ -40,7 +37,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                             else -> "$packageName|$realShortcutId|$instanceId"
                         }
 
-                        // Salva l'intent (se presente)
                         val url = extractUrlFromIntent(intent)
                         if (url != null) {
                             PrefsSync.setShortcutIntent(this, uniqueKey, "url:$url")
@@ -48,12 +44,11 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                             PrefsSync.setShortcutIntent(this, uniqueKey, "")
                         }
 
-                        // Posiziona sul desktop
                         placeShortcutOnFirstFreeCell(packageName, realShortcutId, instanceId)
                         sendBroadcast(Intent("com.simplylauncher.RELOAD"))
                     }
                 }
-                finish() // Chiude l'activity dopo la scelta
+                finish()
             }
         } else {
             finish()
