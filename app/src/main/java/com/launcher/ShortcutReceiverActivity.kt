@@ -18,61 +18,62 @@ class ShortcutReceiverActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+        try {
+            handlePinRequest()
+        } catch (e: Exception) {
+            Log.e(TAG, "CRASH in handlePinRequest", e)
+        } finally {
             finish()
-            return
         }
+    }
 
-        val launcherApps = getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+    private fun handlePinRequest() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+
         val pinRequest = intent.getParcelableExtra<LauncherApps.PinItemRequest>(
             LauncherApps.EXTRA_PIN_ITEM_REQUEST
         )
+        Log.d(TAG, "pinRequest=$pinRequest")
+        if (pinRequest == null) { Log.e(TAG, "pinRequest null"); return }
 
-        if (pinRequest == null || pinRequest.shortcutInfo == null || !pinRequest.accept()) {
-            finish()
-            return
-        }
+        val shortcutInfo = pinRequest.shortcutInfo
+        Log.d(TAG, "shortcutInfo=$shortcutInfo")
+        if (shortcutInfo == null) { Log.e(TAG, "shortcutInfo null"); return }
 
-        val shortcutInfo = pinRequest.shortcutInfo!!
+        val accepted = pinRequest.accept()
+        Log.d(TAG, "accept=$accepted")
+        if (!accepted) { Log.e(TAG, "accept false"); return }
+
         val packageName = shortcutInfo.`package`
         val realShortcutId = shortcutInfo.id
-
-        // Estraiamo l'ID utente esattamente come fa Discreet:
-        // "UserHandle{0}" -> "0"
         val userIdString = shortcutInfo.userHandle.toString()
-            .replace("UserHandle{", "")
-            .replace("}", "")
-
+            .replace("UserHandle{", "").replace("}", "")
         val uniqueKey = "$packageName$SEP$realShortcutId"
+        Log.d(TAG, "pkg=$packageName id=$realShortcutId user=$userIdString key=$uniqueKey")
 
-        // --- 1. Formato canonico (Discreet): package|id|user_id ---
         val savedData = "$packageName$SEP$realShortcutId$SEP$userIdString"
         PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
-        Log.d(TAG, "Salvato formato canonico: $savedData")
+        Log.d(TAG, "salvato canonico: $savedData")
 
-        // --- 2. Fallback per Firefox e derivati ---
-        // Firefox pubblica l'URL negli extras dell'intent. LauncherApps.startShortcut()
-        // non propaga gli extras, quindi al click il browser si apre senza pagina.
-        // Salvando l'intent serializzato possiamo rilanciarlo con Intent.parseUri(),
-        // che invece preserva gli extras.
-        val intents = shortcutInfo.intents
-        if (!intents.isNullOrEmpty()) {
-            try {
+        try {
+            val intents = shortcutInfo.intents
+            Log.d(TAG, "intents=${intents?.size}")
+            if (!intents.isNullOrEmpty()) {
                 val serialized = intents[0].toUri(0)
                 PrefsSync.setShortcutIntent(this, "$uniqueKey$KEY_INTENT_SUFFIX", serialized)
-                Log.d(TAG, "Salvato intent serializzato: $serialized")
-            } catch (e: Exception) {
-                Log.e(TAG, "Impossibile serializzare l'intent", e)
+                Log.d(TAG, "salvato intent serializzato: $serialized")
             }
-        } else {
-            Log.w(TAG, "shortcutInfo.intents è null/vuoto per $packageName/$realShortcutId")
+        } catch (e: Exception) {
+            Log.e(TAG, "errore su intents", e)
         }
 
-        // --- 3. Posizionamento nella home ---
-        ShortcutPlacement.placeOnFirstFreeCell(this, packageName, realShortcutId, "")
+        try {
+            ShortcutPlacement.placeOnFirstFreeCell(this, packageName, realShortcutId, "")
+            Log.d(TAG, "placeOnFirstFreeCell OK")
+        } catch (e: Exception) {
+            Log.e(TAG, "errore placeOnFirstFreeCell", e)
+        }
 
         sendBroadcast(Intent("com.simplylauncher.RELOAD"))
-        finish()
     }
 }
