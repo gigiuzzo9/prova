@@ -1,4 +1,4 @@
-package com.launcher
+package com.simplylauncher
 
 import android.content.BroadcastReceiver
 import android.content.Context
