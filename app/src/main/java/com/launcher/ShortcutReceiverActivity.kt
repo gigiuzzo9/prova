@@ -1,13 +1,17 @@
-package com.simplylauncher
+package com.launcher
 
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.os.Bundle
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class ShortcutReceiverActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // DEBUG: Questo toast ci dice se Firefox usa l'API moderna come Chrome
+        Toast.makeText(this, "ACTIVITY AVVIATA: Metodo Moderno", Toast.LENGTH_LONG).show()
 
         val launcherApps = getSystemService(LAUNCHER_APPS_SERVICE) as LauncherApps
         val request = launcherApps.getPinItemRequest(intent)
@@ -33,11 +37,10 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     else -> "$packageName|$realShortcutId|$instanceId"
                 }
 
-                // NON salviamo l'intent (è null per i launcher di terze parti).
                 PrefsSync.setShortcutIntent(this, uniqueKey, "")
 
                 placeShortcutOnFirstFreeCell(packageName, realShortcutId, instanceId)
-                sendBroadcast(Intent("com.simplylauncher.RELOAD"))
+                sendBroadcast(Intent("com.launcher.RELOAD")) 
             }
         }
         finish()
