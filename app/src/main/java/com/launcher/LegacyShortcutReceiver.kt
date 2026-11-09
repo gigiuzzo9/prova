@@ -14,10 +14,6 @@ import androidx.core.graphics.drawable.toBitmap
 import java.io.File
 import java.io.FileOutputStream
 
-/**
- * Riceve le scorciatoie "legacy" inviate tramite broadcast INSTALL_SHORTCUT.
- * Usato da Firefox, Chrome (vecchie versioni), e molti altri browser/app.
- */
 class LegacyShortcutReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -71,32 +67,27 @@ class LegacyShortcutReceiver : BroadcastReceiver() {
             else -> "$packageName|legacy|$instanceId"
         }
 
-        // === LOGICA SPECIALE PER FIREFOX ===
-        // Firefox e derivati non mettono l'URL nell'Intent legacy in modo standard.
-        // Costruiamo un Intent esplicito verso l'Activity interna di Firefox che
-        // sappiamo gestire gli URL, così il click aprirà la pagina corretta.
-        if (isFirefoxLike(packageName)) {
-            if (url != null) {
-                val firefoxIntent = buildFirefoxExplicitIntent(packageName, url)
-                val firefoxUri = firefoxIntent.toUri(Intent.URI_INTENT_SCHEME)
-                PrefsSync.setShortcutIntent(context, uniqueKey, firefoxUri)
-            } else {
-                // Nessun URL trovato: salva l'intent originale come fallback
+        // Salvataggio dell'Intent da usare al click
+        if (url != null) {
+            if (isFirefoxLike(packageName)) {
+                // Per Firefox: Intent ESPLICITO verso IntentReceiverActivity.
+                // Senza questo, Firefox si apre ma non naviga all'URL.
+                val firefoxIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    setClassName(packageName, "org.mozilla.fenix.IntentReceiverActivity")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
                 PrefsSync.setShortcutIntent(
                     context, uniqueKey,
-                    shortcutIntent.toUri(Intent.URI_INTENT_SCHEME)
+                    firefoxIntent.toUri(Intent.URI_INTENT_SCHEME)
                 )
+            } else {
+                PrefsSync.setShortcutIntent(context, uniqueKey, "url:$url")
             }
         } else {
-            // Comportamento standard per Chrome e altri browser
-            if (url != null) {
-                PrefsSync.setShortcutIntent(context, uniqueKey, "url:$url")
-            } else {
-                PrefsSync.setShortcutIntent(
-                    context, uniqueKey,
-                    shortcutIntent.toUri(Intent.URI_INTENT_SCHEME)
-                )
-            }
+            PrefsSync.setShortcutIntent(
+                context, uniqueKey,
+                shortcutIntent.toUri(Intent.URI_INTENT_SCHEME)
+            )
         }
 
         saveShortcutIcon(context, uniqueKey, intent)
@@ -115,9 +106,6 @@ class LegacyShortcutReceiver : BroadcastReceiver() {
         }
     }
 
-    /**
-     * Riconosce Firefox e i suoi derivati (Fenix, Fennec, Waterfox, ecc.)
-     */
     private fun isFirefoxLike(pkg: String): Boolean {
         val p = pkg.lowercase()
         return p == "org.mozilla.firefox" ||
@@ -132,39 +120,6 @@ class LegacyShortcutReceiver : BroadcastReceiver() {
                p.contains("librewolf")
     }
 
-    /**
-     * Costruisce un Intent esplicito verso l'Activity interna di Firefox
-     * che gestisce l'apertura di URL. Prova diverse candidate Activity note.
-     */
-    private fun buildFirefoxExplicitIntent(packageName: String, url: String): Intent {
-        // Candidate Activity interne di Firefox (in ordine di preferenza).
-        // Fenix/Firefox moderno usa IntentReceiverActivity.
-        val candidateActivities = listOf(
-            "org.mozilla.fenix.IntentReceiverActivity",
-            "org.mozilla.firefox.App",
-            "org.mozilla.gecko.BrowserApp",
-            "org.mozilla.fennec_fdroid.App",
-            "org.mozilla.fenix.HomeActivity"
-        )
-
-        val pm = /* context non disponibile qui */ null // vedi nota sotto
-
-        // Scegliamo la prima candidate che esiste nel pacchetto.
-        // Senza Context qui, proviamo la prima e lasciamo il fallback a ShortcutLauncher.
-        val targetActivity = candidateActivities.first()
-
-        return Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-            setClassName(packageName, targetActivity)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            addCategory(Intent.CATEGORY_BROWSABLE)
-            // Extra che alcune versioni di Firefox leggono per forzare l'URL
-            putExtra("mozilla.components.feature.pwa.EXTRA_URL_OVERRIDE", url)
-        }
-    }
-
-    /**
-     * Cerca l'URL nel shortcutIntent: prima in `data`, poi negli extra più comuni.
-     */
     private fun extractUrlFromIntent(intent: Intent): String? {
         val data = intent.dataString
         if (!data.isNullOrBlank() && (data.startsWith("http://") || data.startsWith("https://"))) {
@@ -192,9 +147,6 @@ class LegacyShortcutReceiver : BroadcastReceiver() {
         return null
     }
 
-    /**
-     * Cerca tra le scorciatoie dinamiche/pinned una con lo stesso label.
-     */
     private fun findDynamicShortcutId(context: Context, packageName: String, label: String): String? {
         return try {
             val la = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
@@ -212,9 +164,6 @@ class LegacyShortcutReceiver : BroadcastReceiver() {
         }
     }
 
-    /**
-     * Trova la prima cella libera e ci posiziona la scorciatoia.
-     */
     private fun placeShortcutOnFirstFreeCell(
         context: Context,
         packageName: String,
