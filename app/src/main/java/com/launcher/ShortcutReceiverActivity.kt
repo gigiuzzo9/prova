@@ -6,6 +6,7 @@ import android.content.pm.LauncherApps
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.ImageView
@@ -25,6 +26,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             if (shortcutInfo == null) { finish(); return }
 
             val packageName = shortcutInfo.`package`
+            
             val label = try {
                 shortcutInfo.shortLabel?.toString() ?: run {
                     val ai = packageManager.getApplicationInfo(packageName, 0)
@@ -32,8 +34,12 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                 }
             } catch (_: Exception) { packageName }
 
-            val iconDrawable = try { launcherApps.getApplicationIcon(packageName, Process.myUserHandle()) } catch (_: Exception) { null }
-            val iconBitmap = (iconDrawable as? BitmapDrawable)?.bitmap
+            // CORRETTO: Usa PackageManager per ottenere l'icona
+            val iconDrawable: Drawable? = try { 
+                packageManager.getApplicationIcon(packageName) 
+            } catch (_: Exception) { null }
+            
+            val iconBitmap: Bitmap? = (iconDrawable as? BitmapDrawable)?.bitmap
 
             val layout = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
