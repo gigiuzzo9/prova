@@ -1,8 +1,8 @@
 package com.simplylauncher
 
+import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.LauncherApps
-import android.net.Uri
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 
@@ -34,42 +34,22 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     else -> "$packageName|$realShortcutId|$instanceId"
                 }
 
-                // === ESTRAZIONE URL ===
-                var url: String? = null
-                val originalIntent = shortcutInfo.intent
-                
-                if (originalIntent != null) {
-                    // Cerca l'URL nell'Intent di Firefox
-                    url = originalIntent.data?.toString()
-                    if (url == null && originalIntent.extras != null) {
-                        val extras = originalIntent.extras!!
-                        val known = listOf("url", "URL", "uri", "URI", "web_url", "S.browser_fallback_url")
-                        for (k in known) {
-                            val v = extras.getString(k)
-                            if (!v.isNullOrEmpty() && (v.startsWith("http://") || v.startsWith("https://"))) {
-                                url = v
-                                break
-                            }
+                // Salva l'IntentSender come stringa (lo useremo dopo per lanciare la scorciatoia)
+                try {
+                    val intentSender = request.intentSender
+                    if (intentSender != null) {
+                        // Salva l'IntentSender in un file o usa il suo identificatore
+                        // Per semplicità, salviamo l'Intent originale come stringa (se disponibile)
+                        val originalIntent = shortcutInfo.intent
+                        if (originalIntent != null) {
+                            val intentUri = originalIntent.toUri(Intent.URI_INTENT_SCHEME)
+                            PrefsSync.setShortcutIntent(this, uniqueKey, intentUri)
+                        } else {
+                            // Se l'Intent non è disponibile, salviamo una stringa vuota
+                            PrefsSync.setShortcutIntent(this, uniqueKey, "")
                         }
                     }
-                    // Prova a fare il parse se l'action è "intent"
-                    if (url == null && originalIntent.data?.scheme == "intent") {
-                        try {
-                            val parsed = Intent.parseUri(originalIntent.data.toString(), Intent.URI_INTENT_SCHEME)
-                            url = parsed.data?.toString()
-                        } catch (_: Exception) {}
-                    }
-                }
-
-                // Salva l'URL vero e proprio. Se non lo trova, salva l'Intent originale.
-                if (url != null) {
-                    PrefsSync.setShortcutIntent(this, uniqueKey, "url:$url")
-                } else if (originalIntent != null) {
-                    try {
-                        val intentUri = originalIntent.toUri(Intent.URI_INTENT_SCHEME)
-                        PrefsSync.setShortcutIntent(this, uniqueKey, intentUri)
-                    } catch (_: Exception) {}
-                }
+                } catch (_: Exception) {}
 
                 placeShortcutOnFirstFreeCell(packageName, realShortcutId, instanceId)
                 sendBroadcast(Intent("com.simplylauncher.RELOAD"))
