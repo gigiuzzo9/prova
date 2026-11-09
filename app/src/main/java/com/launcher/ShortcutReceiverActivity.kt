@@ -1,6 +1,5 @@
 package com.simplylauncher
 
-import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.os.Bundle
@@ -34,22 +33,9 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     else -> "$packageName|$realShortcutId|$instanceId"
                 }
 
-                // Salva l'IntentSender come stringa (lo useremo dopo per lanciare la scorciatoia)
-                try {
-                    val intentSender = request.intentSender
-                    if (intentSender != null) {
-                        // Salva l'IntentSender in un file o usa il suo identificatore
-                        // Per semplicità, salviamo l'Intent originale come stringa (se disponibile)
-                        val originalIntent = shortcutInfo.intent
-                        if (originalIntent != null) {
-                            val intentUri = originalIntent.toUri(Intent.URI_INTENT_SCHEME)
-                            PrefsSync.setShortcutIntent(this, uniqueKey, intentUri)
-                        } else {
-                            // Se l'Intent non è disponibile, salviamo una stringa vuota
-                            PrefsSync.setShortcutIntent(this, uniqueKey, "")
-                        }
-                    }
-                } catch (_: Exception) {}
+                // NON salviamo l'intent (è null per i launcher di terze parti).
+                // Salviamo una stringa vuota, così ShortcutLauncher userà startShortcut.
+                PrefsSync.setShortcutIntent(this, uniqueKey, "")
 
                 placeShortcutOnFirstFreeCell(packageName, realShortcutId, instanceId)
                 sendBroadcast(Intent("com.simplylauncher.RELOAD"))
