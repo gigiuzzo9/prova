@@ -19,6 +19,12 @@
         <intent>
             <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
         </intent>
+        <!-- Necessario per far vedere i browser nelle query di ShortcutLauncher -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
 
     <application
@@ -61,17 +67,19 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
-        <!-- Activity per ricevere le richieste di creazione scorciatoie (Pin Shortcut) -->
+        <!-- Canale moderno: PinItemRequest (Chrome e derivati) -->
         <activity
             android:name=".ShortcutReceiverActivity"
             android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
             android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
             </intent-filter>
         </activity>
 
-        <!-- Receiver per le scorciatoie "legacy" (Firefox, Chrome, app vecchie) -->
+        <!-- Canale legacy: broadcast INSTALL_SHORTCUT (Firefox e derivati) -->
         <receiver
             android:name=".LegacyShortcutReceiver"
             android:exported="true">
