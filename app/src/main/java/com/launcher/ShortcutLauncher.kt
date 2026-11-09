@@ -32,8 +32,10 @@ object ShortcutLauncher {
     }
 
     private fun extractHttpUrl(intent: Intent): String? {
+        // 1) Controlla il data diretto
         intent.data?.let { d ->
             if (isValidHttpString(d.toString())) return d.toString()
+            // Se è un intent:// (tipico di Firefox), estrai il fallback
             if (d.scheme == "intent") {
                 try {
                     val parsed = Intent.parseUri(d.toString(), Intent.URI_INTENT_SCHEME)
@@ -43,6 +45,8 @@ object ShortcutLauncher {
                 } catch (_: Exception) {}
             }
         }
+
+        // 2) Controlla gli extra (fondamentale per Firefox)
         val extras = intent.extras
         if (extras != null) {
             val known = listOf(
@@ -54,11 +58,14 @@ object ShortcutLauncher {
                 val v = extras.getString(k)
                 if (isValidHttpString(v)) return v
             }
+            
+            // Scansiona TUTTI gli extra per trovare una stringa che assomiglia a un URL
             for (k in extras.keySet()) {
                 val v = extras.get(k)
                 if (v is String && isValidHttpString(v)) return v
             }
         }
+        
         return null
     }
 
@@ -81,7 +88,7 @@ object ShortcutLauncher {
 
         val savedIntentUri = PrefsSync.shortcutIntents(context)[uniqueKey]
 
-        // 1. Prova a estrarre l'URL
+        // 1. Estrai l'URL (per i browser)
         var url: String? = null
         if (!savedIntentUri.isNullOrEmpty()) {
             try {
@@ -100,7 +107,7 @@ object ShortcutLauncher {
                 context.startActivity(browserIntent)
                 return
             } catch (e: Exception) {
-                // Se fallisce, prova a forzare il package
+                // Forza il package se il browser predefinito non basta
                 try {
                     val forcedIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                         setPackage(packageName)
@@ -113,7 +120,7 @@ object ShortcutLauncher {
             }
         }
 
-        // 3. Prova startShortcut (per le app normali)
+        // 3. Prova startShortcut (per le app normali e come fallback)
         try {
             val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
             launcherApps.startShortcut(packageName, shortcutId, null, null, Process.myUserHandle())
