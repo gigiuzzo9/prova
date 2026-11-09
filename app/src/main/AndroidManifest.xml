@@ -61,23 +61,24 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
-        <!-- Activity per ricevere le richieste di creazione scorciatoie (Pin Shortcut da Chrome/Vivaldi) -->
+        <!-- Activity per ricevere le richieste di creazione scorciatoie (Pin Shortcut da Chrome/Vivaldi/Firefox) -->
+        <!-- MODIFICATO: Tema cambiato da NoDisplay a Translucent per far vedere il dialogo -->
         <activity
             android:name=".ShortcutReceiverActivity"
             android:exported="true"
-            android:theme="@android:style/Theme.NoDisplay">
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
             </intent-filter>
         </activity>
 
-        <!-- NUOVA ACTIVITY: Mostra il pop-up di conferma quando si crea una scorciatoia da Firefox (Legacy) -->
+        <!-- Activity per mostrare il pop-up di conferma quando si crea una scorciatoia via Legacy -->
         <activity
             android:name=".LegacyConfirmActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
-        <!-- Receiver per le scorciatoie "legacy" (Firefox, Chrome, app vecchie) -->
+        <!-- Receiver per le scorciatoie "legacy" (app vecchie) -->
         <receiver
             android:name=".LegacyShortcutReceiver"
             android:exported="true">
