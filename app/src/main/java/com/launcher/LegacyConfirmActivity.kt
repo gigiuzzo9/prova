@@ -4,13 +4,11 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
-import android.view.LayoutInflater
+import android.view.Gravity
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 
 class LegacyConfirmActivity : AppCompatActivity() {
 
@@ -45,11 +43,10 @@ class LegacyConfirmActivity : AppCompatActivity() {
             } catch (_: Exception) { packageName }
         }
 
-        // Costruiamo l'aspetto della finestra (Icona + Nome)
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(60, 60, 60, 40)
-            gravity = android.view.Gravity.CENTER
+            gravity = Gravity.CENTER
         }
 
         val iconView = ImageView(this).apply {
@@ -64,9 +61,9 @@ class LegacyConfirmActivity : AppCompatActivity() {
         val textView = TextView(this).apply {
             text = label
             textSize = 18f
-            setTextColor(Color.BLACK)
+            setTextColor(android.graphics.Color.BLACK)
             setPadding(0, 30, 0, 0)
-            gravity = android.view.Gravity.CENTER
+            gravity = Gravity.CENTER
         }
 
         layout.addView(iconView)
