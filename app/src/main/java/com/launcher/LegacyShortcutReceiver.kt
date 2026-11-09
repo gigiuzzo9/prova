@@ -4,14 +4,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import android.widget.Toast
 
 class LegacyShortcutReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        // DEBUG: Questo toast ci dice se Firefox sta inviando il broadcast legacy!
-        Toast.makeText(context, "RICEVUTO: ${intent.action}", Toast.LENGTH_LONG).show()
-
         val action = intent.action ?: return
         val validActions = setOf(
             "com.android.launcher.action.INSTALL_SHORTCUT",
@@ -37,7 +33,6 @@ class LegacyShortcutReceiver : BroadcastReceiver() {
             ?: shortcutIntent.component?.packageName
             ?: return
 
-        // Avviamo la finestra di conferma!
         val confirmIntent = Intent(context, LegacyConfirmActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra("shortcut_intent", shortcutIntent)
