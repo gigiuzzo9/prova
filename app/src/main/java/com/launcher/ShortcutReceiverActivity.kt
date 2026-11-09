@@ -34,23 +34,39 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     else -> "$packageName|$realShortcutId|$instanceId"
                 }
 
-                // ---- Estrai l'URL/Intent della scorciatoia ----
-                // shortcutInfo.intent può essere null per le scorciatoie web.
-                // Proviamo diverse fonti in ordine di affidabilità.
-                val url: String? = extractUrlFromShortcut(shortcutInfo)
-
-                // Salva l'Intent se disponibile
+                // === ESTRAZIONE URL ===
+                var url: String? = null
                 val originalIntent = shortcutInfo.intent
+                
                 if (originalIntent != null) {
+                    // Cerca l'URL nell'Intent di Firefox
+                    url = originalIntent.data?.toString()
+                    if (url == null && originalIntent.extras != null) {
+                        val extras = originalIntent.extras!!
+                        val known = listOf("url", "URL", "uri", "URI", "web_url", "S.browser_fallback_url")
+                        for (k in known) {
+                            val v = extras.getString(k)
+                            if (!v.isNullOrEmpty() && (v.startsWith("http://") || v.startsWith("https://"))) {
+                                url = v
+                                break
+                            }
+                        }
+                    }
+                    // Prova a fare il parse se l'action è "intent"
+                    if (url == null && originalIntent.data?.scheme == "intent") {
+                        try {
+                            val parsed = Intent.parseUri(originalIntent.data.toString(), Intent.URI_INTENT_SCHEME)
+                            url = parsed.data?.toString()
+                        } catch (_: Exception) {}
+                    }
+                }
+
+                // Salva l'URL vero e proprio. Se non lo trova, salva l'Intent originale.
+                if (url != null) {
+                    PrefsSync.setShortcutIntent(this, uniqueKey, "url:$url")
+                } else if (originalIntent != null) {
                     try {
                         val intentUri = originalIntent.toUri(Intent.URI_INTENT_SCHEME)
-                        PrefsSync.setShortcutIntent(this, uniqueKey, intentUri)
-                    } catch (_: Exception) {}
-                } else if (url != null) {
-                    // Nessun Intent ma abbiamo l'URL: costruiamo un Intent VIEW e salviamolo
-                    try {
-                        val syntheticIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                        val intentUri = syntheticIntent.toUri(Intent.URI_INTENT_SCHEME)
                         PrefsSync.setShortcutIntent(this, uniqueKey, intentUri)
                     } catch (_: Exception) {}
                 }
@@ -60,44 +76,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             }
         }
         finish()
-    }
-
-    /**
-     * Prova a estrarre l'URL della scorciatoia da varie fonti:
-     * 1. shortcutInfo.intent (se presente)
-     * 2. extras (chiavi note usate dai browser)
-     * 3. longLabel/shortLabel (a volte contengono l'URL)
-     */
-    private fun extractUrlFromShortcut(shortcutInfo: android.content.pm.ShortcutInfo): String? {
-        // 1. Intent
-        val intentData = shortcutInfo.intent?.data
-        if (intentData != null && (intentData.scheme == "http" || intentData.scheme == "https")) {
-            return intentData.toString()
-        }
-
-        // 2. Extras note
-        val extras = shortcutInfo.extras
-        if (extras != null) {
-            val keys = listOf(
-                "url", "URL", "uri", "URI", "web_url", "webUrl",
-                "android.intent.extra.TEXT",
-                "com.android.browser.application_id"
-            )
-            for (key in keys) {
-                val value = extras.getString(key)
-                if (!value.isNullOrEmpty() && (value.startsWith("http://") || value.startsWith("https://"))) {
-                    return value
-                }
-            }
-        }
-
-        // 3. Label (fallback raro ma succede con alcuni browser)
-        val label = shortcutInfo.longLabel?.toString() ?: shortcutInfo.shortLabel?.toString()
-        if (!label.isNullOrEmpty() && (label.startsWith("http://") || label.startsWith("https://"))) {
-            return label
-        }
-
-        return null
     }
 
     private fun placeShortcutOnFirstFreeCell(
@@ -141,9 +119,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             }
             if (targetRow == -1) {
                 page++
-                if (page >= 20) {
-                    return false
-                }
+                if (page >= 20) return false
             }
         }
 
