@@ -3,7 +3,6 @@ package com.simplylauncher
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Bundle
 import android.util.Log
 
 class LegacyShortcutReceiver : BroadcastReceiver() {
@@ -14,7 +13,6 @@ class LegacyShortcutReceiver : BroadcastReceiver() {
             return
         }
 
-        // Estrai l'Intent originale della scorciatoia (contiene VIEW_PWA e il manifest)
         val shortcutIntent = intent.getParcelableExtra<Intent>(Intent.EXTRA_SHORTCUT_INTENT)
         val shortcutName = intent.getStringExtra(Intent.EXTRA_SHORTCUT_NAME) ?: "Link"
 
@@ -31,7 +29,6 @@ class LegacyShortcutReceiver : BroadcastReceiver() {
             return
         }
 
-        // Genera un ID univoco per la scorciatoia (se ce ne sono più di una)
         val instanceId = "legacy_${System.currentTimeMillis()}"
 
         val uniqueKey = when {
@@ -39,7 +36,6 @@ class LegacyShortcutReceiver : BroadcastReceiver() {
             else -> "$packageName|$shortcutId|$instanceId"
         }
 
-        // SALVA L'INTENT ORIGINALE COMPLETO (con il manifest)
         try {
             val intentUri = shortcutIntent.toUri(Intent.URI_INTENT_SCHEME)
             PrefsSync.setShortcutIntent(context, uniqueKey, intentUri)
@@ -49,23 +45,20 @@ class LegacyShortcutReceiver : BroadcastReceiver() {
             return
         }
 
-        // Aggiungi la scorciatoia alla home (nella prima cella libera)
-        addShortcutToHome(context, packageName, shortcutId, instanceId, shortcutName)
+        addShortcutToHome(context, packageName, shortcutId, instanceId)
     }
 
     private fun addShortcutToHome(
         context: Context,
         packageName: String,
         shortcutId: String,
-        instanceId: String,
-        label: String
+        instanceId: String
     ) {
         val cols = PrefsSync.cols(context).coerceAtLeast(1)
         val rows = PrefsSync.rows(context).coerceAtLeast(1)
         val slots = PrefsSync.homeSlots(context).toMutableList()
         val widgets = PrefsSync.widgetSlots(context)
 
-        // Trova la prima cella libera
         val occupied = mutableSetOf<Pair<Int, Int>>()
         slots.forEach { occupied.add(it.row to it.col) }
         widgets.forEach { w ->
