@@ -32,10 +32,8 @@ object ShortcutLauncher {
     }
 
     private fun extractHttpUrl(intent: Intent): String? {
-        // 1) Controlla il data diretto
         intent.data?.let { d ->
             if (isValidHttpString(d.toString())) return d.toString()
-            // Se è un intent:// (tipico di Firefox), estrai il fallback
             if (d.scheme == "intent") {
                 try {
                     val parsed = Intent.parseUri(d.toString(), Intent.URI_INTENT_SCHEME)
@@ -45,8 +43,6 @@ object ShortcutLauncher {
                 } catch (_: Exception) {}
             }
         }
-
-        // 2) Controlla gli extra (fondamentale per Firefox)
         val extras = intent.extras
         if (extras != null) {
             val known = listOf(
@@ -58,14 +54,11 @@ object ShortcutLauncher {
                 val v = extras.getString(k)
                 if (isValidHttpString(v)) return v
             }
-            
-            // Scansiona TUTTI gli extra per trovare una stringa che assomiglia a un URL
             for (k in extras.keySet()) {
                 val v = extras.get(k)
                 if (v is String && isValidHttpString(v)) return v
             }
         }
-        
         return null
     }
 
@@ -88,7 +81,7 @@ object ShortcutLauncher {
 
         val savedIntentUri = PrefsSync.shortcutIntents(context)[uniqueKey]
 
-        // 1. Estrai l'URL (per i browser)
+        // 1. Estrai l'URL
         var url: String? = null
         if (!savedIntentUri.isNullOrEmpty()) {
             try {
@@ -97,7 +90,7 @@ object ShortcutLauncher {
             } catch (_: Exception) {}
         }
 
-        // 2. Se è un browser e abbiamo l'URL, apri il link in modo standard
+        // 2. Se è un browser e abbiamo l'URL, apri il link
         if (packageName in BROWSER_PACKAGES && url != null) {
             val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                 addCategory(Intent.CATEGORY_BROWSABLE)
@@ -107,7 +100,6 @@ object ShortcutLauncher {
                 context.startActivity(browserIntent)
                 return
             } catch (e: Exception) {
-                // Forza il package se il browser predefinito non basta
                 try {
                     val forcedIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                         setPackage(packageName)
@@ -120,15 +112,15 @@ object ShortcutLauncher {
             }
         }
 
-        // 3. Prova startShortcut (per le app normali e come fallback)
+        // 3. Prova startShortcut
         try {
             val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
             launcherApps.startShortcut(packageName, shortcutId, null, null, Process.myUserHandle())
             return
         } catch (_: Exception) {}
 
-        // 4. Fallback: apri l'Intent salvato così com'è
-        if (!savedIntentUri.isNullOrEmpty()) {
+        // 4. Fallback: apri l'Intent salvato (solo se non è un browser)
+        if (packageName !in BROWSER_PACKAGES && !savedIntentUri.isNullOrEmpty()) {
             try {
                 val pi = Intent.parseUri(savedIntentUri, Intent.URI_INTENT_SCHEME)
                 pi.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -137,18 +129,29 @@ object ShortcutLauncher {
             } catch (_: Exception) {}
         }
 
-        // 5. Ultimo fallback: apri l'app
-        try {
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(launchIntent)
-                return
-            }
-        } catch (_: Exception) {}
+        // 5. Fallback: apri l'app (solo se non è un browser)
+        if (packageName !in BROWSER_PACKAGES) {
+            try {
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+                if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(launchIntent)
+                    return
+                }
+            } catch (_: Exception) {}
+        }
 
+        // 6. Se è un browser e tutto è fallito, mostra un messaggio chiaro
         if (showErrorToast) {
-            Toast.makeText(context.applicationContext, "Impossibile avviare la scorciatoia", Toast.LENGTH_SHORT).show()
+            if (packageName in BROWSER_PACKAGES) {
+                Toast.makeText(
+                    context.applicationContext,
+                    "Impossibile aprire il link. Riprova dal browser.",
+                    Toast.LENGTH_LONG
+                ).show()
+            } else {
+                Toast.makeText(context.applicationContext, "Impossibile avviare la scorciatoia", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }
