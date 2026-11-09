@@ -38,13 +38,15 @@ object ShortcutLauncher {
 
         val savedData = PrefsSync.shortcutIntents(context)[uniqueKey]
 
+        // 1. Se abbiamo salvato un URL puro (es. "url:https://..."), aprilo subito
         if (savedData != null && savedData.startsWith("url:")) {
             val url = savedData.removePrefix("url:")
             val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                 addCategory(Intent.CATEGORY_BROWSABLE)
             }
             if (tryStart(context, browserIntent)) return
-
+            
+            // Se fallisce (raro), apri forzando il browser specifico
             val forcedIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                 setPackage(packageName)
                 addCategory(Intent.CATEGORY_BROWSABLE)
@@ -52,19 +54,22 @@ object ShortcutLauncher {
             if (tryStart(context, forcedIntent)) return
         }
 
-        if (!savedData.isNullOrBlank() && !savedData.startsWith("url:")) {
-            try {
-                val pi = Intent.parseUri(savedData, Intent.URI_INTENT_SCHEME)
-                if (tryStart(context, pi)) return
-            } catch (_: Exception) {}
-        }
-
+        // 2. Prova l'API startShortcut (per le app normali)
         try {
             val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
             launcherApps.startShortcut(packageName, shortcutId, null, null, Process.myUserHandle())
             return
         } catch (_: Exception) {}
 
+        // 3. Fallback: se abbiamo l'Intent originale salvato
+        if (savedData != null && !savedData.startsWith("url:")) {
+            try {
+                val pi = Intent.parseUri(savedData, Intent.URI_INTENT_SCHEME)
+                if (tryStart(context, pi)) return
+            } catch (_: Exception) {}
+        }
+
+        // 4. Fallback: apri l'app (solo se non è un browser)
         try {
             val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
             if (launchIntent != null && tryStart(context, launchIntent)) return
