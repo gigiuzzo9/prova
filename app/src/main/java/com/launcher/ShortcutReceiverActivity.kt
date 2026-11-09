@@ -19,8 +19,12 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                 val packageName = shortcutInfo.`package`
                 val realShortcutId = shortcutInfo.id
 
-                // --- INIZIO BLOCCO DI RECUPERO INTENT (come Nova) ---
                 var savedData = ""
+
+                // --- INIZIO RECUPERO URL (NOVA-STYLE) ---
+                // Interroghiamo il sistema per ottenere la ShortcutInfo completa.
+                // Questo ci permette di leggere l'Intent originale con l'URL, 
+                // che a volte non è presente nell'oggetto passato direttamente.
                 try {
                     val query = LauncherApps.ShortcutQuery()
                         .setPackage(packageName)
@@ -36,15 +40,17 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     
                     if (realIntent != null) {
                         if (realIntent.action == Intent.ACTION_VIEW && realIntent.data != null) {
+                            // Abbiamo trovato l'URL! Lo salviamo col prefisso "url:"
                             savedData = "url:${realIntent.data}"
                         } else {
+                            // Se non è un ACTION_VIEW, salviamo l'Intent serializzato
                             savedData = realIntent.toUri(Intent.URI_INTENT_SCHEME)
                         }
                     }
                 } catch (_: Exception) {
-                    // Fallback: se fallisce, resta vuoto e usa startShortcut
+                    // Se fallisce, savedData resta vuoto e useremo startShortcut
                 }
-                // --- FINE BLOCCO ---
+                // --- FINE RECUPERO URL ---
 
                 val existingSlots = PrefsSync.homeSlots(this)
                 val sameShortcutExists = existingSlots.any {
@@ -61,10 +67,13 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     else -> "$packageName|$realShortcutId|$instanceId"
                 }
 
-                // Salviamo l'URL (se recuperato) invece della stringa vuota
+                // Salviamo l'URL (se trovato) o stringa vuota
                 PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
 
+                // Piazziamo l'icona sulla home
                 ShortcutPlacement.placeOnFirstFreeCell(this, packageName, realShortcutId, instanceId)
+                
+                // Ricarichiamo la home
                 sendBroadcast(Intent("com.simplylauncher.RELOAD"))
             }
         }
