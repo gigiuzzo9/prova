@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Rect
 import android.net.Uri
@@ -231,73 +232,72 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupGrid() {
-    homeScreenGrid.itemClickListener = { slot ->
-        if (slot.shortcutId.isNotEmpty()) {
-            // Usa ShortcutLauncher per gestire scorciatoie (Firefox, app, ecc.)
-            ShortcutLauncher.launch(
-                context = this@HomeActivity,
-                packageName = slot.packageName,
-                shortcutId = slot.shortcutId,
-                instanceId = slot.instanceId
-            )
-        } else if (slot.packageName.isNotEmpty()) {
-            AppRepository.launchApp(this, slot.packageName)
-        }
-    }
-    homeScreenGrid.itemLongClickListener = { slot, view ->
-        val app = AppCache.get(slot.packageName)
-        if (app != null) {
-            draggingShortcutId = slot.shortcutId
-            draggingInstanceId = slot.instanceId
-            dragController.onLongPress(
-                app,
-                view,
-                DragController.SOURCE_HOME,
-                false,
-                shortcutId = slot.shortcutId,
-                instanceId = slot.instanceId
-            )
-        }
-    }
-    homeScreenGrid.emptyCellLongClickListener = { view ->
-        showHomePopup(view)
-    }
-
-    homeScreenGrid.onSwipeOffsetChanged = { offset ->
-        widgetContainer.translationX = offset
-
-        val page = homeScreenGrid.getCurrentPage()
-        val adj = when {
-            offset > 0 && page > 0 -> page - 1
-            offset < 0 && page < currentPageCount - 1 -> page + 1
-            else -> -1
-        }
-        if (adj != -1) {
-            if (adjWidgetPage != adj) {
-                adjWidgetPage = adj
-                renderWidgetsForPage(adj, widgetContainer2)
+        homeScreenGrid.itemClickListener = { slot ->
+            if (slot.shortcutId.isNotEmpty()) {
+                ShortcutLauncher.launch(
+                    context = this@HomeActivity,
+                    packageName = slot.packageName,
+                    shortcutId = slot.shortcutId,
+                    instanceId = slot.instanceId
+                )
+            } else if (slot.packageName.isNotEmpty()) {
+                AppRepository.launchApp(this, slot.packageName)
             }
-            val sign = if (offset > 0) -1 else 1
-            widgetContainer2.translationX = offset + sign * homeScreenGrid.width
-        } else {
+        }
+        homeScreenGrid.itemLongClickListener = { slot, view ->
+            val app = AppCache.get(slot.packageName)
+            if (app != null) {
+                draggingShortcutId = slot.shortcutId
+                draggingInstanceId = slot.instanceId
+                dragController.onLongPress(
+                    app,
+                    view,
+                    DragController.SOURCE_HOME,
+                    false,
+                    shortcutId = slot.shortcutId,
+                    instanceId = slot.instanceId
+                )
+            }
+        }
+        homeScreenGrid.emptyCellLongClickListener = { view ->
+            showHomePopup(view)
+        }
+
+        homeScreenGrid.onSwipeOffsetChanged = { offset ->
+            widgetContainer.translationX = offset
+
+            val page = homeScreenGrid.getCurrentPage()
+            val adj = when {
+                offset > 0 && page > 0 -> page - 1
+                offset < 0 && page < currentPageCount - 1 -> page + 1
+                else -> -1
+            }
+            if (adj != -1) {
+                if (adjWidgetPage != adj) {
+                    adjWidgetPage = adj
+                    renderWidgetsForPage(adj, widgetContainer2)
+                }
+                val sign = if (offset > 0) -1 else 1
+                widgetContainer2.translationX = offset + sign * homeScreenGrid.width
+            } else {
+                widgetContainer2.translationX = 0f
+                widgetContainer2.removeAllViews()
+                adjWidgetPage = -1
+            }
+        }
+
+        homeScreenGrid.pageChangeListener = { page ->
+            pageIndicator.setCurrentPage(page)
+            val tmp = widgetContainer
+            widgetContainer = widgetContainer2
+            widgetContainer2 = tmp
+            widgetContainer.translationX = 0f
             widgetContainer2.translationX = 0f
             widgetContainer2.removeAllViews()
             adjWidgetPage = -1
+            renderWidgets()
         }
     }
-
-    homeScreenGrid.pageChangeListener = { page ->
-        pageIndicator.setCurrentPage(page)
-        val tmp = widgetContainer
-        widgetContainer = widgetContainer2
-        widgetContainer2 = tmp
-        widgetContainer.translationX = 0f
-        widgetContainer2.translationX = 0f
-        widgetContainer2.removeAllViews()
-        adjWidgetPage = -1
-        renderWidgets()
-    }
-}
 
     private fun setupResizeFrame() {
         resizeFrame.onClickListener = { endResizeMode() }
@@ -364,7 +364,13 @@ class HomeActivity : AppCompatActivity() {
             REQUEST_PICK_ICON -> {
                 if (resultCode == RESULT_OK && data?.data != null) {
                     pendingIconPackage?.let { pkg ->
-                        saveCustomIcon(pkg, pendingIconShortcutId, pendingIconInstanceId, data.data!!)
+                        val realShortcutId = pendingIconShortcutId
+                        if (realShortcutId == "legacy") {
+                            // Scorciatoia legacy: salva con chiave uniqueKey
+                            saveLegacyShortcutIcon(pkg, pendingIconInstanceId, data.data!!)
+                        } else {
+                            saveCustomIcon(pkg, pendingIconShortcutId, pendingIconInstanceId, data.data!!)
+                        }
                     }
                 }
                 pendingIconPackage = null
@@ -516,6 +522,37 @@ class HomeActivity : AppCompatActivity() {
                 PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
             }
 
+            AppRepository.invalidateCache()
+
+            lifecycleScope.launch {
+                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+                loadHomeApps()
+                dockController.refresh()
+                loadDrawerApps()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Errore salvataggio: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Salva l'icona custom per una scorciatoia LEGACY (Firefox, browser vecchi).
+     * La uniqueKey usata è "$packageName|legacy|$instanceId", coerente con LegacyShortcutReceiver.
+     */
+    private fun saveLegacyShortcutIcon(packageName: String, instanceId: String, uri: Uri) {
+        try {
+            val iconsDir = File(filesDir, "custom_icons")
+            if (!iconsDir.exists()) iconsDir.mkdirs()
+
+            val uniqueKey = "$packageName|legacy|$instanceId"
+            val safeName = uniqueKey.replace(Regex("[^A-Za-z0-9_.-]"), "_")
+            val destFile = File(iconsDir, "${safeName}.png")
+
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(destFile).use { output -> input.copyTo(output) }
+            }
+
+            PrefsSync.setCustomShortcutIcon(this, uniqueKey, destFile.absolutePath)
             AppRepository.invalidateCache()
 
             lifecycleScope.launch {
@@ -1191,111 +1228,104 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun showDragOverlay(
-    source: String,
-    pkg: String,
-    widgetId: Int,
-    widthCells: Int,
-    heightCells: Int,
-    x: Float,
-    y: Float
-) {
-    if (source == DragController.SOURCE_WIDGET) {
-        // Trova l'hostView del widget che stiamo trascinando
-        val hostView = findWidgetHostView(widgetId)
-        if (hostView != null && hostView.width > 0 && hostView.height > 0) {
-            val bmp = Bitmap.createBitmap(
-                hostView.width,
-                hostView.height,
-                Bitmap.Config.ARGB_8888
-            )
-            val canvas = android.graphics.Canvas(bmp)
-            hostView.draw(canvas)
-            dragOverlayView.layoutParams = FrameLayout.LayoutParams(
-                hostView.width,
-                hostView.height
-            )
-            dragOverlayView.setImageBitmap(bmp)
-            dragOverlayView.alpha = 0.85f
-        } else {
-            // Fallback: dimensione in base alle celle
-            val cellW = homeScreenGrid.width / currentCols
-            val cellH = homeScreenGrid.height / currentRows
-            val w = (cellW * widthCells).coerceAtLeast(1)
-            val h = (cellH * heightCells).coerceAtLeast(1)
-            dragOverlayView.layoutParams = FrameLayout.LayoutParams(w, h)
-            dragOverlayView.setImageDrawable(null)
-            dragOverlayView.setBackgroundColor(0x33000000)
+        source: String,
+        pkg: String,
+        widgetId: Int,
+        widthCells: Int,
+        heightCells: Int,
+        x: Float,
+        y: Float
+    ) {
+        if (source == DragController.SOURCE_WIDGET) {
+            val hostView = findWidgetHostView(widgetId)
+            if (hostView != null && hostView.width > 0 && hostView.height > 0) {
+                val bmp = Bitmap.createBitmap(
+                    hostView.width,
+                    hostView.height,
+                    Bitmap.Config.ARGB_8888
+                )
+                val canvas = android.graphics.Canvas(bmp)
+                hostView.draw(canvas)
+                dragOverlayView.layoutParams = FrameLayout.LayoutParams(
+                    hostView.width,
+                    hostView.height
+                )
+                dragOverlayView.setImageBitmap(bmp)
+                dragOverlayView.alpha = 0.85f
+            } else {
+                val cellW = homeScreenGrid.width / currentCols
+                val cellH = homeScreenGrid.height / currentRows
+                val w = (cellW * widthCells).coerceAtLeast(1)
+                val h = (cellH * heightCells).coerceAtLeast(1)
+                dragOverlayView.layoutParams = FrameLayout.LayoutParams(w, h)
+                dragOverlayView.setImageDrawable(null)
+                dragOverlayView.setBackgroundColor(0x33000000)
+            }
+            dragOverlayView.visibility = View.VISIBLE
+            updateDragOverlay(x, y)
+            return
         }
+
+        val sizePx = (56 * resources.displayMetrics.density).toInt()
+        dragOverlayView.layoutParams = FrameLayout.LayoutParams(sizePx, sizePx)
+        dragOverlayView.alpha = 1f
+        dragOverlayView.setBackgroundColor(Color.TRANSPARENT)
+
+        val bitmap: android.graphics.Bitmap? = run {
+            val shortcutId = draggingShortcutId
+            val instanceId = draggingInstanceId
+
+            if (shortcutId.isNotEmpty()) {
+                val uniqueKey = when {
+                    instanceId.isEmpty() -> "$pkg|$shortcutId"
+                    else -> "$pkg|$shortcutId|$instanceId"
+                }
+                val customPath = PrefsSync.customShortcutIcons(this)[uniqueKey]
+                if (customPath != null) {
+                    val f = java.io.File(customPath)
+                    if (f.exists()) {
+                        val bmp = BitmapFactory.decodeFile(customPath)
+                        if (bmp != null) {
+                            return@run Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true)
+                        }
+                    }
+                }
+            } else {
+                val customPath = PrefsSync.customIcons(this)[pkg]
+                if (customPath != null) {
+                    val f = java.io.File(customPath)
+                    if (f.exists()) {
+                        val bmp = BitmapFactory.decodeFile(customPath)
+                        if (bmp != null) {
+                            return@run Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true)
+                        }
+                    }
+                }
+            }
+            AppCache.getIconBitmap(pkg, sizePx)
+        }
+
+        if (bitmap != null) {
+            dragOverlayView.setImageBitmap(bitmap)
+        } else {
+            dragOverlayView.setImageDrawable(null)
+        }
+
         dragOverlayView.visibility = View.VISIBLE
         updateDragOverlay(x, y)
-        return
     }
 
-    // Ramo app normale
-    val sizePx = (56 * resources.displayMetrics.density).toInt()
-    dragOverlayView.layoutParams = FrameLayout.LayoutParams(sizePx, sizePx)
-    dragOverlayView.alpha = 1f
-    dragOverlayView.setBackgroundColor(Color.TRANSPARENT)
-
-    val bitmap: android.graphics.Bitmap? = run {
-        val shortcutId = draggingShortcutId
-        val instanceId = draggingInstanceId
-
-        if (shortcutId.isNotEmpty()) {
-            val uniqueKey = when {
-                instanceId.isEmpty() -> "$pkg|$shortcutId"
-                else -> "$pkg|$shortcutId|$instanceId"
-            }
-            val customPath = PrefsSync.customShortcutIcons(this)[uniqueKey]
-            if (customPath != null) {
-                val f = java.io.File(customPath)
-                if (f.exists()) {
-                    val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
-                    if (bmp != null) {
-                        return@run android.graphics.Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true)
-                    }
-                }
-            }
-        } else {
-            val customPath = PrefsSync.customIcons(this)[pkg]
-            if (customPath != null) {
-                val f = java.io.File(customPath)
-                if (f.exists()) {
-                    val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
-                    if (bmp != null) {
-                        return@run android.graphics.Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true)
-                    }
+    private fun findWidgetHostView(appWidgetId: Int): LauncherAppWidgetHostView? {
+        for (container in listOf(widgetContainer, widgetContainer2)) {
+            for (i in 0 until container.childCount) {
+                val child = container.getChildAt(i)
+                if (child is LauncherAppWidgetHostView && child.tag == appWidgetId) {
+                    return child
                 }
             }
         }
-        AppCache.getIconBitmap(pkg, sizePx)
+        return null
     }
-
-    if (bitmap != null) {
-        dragOverlayView.setImageBitmap(bitmap)
-    } else {
-        dragOverlayView.setImageDrawable(null)
-    }
-
-    dragOverlayView.visibility = View.VISIBLE
-    updateDragOverlay(x, y)
-}
-
-/**
- * Cerca la view del widget attualmente mostrato con quell'appWidgetId.
- * Prima in widgetContainer, poi in widgetContainer2 (quello della pagina adiacente).
- */
-private fun findWidgetHostView(appWidgetId: Int): LauncherAppWidgetHostView? {
-    for (container in listOf(widgetContainer, widgetContainer2)) {
-        for (i in 0 until container.childCount) {
-            val child = container.getChildAt(i)
-            if (child is LauncherAppWidgetHostView && child.tag == appWidgetId) {
-                return child
-            }
-        }
-    }
-    return null
-}
 
     private fun updateDragOverlay(x: Float, y: Float) {
         if (dragOverlayView.visibility != View.VISIBLE) return
@@ -1471,6 +1501,18 @@ private fun findWidgetHostView(appWidgetId: Int): LauncherAppWidgetHostView? {
                 }
                 PrefsSync.removeHomeSlotByKey(this, key)
                 PrefsSync.removeDockSlotByKey(this, app.packageName, shortcutId, instanceId)
+
+                // Se è una shortcut legacy, elimina anche il file PNG e l'URI Intent
+                if (shortcutId == "legacy" && instanceId.isNotEmpty()) {
+                    try {
+                        val safeName = key.replace(Regex("[^A-Za-z0-9_.-]"), "_")
+                        val f = File(File(filesDir, "custom_icons"), "${safeName}.png")
+                        if (f.exists()) f.delete()
+                    } catch (_: Exception) {}
+                    PrefsSync.removeCustomShortcutIcon(this, key)
+                    PrefsSync.removeShortcutIntent(this, key)
+                }
+
                 loadHomeApps()
                 dockController.refresh()
             }
