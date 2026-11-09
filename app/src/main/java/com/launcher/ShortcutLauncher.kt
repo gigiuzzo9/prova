@@ -38,7 +38,6 @@ object ShortcutLauncher {
 
         val savedData = PrefsSync.shortcutIntents(context)[uniqueKey]
 
-        // 1. Se abbiamo salvato un URL puro (es. "url:https://..."), aprilo subito
         if (savedData != null && savedData.startsWith("url:")) {
             val url = savedData.removePrefix("url:")
             val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
@@ -46,7 +45,6 @@ object ShortcutLauncher {
             }
             if (tryStart(context, browserIntent)) return
 
-            // Se fallisce (raro), apri forzando il browser specifico
             val forcedIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                 setPackage(packageName)
                 addCategory(Intent.CATEGORY_BROWSABLE)
@@ -54,8 +52,6 @@ object ShortcutLauncher {
             if (tryStart(context, forcedIntent)) return
         }
 
-        // 2. PRIORITÀ: se abbiamo un Intent salvato (scorciatoia legacy),
-        //    avvialo SUBITO con startActivity prima di startShortcut.
         if (!savedData.isNullOrBlank() && !savedData.startsWith("url:")) {
             try {
                 val pi = Intent.parseUri(savedData, Intent.URI_INTENT_SCHEME)
@@ -63,14 +59,12 @@ object ShortcutLauncher {
             } catch (_: Exception) {}
         }
 
-        // 3. Solo dopo, prova startShortcut (per scorciatoie dinamiche/pinned moderne)
         try {
             val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
             launcherApps.startShortcut(packageName, shortcutId, null, null, Process.myUserHandle())
             return
         } catch (_: Exception) {}
 
-        // 4. Fallback: apri l'app (solo se non è un browser)
         try {
             val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
             if (launchIntent != null && tryStart(context, launchIntent)) return
