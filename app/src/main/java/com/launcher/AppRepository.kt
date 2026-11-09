@@ -56,9 +56,8 @@ object AppRepository {
                 val label = customLabels[pkg] ?: pm.getApplicationLabel(appInfo).toString()
 
                 // Icona custom ha priorità
-                val customIconPath = customIcons[pkg]
                 var icon: Drawable? = null
-                if (customIconPath != null) {
+                customIcons[pkg]?.let { customIconPath ->
                     val file = File(customIconPath)
                     if (file.exists()) {
                         icon = Drawable.createFromPath(customIconPath)
@@ -74,7 +73,7 @@ object AppRepository {
                     icon = launcherIcon ?: pm.getApplicationIcon(appInfo)
                 }
 
-                AppInfo(label = label, packageName = pkg, icon = icon)
+                AppInfo(label = label, packageName = pkg, icon = icon!!)
             }
             .sortedBy { it.label.lowercase() }
 
