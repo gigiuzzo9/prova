@@ -1,4 +1,4 @@
-package com.launcher
+package com.simplylauncher
 
 import android.app.AlertDialog
 import android.content.Intent
