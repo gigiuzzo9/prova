@@ -336,16 +336,18 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect, offsetX: Float) {
+    // Non usiamo più AppCache per il nome, ma solo per l'icona
     val app = AppCache.get(slot.packageName) ?: return
 
-    // --- NOME: usa la chiave "pulita" per gli shortcut, il package per le app ---
+    // --- NOME: se è uno shortcut, legge SOLO dalla mappa degli shortcut ---
     val displayLabel = if (slot.isShortcut) {
         val safeKey = slot.uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
+        // Se c'è un nome personalizzato per lo shortcut, usa quello.
+        // Altrimenti usa l'etichetta dell'app (che è il default).
         PrefsSync.customShortcutLabels(context)[safeKey] ?: app.label
     } else {
         PrefsSync.customLabels(context)[slot.packageName] ?: app.label
     }
-    // ------------------------------------------------------------------------
 
     val isCustom = if (slot.isShortcut) {
         PrefsSync.customShortcutIcons(context).containsKey(slot.uniqueKey)
@@ -394,7 +396,6 @@ class HomeScreenGrid @JvmOverloads constructor(
         canvas.restore()
     }
 }
-
     private fun loadShortcutIcon(packageName: String, shortcutId: String, sizePx: Int): Bitmap? {
         if (sizePx <= 0 || shortcutId.isEmpty()) return null
         return try {
