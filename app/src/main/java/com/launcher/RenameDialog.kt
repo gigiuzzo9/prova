@@ -11,15 +11,25 @@ object RenameDialog {
     fun show(
         context: Context,
         app: AppInfo,
+        shortcutId: String = "",
+        instanceId: String = "",
         onRenamed: () -> Unit
     ) {
         val input = EditText(context).apply {
             hint = context.getString(R.string.rename_hint)
-            setText(app.label)
+            
+            // Se è una scorciatoia, mostra il nome attuale della scorciatoia (se esiste)
+            val currentLabel = if (shortcutId.isNotEmpty()) {
+                val key = if (instanceId.isEmpty()) "${app.packageName}|$shortcutId" 
+                          else "${app.packageName}|$shortcutId|$instanceId"
+                PrefsSync.customShortcutLabels(context)[key] ?: app.label
+            } else {
+                app.label
+            }
+            
+            setText(currentLabel)
             setSelection(text.length)
-            // Aumentato del 30%: 16 -> 21
             textSize = 21f
-            // Aumentato del 30%: 32,16 -> 42,21
             setPadding(42, 21, 42, 21)
         }
 
@@ -30,7 +40,15 @@ object RenameDialog {
                 val newName = input.text.toString().trim()
                 if (newName.isNotEmpty()) {
                     (context as? androidx.appcompat.app.AppCompatActivity)?.lifecycleScope?.launch {
-                        Prefs.setCustomLabel(context, app.packageName, newName)
+                        if (shortcutId.isNotEmpty()) {
+                            // È una scorciatoia: salva nella mappa separata
+                            val key = if (instanceId.isEmpty()) "${app.packageName}|$shortcutId" 
+                                      else "${app.packageName}|$shortcutId|$instanceId"
+                            PrefsSync.setCustomShortcutLabel(context, key, newName)
+                        } else {
+                            // È un'app normale
+                            PrefsSync.setCustomLabel(context, app.packageName, newName)
+                        }
                         onRenamed()
                     }
                 }
