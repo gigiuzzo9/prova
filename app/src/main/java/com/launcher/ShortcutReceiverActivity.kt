@@ -3,12 +3,18 @@ package com.simplylauncher
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
+import android.content.pm.ShortcutInfo
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import java.io.File
+import java.io.FileOutputStream
 
 class ShortcutReceiverActivity : AppCompatActivity() {
 
@@ -52,7 +58,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             try { launcherApps.getShortcutIconDrawable(shortcutInfo, 0) } catch (e: Exception) { null }
         } else null
 
-        // --- FINESTRA DI CONFERMA (il pezzo che mancava) ---
+        // --- FINESTRA DI CONFERMA ---
         val builder = AlertDialog.Builder(this)
             .setTitle("Aggiungi scorciatoia")
             .setMessage(label)
@@ -68,7 +74,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         builder.show()
     }
 
-    private fun confirmAndSave(shortcutInfo: android.content.pm.ShortcutInfo) {
+    private fun confirmAndSave(shortcutInfo: ShortcutInfo) {
         val request = pinRequest ?: run { finish(); return }
 
         // Accetta SOLO ORA, dopo la conferma dell'utente
@@ -78,22 +84,82 @@ class ShortcutReceiverActivity : AppCompatActivity() {
 
         val packageName = shortcutInfo.`package`
         val shortcutId = shortcutInfo.id
+        val displayName = shortcutInfo.shortLabel?.toString() ?: "Scorciatoia"
         val userIdString = shortcutInfo.userHandle.toString()
             .replace("UserHandle{", "").replace("}", "")
         val uniqueKey = "$packageName$SEP$shortcutId"
 
-        // Salva formato canonico (per Chrome e altri browser)
-        val savedData = "$packageName$SEP$shortcutId$SEP$userIdString"
-        PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
-        Log.d(TAG, "salvato canonico: $savedData")
+        // --- 1. CONTROLLO PWA / SCORCIATOIA ---
+        // Firefox aggiunge un extra specifico quando crea un'App (PWA).
+        val isPwa = shortcutInfo.extras?.containsKey("mozilla.components.feature.pwa.WEB_APP_MANIFEST") == true
+        
+        Log.d(TAG, "isPwa=$isPwa")
 
-        // Se l'ID è un URL (Iceraven/Firefox), salvalo come URL puro
-        if (shortcutId.startsWith("http://") || shortcutId.startsWith("https://")) {
-            PrefsSync.setShortcutIntent(this, uniqueKey, "url:$shortcutId")
-            Log.d(TAG, "URL salvato dall'ID: url:$shortcutId")
+        if (isPwa) {
+            // È un'App (PWA). Salviamo l'ID per usare startShortcut (apre senza barra).
+            val savedData = "$packageName$SEP$shortcutId$SEP$userIdString"
+            PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
+            Log.d(TAG, "Salvato come PWA: $savedData")
+        } else {
+            // È una scorciatoia normale. Salviamo come URL (apre con ACTION_VIEW).
+            if (shortcutId.startsWith("http://") || shortcutId.startsWith("https://")) {
+                PrefsSync.setShortcutIntent(this, uniqueKey, "url:$shortcutId")
+                Log.d(TAG, "Salvato come URL: url:$shortcutId")
+            } else {
+                // Fallback se l'ID non è un URL
+                val savedData = "$packageName$SEP$shortcutId$SEP$userIdString"
+                PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
+                Log.d(TAG, "Salvato canonico: $savedData")
+            }
         }
 
-        // Posiziona nella home
+        // --- 2. GESTIONE ICONA ---
+        try {
+            val launcherApps = getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+            val iconDrawable = launcherApps.getShortcutIconDrawable(shortcutInfo, 0)
+            val appIcon = packageManager.getApplicationIcon(packageName)
+            
+            val isDifferentFromApp = iconDrawable != null && 
+                                     iconDrawable.constantState != appIcon.constantState
+            
+            val filename = "shortcut_icon_${uniqueKey.hashCode()}.png"
+            val file = File(filesDir, filename)
+            var bitmap: Bitmap? = null
+
+            if (isDifferentFromApp) {
+                bitmap = Bitmap.createBitmap(
+                    iconDrawable!!.intrinsicWidth.coerceAtLeast(1),
+                    iconDrawable.intrinsicHeight.coerceAtLeast(1),
+                    Bitmap.Config.ARGB_8888
+                )
+                val canvas = Canvas(bitmap)
+                iconDrawable.setBounds(0, 0, canvas.width, canvas.height)
+                iconDrawable.draw(canvas)
+            } else {
+                val size = 192
+                bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+                val colors = intArrayOf(0xFFF44336.toInt(), 0xFF2196F3.toInt(), 0xFF4CAF50.toInt(), 0xFFFF9800.toInt())
+                paint.color = colors[Math.abs(displayName.hashCode()) % colors.size]
+                canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+                paint.color = android.graphics.Color.WHITE
+                paint.textSize = size / 2f
+                paint.textAlign = Paint.Align.CENTER
+                canvas.drawText(displayName.take(1).uppercase(), size / 2f, size / 2f + (paint.textSize / 3), paint)
+            }
+
+            if (bitmap != null) {
+                FileOutputStream(file).use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                }
+                PrefsSync.setCustomShortcutIcon(this, uniqueKey, file.absolutePath)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Errore salvataggio icona", e)
+        }
+
+        // --- 3. POSIZIONAMENTO NELLA HOME ---
         try {
             ShortcutPlacement.placeOnFirstFreeCell(this, packageName, shortcutId, "")
             Log.d(TAG, "placeOnFirstFreeCell OK")
