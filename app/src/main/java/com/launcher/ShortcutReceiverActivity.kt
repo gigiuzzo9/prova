@@ -20,7 +20,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         try {
             handlePinRequest()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e(TAG, "CRASH in handlePinRequest", e)
         } finally {
             finish()
@@ -55,22 +55,27 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
         Log.d(TAG, "salvato canonico: $savedData")
 
+        // --- Fallback per Firefox: salva l'intent serializzato se disponibile ---
+        // ATTENZIONE: shortcutInfo.intents può essere null. Gestito in modo sicuro.
         try {
             val intents = shortcutInfo.intents
-            Log.d(TAG, "intents=${intents?.size}")
-            if (!intents.isNullOrEmpty()) {
+            Log.d(TAG, "intents size = ${intents?.size ?: -1}")
+            if (intents != null && intents.isNotEmpty()) {
                 val serialized = intents[0].toUri(0)
                 PrefsSync.setShortcutIntent(this, "$uniqueKey$KEY_INTENT_SUFFIX", serialized)
                 Log.d(TAG, "salvato intent serializzato: $serialized")
+            } else {
+                Log.w(TAG, "intents null o vuoto: Firefox non espone l'URL")
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e(TAG, "errore su intents", e)
         }
 
+        // --- Posizionamento nella home ---
         try {
             ShortcutPlacement.placeOnFirstFreeCell(this, packageName, realShortcutId, "")
             Log.d(TAG, "placeOnFirstFreeCell OK")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e(TAG, "errore placeOnFirstFreeCell", e)
         }
 
