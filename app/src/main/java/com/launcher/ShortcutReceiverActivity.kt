@@ -53,20 +53,15 @@ class ShortcutReceiverActivity : AppCompatActivity() {
 
         Log.d(TAG, "Pin ricevuto: pkg=$packageName id=$shortcutId label=$label user=$userIdString")
 
-        // Icona della scorciatoia (se disponibile)
         val icon: Drawable? = if (launcherApps.hasShortcutHostPermission()) {
             try { launcherApps.getShortcutIconDrawable(shortcutInfo, 0) } catch (e: Exception) { null }
         } else null
 
-        // --- FINESTRA DI CONFERMA ---
         val builder = AlertDialog.Builder(this)
             .setTitle("Aggiungi scorciatoia")
             .setMessage(label)
             .setPositiveButton("Aggiungi") { _, _ -> confirmAndSave(shortcutInfo) }
-            .setNegativeButton("Annulla") { _, _ ->
-                Log.d(TAG, "Utente ha annullato")
-                finish()
-            }
+            .setNegativeButton("Annulla") { _, _ -> finish() }
             .setCancelable(false)
 
         if (icon != null) builder.setIcon(icon)
@@ -77,7 +72,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
     private fun confirmAndSave(shortcutInfo: ShortcutInfo) {
         val request = pinRequest ?: run { finish(); return }
 
-        // Accetta SOLO ORA, dopo la conferma dell'utente
         val accepted = request.accept()
         Log.d(TAG, "accept=$accepted")
         if (!accepted) { finish(); return }
@@ -88,31 +82,39 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         val userIdString = shortcutInfo.userHandle.toString()
             .replace("UserHandle{", "").replace("}", "")
 
-        // --- CHIAVE UNIVOCA: aggiungi un timestamp per evitare sovrascritture ---
-        val timestamp = System.currentTimeMillis()
-        val uniqueKey = "$packageName$SEP$shortcutId$SEP$timestamp"
+        // --- SALVATAGGIO ---
+        // Se l'ID è un URL (Firefox/Chrome), salvalo come URL puro.
+        // Altrimenti salva package|id|user, ma con un timestamp per evitare sovrascritture.
+        val isUrl = shortcutId.startsWith("http://") || shortcutId.startsWith("https://")
         
-        Log.d(TAG, "Salvataggio con chiave univoca: $uniqueKey")
+        // Chiave univoca: se è URL, uso l'URL come parte della chiave (per evitare duplicati)
+        // altrimenti uso un timestamp.
+        val uniqueKey = if (isUrl) {
+            // Puliamo l'URL per renderlo sicuro come chiave
+            val safeUrl = shortcutId.replace("|", "_").replace(":", "_").replace("/", "_")
+            "$packageName$SEP$safeUrl"
+        } else {
+            "$packageName$SEP$shortcutId$SEP${System.currentTimeMillis()}"
+        }
 
-        // --- 1. SALVATAGGIO (URL o ID) ---
-        if (shortcutId.startsWith("http://") || shortcutId.startsWith("https://")) {
+        if (isUrl) {
             PrefsSync.setShortcutIntent(this, uniqueKey, "url:$shortcutId")
-            Log.d(TAG, "Salvato come URL: url:$shortcutId")
+            Log.d(TAG, "Salvato URL: url:$shortcutId")
         } else {
             val savedData = "$packageName$SEP$shortcutId$SEP$userIdString"
             PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
             Log.d(TAG, "Salvato canonico: $savedData")
         }
 
-        // --- 2. GESTIONE ICONA ---
+        // --- ICONA ---
         try {
             val launcherApps = getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
             val iconDrawable = launcherApps.getShortcutIconDrawable(shortcutInfo, 0)
             val appIcon = packageManager.getApplicationIcon(packageName)
-            
-            val isDifferentFromApp = iconDrawable != null && 
+
+            val isDifferentFromApp = iconDrawable != null &&
                                      iconDrawable.constantState != appIcon.constantState
-            
+
             val filename = "shortcut_icon_${uniqueKey.hashCode()}.png"
             val file = File(filesDir, filename)
             var bitmap: Bitmap? = null
@@ -150,9 +152,8 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             Log.e(TAG, "Errore salvataggio icona", e)
         }
 
-        // --- 3. POSIZIONAMENTO NELLA HOME ---
+        // --- POSIZIONAMENTO ---
         try {
-            // Passa la chiave univoca (con timestamp) a ShortcutPlacement
             ShortcutPlacement.placeOnFirstFreeCell(this, packageName, uniqueKey, "")
             Log.d(TAG, "placeOnFirstFreeCell OK")
         } catch (e: Exception) {
