@@ -1242,7 +1242,13 @@ class HomeActivity : AppCompatActivity() {
                 instanceId.isEmpty() -> "$pkg|$shortcutId"
                 else -> "$pkg|$shortcutId|$instanceId"
             }
-            val customPath = PrefsSync.customShortcutIcons(this)[uniqueKey]
+            // 1. Puliamo la chiave per trovare il file salvato
+            val safeKey = uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
+            
+            // 2. Cerchiamo prima con la chiave pulita, poi con quella originale
+            var customPath = PrefsSync.customShortcutIcons(this)[safeKey]
+            if (customPath == null) customPath = PrefsSync.customShortcutIcons(this)[uniqueKey]
+            
             if (customPath != null) {
                 val f = java.io.File(customPath)
                 if (f.exists()) {
