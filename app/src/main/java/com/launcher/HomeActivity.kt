@@ -1459,7 +1459,14 @@ private fun findWidgetHostView(appWidgetId: Int): LauncherAppWidgetHostView? {
     }
     contextMenuView.onRename = { shortcutId, instanceId ->
         currentApp?.let { app ->
-            RenameDialog.show(this, app, shortcutId, instanceId) {
+            // Calcola la chiave univoca esatta usata dalla griglia
+            val uniqueKey = when {
+                shortcutId.isEmpty() -> app.packageName
+                instanceId.isEmpty() -> "${app.packageName}|$shortcutId"
+                else -> "${app.packageName}|$shortcutId|$instanceId"
+            }
+            
+            RenameDialog.show(this, app, shortcutId, instanceId, uniqueKey) {
                 AppRepository.invalidateCache()
                 loadHomeApps()
                 dockController.refresh()
