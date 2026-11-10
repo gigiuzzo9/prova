@@ -37,29 +37,11 @@ object ShortcutLauncher {
         }
 
         val map = PrefsSync.shortcutIntents(context)
-        Log.d(TAG, "launch: pkg=$packageName key=$shortcutId")
+        // La shortcutId che arriva qui è la chiave univoca salvata da ShortcutReceiverActivity
+        val savedData = map[shortcutId] ?: ""
+        Log.d(TAG, "launch: key=$shortcutId savedData=$savedData")
 
-        // 1. Cerca la chiave esatta
-        var savedData = map[shortcutId]
-
-        // 2. Se non trovata, cerca qualsiasi chiave che inizi per "$packageName|"
-        if (savedData == null) {
-            val entry = map.entries.firstOrNull { it.key.startsWith("$packageName$SEP") }
-            savedData = entry?.value
-            Log.d(TAG, "Fallback per package: ${entry?.key} = $savedData")
-        }
-
-        if (savedData == null) {
-            Log.w(TAG, "Nessuna entry trovata per $packageName/$shortcutId")
-            if (showErrorToast) {
-                Toast.makeText(context, "Impossibile avviare la scorciatoia", Toast.LENGTH_SHORT).show()
-            }
-            return
-        }
-
-        Log.d(TAG, "savedData=$savedData")
-
-        // --- URL puro ---
+        // URL puro
         if (savedData.startsWith("url:")) {
             val url = savedData.removePrefix("url:")
             try {
@@ -74,7 +56,7 @@ object ShortcutLauncher {
             }
         }
 
-        // --- Formato canonico package|id|user ---
+        // Formato canonico
         if (savedData.contains(SEP)) {
             val parts = savedData.split(SEP)
             if (parts.size >= 2) {
@@ -94,12 +76,12 @@ object ShortcutLauncher {
                     Log.d(TAG, "startShortcut OK: $pkg/$id")
                     return
                 } catch (e: Exception) {
-                    Log.e(TAG, "startShortcut fallito: $pkg/$id", e)
+                    Log.e(TAG, "startShortcut fallito", e)
                 }
             }
         }
 
-        // --- Fallback app ---
+        // Fallback app
         try {
             val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
             if (launchIntent != null && tryStart(context, launchIntent)) {
