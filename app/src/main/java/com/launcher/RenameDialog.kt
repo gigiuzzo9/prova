@@ -13,16 +13,15 @@ object RenameDialog {
         app: AppInfo,
         shortcutId: String = "",
         instanceId: String = "",
+        uniqueKey: String = "", // <--- AGGIUNTO
         onRenamed: () -> Unit
     ) {
         val input = EditText(context).apply {
             hint = context.getString(R.string.rename_hint)
             
-            // Se è una scorciatoia, mostra il nome attuale della scorciatoia (se esiste)
-            val currentLabel = if (shortcutId.isNotEmpty()) {
-                val key = if (instanceId.isEmpty()) "${app.packageName}|$shortcutId" 
-                          else "${app.packageName}|$shortcutId|$instanceId"
-                PrefsSync.customShortcutLabels(context)[key] ?: app.label
+            // Usa la chiave esatta per leggere il nome attuale
+            val currentLabel = if (uniqueKey.isNotEmpty() && shortcutId.isNotEmpty()) {
+                PrefsSync.customShortcutLabels(context)[uniqueKey] ?: app.label
             } else {
                 app.label
             }
@@ -40,11 +39,9 @@ object RenameDialog {
                 val newName = input.text.toString().trim()
                 if (newName.isNotEmpty()) {
                     (context as? androidx.appcompat.app.AppCompatActivity)?.lifecycleScope?.launch {
-                        if (shortcutId.isNotEmpty()) {
-                            // È una scorciatoia: salva nella mappa separata
-                            val key = if (instanceId.isEmpty()) "${app.packageName}|$shortcutId" 
-                                      else "${app.packageName}|$shortcutId|$instanceId"
-                            PrefsSync.setCustomShortcutLabel(context, key, newName)
+                        if (uniqueKey.isNotEmpty() && shortcutId.isNotEmpty()) {
+                            // Salva usando la chiave esatta
+                            PrefsSync.setCustomShortcutLabel(context, uniqueKey, newName)
                         } else {
                             // È un'app normale
                             PrefsSync.setCustomLabel(context, app.packageName, newName)
