@@ -338,12 +338,13 @@ class HomeScreenGrid @JvmOverloads constructor(
     private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect, offsetX: Float) {
         val app = AppCache.get(slot.packageName) ?: return
 
-        // Legge il nome personalizzato (app o scorciatoia)
+        // --- UNICA AGGIUNTA: calcolo del nome corretto ---
         val displayLabel = if (slot.isShortcut) {
             PrefsSync.customShortcutLabels(context)[slot.uniqueKey] ?: app.label
         } else {
             PrefsSync.customLabels(context)[slot.packageName] ?: app.label
         }
+        // -------------------------------------------------
 
         val isCustom = if (slot.isShortcut) {
             PrefsSync.customShortcutIcons(context).containsKey(slot.uniqueKey)
@@ -357,6 +358,7 @@ class HomeScreenGrid @JvmOverloads constructor(
         if (bitmap == null) return
 
         val hideLabels = PrefsSync.hideAppLabels(context)
+        // Usa displayLabel per decidere se mostrare il testo
         val hasLabel = displayLabel.isNotEmpty() && !hideLabels
 
         val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
@@ -379,6 +381,7 @@ class HomeScreenGrid @JvmOverloads constructor(
         if (hasLabel) {
             val textWidth = cell.width() - 2 * labelSideMargin
             val layout = StaticLayout.Builder
+                // Usa displayLabel qui per disegnare il testo
                 .obtain(displayLabel, 0, displayLabel.length, textPaint, textWidth)
                 .setMaxLines(1)
                 .setEllipsize(TextUtils.TruncateAt.END)
