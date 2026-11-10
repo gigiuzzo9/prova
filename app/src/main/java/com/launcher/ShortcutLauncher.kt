@@ -37,8 +37,14 @@ object ShortcutLauncher {
         }
 
         val map = PrefsSync.shortcutIntents(context)
-        // La shortcutId che arriva qui è la chiave univoca salvata da ShortcutReceiverActivity
-        val savedData = map[shortcutId] ?: ""
+
+        // La shortcutId che arriva qui è la CHIAVE UNIVOCA PULITA salvata in HomeSlot.
+        // Cerca PRIMA quella esatta. Poi, per compatibilità, prova le vecchie chiavi.
+        val savedData = map[shortcutId] 
+                     ?: map["$packageName$SEP$shortcutId"] 
+                     ?: map["$packageName$SEP${shortcutId.replace("|", "_").replace(":", "_").replace("/", "_")}"]
+                     ?: ""
+        
         Log.d(TAG, "launch: key=$shortcutId savedData=$savedData")
 
         // URL puro
