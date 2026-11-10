@@ -491,24 +491,16 @@ class HomeActivity : AppCompatActivity() {
         val realShortcutId = shortcutId ?: ""
         val realInstanceId = instanceId
 
-        val uniqueKey = when {
-            !isShortcut -> packageName
-            realInstanceId.isEmpty() -> "${packageName}|$realShortcutId"
-            else -> "${packageName}|$realShortcutId|$realInstanceId"
-        }
-        val fileKey = if (isShortcut) {
-            if (realInstanceId.isEmpty()) "${packageName}_${realShortcutId}"
-            else "${packageName}_${realShortcutId}_${realInstanceId}"
+        // Usa la chiave PULITA per tutto
+        val uniqueKey = if (isShortcut) {
+            val rawKey = if (realInstanceId.isEmpty()) "${packageName}|$realShortcutId"
+                         else "${packageName}|$realShortcutId|$realInstanceId"
+            rawKey.replace("|", "_").replace(":", "_").replace("/", "_")
         } else {
             packageName
         }
         
-        // QUI C'È LA CORREZIONE: puliamo i caratteri proibiti dal nome del file
-        val safeFileKey = fileKey.replace("|", "_")
-                               .replace(":", "_")
-                               .replace("/", "_")
-        
-        val destFile = File(iconsDir, "$safeFileKey.png")
+        val destFile = File(iconsDir, "$uniqueKey.png")
 
         contentResolver.openInputStream(uri)?.use { input ->
             FileOutputStream(destFile).use { output ->
