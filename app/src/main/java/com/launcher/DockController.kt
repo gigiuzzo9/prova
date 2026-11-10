@@ -53,8 +53,14 @@ class DockController(
                         else -> "${app.packageName}|$shortcutId|$instanceId"
                     }
 
+                    // Calcola la chiave "pulita" per trovare il file dell'icona
+                    val safeKey = uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
+
                     val bitmap: android.graphics.Bitmap? = if (shortcutId.isNotEmpty()) {
-                        val customPath = customShortcutIcons[uniqueKey]
+                        // Prova prima con la chiave pulita, poi con quella originale
+                        var customPath = customShortcutIcons[safeKey]
+                        if (customPath == null) customPath = customShortcutIcons[uniqueKey]
+                        
                         val customBmp = if (customPath != null) {
                             val f = java.io.File(customPath)
                             if (f.exists()) android.graphics.BitmapFactory.decodeFile(customPath) else null
@@ -77,7 +83,7 @@ class DockController(
                     }
 
                     val hasCustom = if (shortcutId.isNotEmpty()) {
-                        customShortcutIcons.containsKey(uniqueKey)
+                        customShortcutIcons.containsKey(safeKey) || customShortcutIcons.containsKey(uniqueKey)
                     } else {
                         customIcons.containsKey(app.packageName)
                     }
