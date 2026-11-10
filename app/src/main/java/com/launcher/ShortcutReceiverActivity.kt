@@ -3,7 +3,6 @@ package com.simplylauncher
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
-import android.content.pm.ShortcutInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -48,10 +47,8 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         val packageName = shortcutInfo.`package`
         val shortcutId = shortcutInfo.id
         val label = shortcutInfo.shortLabel?.toString() ?: packageName
-        val userIdString = shortcutInfo.userHandle.toString()
-            .replace("UserHandle{", "").replace("}", "")
 
-        Log.d(TAG, "Pin ricevuto: pkg=$packageName id=$shortcutId label=$label user=$userIdString")
+        Log.d(TAG, "Pin ricevuto: pkg=$packageName id=$shortcutId label=$label")
 
         val icon: Drawable? = if (launcherApps.hasShortcutHostPermission()) {
             try { launcherApps.getShortcutIconDrawable(shortcutInfo, 0) } catch (e: Exception) { null }
@@ -69,7 +66,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         builder.show()
     }
 
-    private fun confirmAndSave(shortcutInfo: ShortcutInfo) {
+    private fun confirmAndSave(shortcutInfo: android.content.pm.ShortcutInfo) {
         val request = pinRequest ?: run { finish(); return }
 
         val accepted = request.accept()
@@ -82,23 +79,24 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         val userIdString = shortcutInfo.userHandle.toString()
             .replace("UserHandle{", "").replace("}", "")
 
-        // --- CHIAVE UNIVOCA BASATA SU TIMESTAMP ---
-        // Ogni pin ha una chiave diversa, anche se Firefox passa lo stesso shortcutId.
+        // 1. CHIAVE PULITA + TIMESTAMP per unicità
         val timestamp = System.currentTimeMillis()
-        val uniqueKey = "$packageName$SEP$shortcutId$SEP$timestamp"
-        Log.d(TAG, "Chiave univoca: $uniqueKey")
+        val rawKey = "$packageName$SEP$shortcutId$SEP$timestamp"
+        val safeKey = rawKey.replace("|", "_").replace(":", "_").replace("/", "_")
 
-        // Salva l'URL se l'ID è un URL, altrimenti il formato canonico
+        Log.d(TAG, "Chiave univoca pulita: $safeKey")
+
+        // 2. Salva URL o canonico con la chiave univoca
         if (shortcutId.startsWith("http://") || shortcutId.startsWith("https://")) {
-            PrefsSync.setShortcutIntent(this, uniqueKey, "url:$shortcutId")
-            Log.d(TAG, "Salvato URL: url:$shortcutId")
+            PrefsSync.setShortcutIntent(this, safeKey, "url:$shortcutId")
+            Log.d(TAG, "Salvato URL: url:$shortcutId (key=$safeKey)")
         } else {
             val savedData = "$packageName$SEP$shortcutId$SEP$userIdString"
-            PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
-            Log.d(TAG, "Salvato canonico: $savedData")
+            PrefsSync.setShortcutIntent(this, safeKey, savedData)
+            Log.d(TAG, "Salvato canonico: $savedData (key=$safeKey)")
         }
 
-        // Gestione icona (con la chiave univoca)
+        // 3. Icona (usa la chiave univoca pulita)
         try {
             val launcherApps = getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
             val iconDrawable = launcherApps.getShortcutIconDrawable(shortcutInfo, 0)
@@ -107,7 +105,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             val isDifferentFromApp = iconDrawable != null &&
                                      iconDrawable.constantState != appIcon.constantState
 
-            val filename = "shortcut_icon_${uniqueKey.hashCode()}.png"
+            val filename = "shortcut_icon_${safeKey.hashCode()}.png"
             val file = File(filesDir, filename)
             var bitmap: Bitmap? = null
 
@@ -138,15 +136,15 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                 FileOutputStream(file).use { out ->
                     bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
                 }
-                PrefsSync.setCustomShortcutIcon(this, uniqueKey, file.absolutePath)
+                PrefsSync.setCustomShortcutIcon(this, safeKey, file.absolutePath)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Errore salvataggio icona", e)
         }
 
-        // Posiziona nella home (usando la chiave univoca come shortcutId)
+        // 4. Posiziona nella home: passa la chiave univoca pulita come shortcutId
         try {
-            ShortcutPlacement.placeOnFirstFreeCell(this, packageName, uniqueKey, "")
+            ShortcutPlacement.placeOnFirstFreeCell(this, packageName, safeKey, "")
             Log.d(TAG, "placeOnFirstFreeCell OK")
         } catch (e: Exception) {
             Log.e(TAG, "errore placeOnFirstFreeCell", e)
