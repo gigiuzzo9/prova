@@ -49,13 +49,27 @@ object ShortcutLauncher {
         // -----------------------------------------------------------------
         // 0) RICERCA PER PREFISSO: qualsiasi chiave che inizia con packageName|
         //    e ha valore "url:..." o "intent:..."
-        //    Bypassa il problema della chiave troncata/modificata in HomeSlot.
         // -----------------------------------------------------------------
         val urlEntry = map.entries.firstOrNull { (key, value) ->
             key.startsWith("$packageName$SEP") && value.startsWith("url:")
         }
         if (urlEntry != null) {
             val url = urlEntry.value.removePrefix("url:")
+            
+            // --- TENTATIVO PWA (Firefox/Iceraven) ---
+            try {
+                val pwaIntent = Intent("mozilla.components.feature.pwa.VIEW_PWA")
+                pwaIntent.data = Uri.parse(url)
+                pwaIntent.setPackage(packageName)
+                if (tryStart(context, pwaIntent)) {
+                    Log.d(TAG, "Avviato come PWA (ricerca per prefisso): $url")
+                    return
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "PWA fallita, provo ACTION_VIEW", e)
+            }
+
+            // --- FALLBACK BROWSER NORMALE ---
             try {
                 val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                     .addCategory(Intent.CATEGORY_BROWSABLE)
@@ -84,7 +98,7 @@ object ShortcutLauncher {
         }
 
         // -----------------------------------------------------------------
-        // 1) Chiave esatta: intent serializzato (Firefox e derivati)
+        // 1) Chiave esatta: intent serializzato
         // -----------------------------------------------------------------
         val serializedFallback = map["$uniqueKey$KEY_INTENT_SUFFIX"]
         if (!serializedFallback.isNullOrEmpty()) {
@@ -106,6 +120,21 @@ object ShortcutLauncher {
 
         if (savedData.startsWith("url:")) {
             val url = savedData.removePrefix("url:")
+            
+            // --- TENTATIVO PWA ---
+            try {
+                val pwaIntent = Intent("mozilla.components.feature.pwa.VIEW_PWA")
+                pwaIntent.data = Uri.parse(url)
+                pwaIntent.setPackage(packageName)
+                if (tryStart(context, pwaIntent)) {
+                    Log.d(TAG, "Avviato come PWA: $url")
+                    return
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "PWA fallita, provo ACTION_VIEW", e)
+            }
+
+            // --- FALLBACK BROWSER NORMALE ---
             try {
                 val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                     .addCategory(Intent.CATEGORY_BROWSABLE)
