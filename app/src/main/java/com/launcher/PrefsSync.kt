@@ -14,12 +14,6 @@ object PrefsSync {
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
-    /**
-     * Pulizia una-tantum: il vecchio formato usava "|" tra entry e ":" tra chiave/valore,
-     * ma le chiavi delle shortcut contengono "|" → dati corrotti.
-     * Alla prima esecuzione con questo codice cancelliamo le vecchie mappe.
-     * Gli utenti riapplicano le icone una volta sola.
-     */
     private fun ensureMapsFormat(context: Context) {
         val p = prefs(context)
         if (p.getBoolean(KEY_MAPS_MIGRATED, false)) return
@@ -91,6 +85,8 @@ object PrefsSync {
         if (filtered.size == slots.size) return false
         setHomeSlots(context, filtered)
         removeShortcutIntent(context, uniqueKey)
+        removeCustomShortcutIcon(context, uniqueKey)
+        removeCustomShortcutLabel(context, uniqueKey)
         return true
     }
 
@@ -174,6 +170,8 @@ object PrefsSync {
                 else -> "$pkg|$shortcutId|$instanceId"
             }
             removeShortcutIntent(context, uniqueKey)
+            removeCustomShortcutIcon(context, uniqueKey)
+            removeCustomShortcutLabel(context, uniqueKey)
         }
         return removed
     }
@@ -190,6 +188,28 @@ object PrefsSync {
         val map = customLabels(context).toMutableMap()
         map[packageName] = label
         prefs(context).edit().putString("custom_labels", mapToJson(map)).apply()
+    }
+
+    // --- Custom labels per shortcut (JSON, chiave = uniqueKey) ---
+
+    fun customShortcutLabels(context: Context): Map<String, String> {
+        ensureMapsFormat(context)
+        return jsonToMap(prefs(context).getString("custom_shortcut_labels", ""))
+    }
+
+    fun setCustomShortcutLabel(context: Context, uniqueKey: String, label: String) {
+        ensureMapsFormat(context)
+        val map = customShortcutLabels(context).toMutableMap()
+        map[uniqueKey] = label
+        prefs(context).edit().putString("custom_shortcut_labels", mapToJson(map)).apply()
+    }
+    
+    fun removeCustomShortcutLabel(context: Context, uniqueKey: String) {
+        ensureMapsFormat(context)
+        val map = customShortcutLabels(context).toMutableMap()
+        if (map.remove(uniqueKey) != null) {
+            prefs(context).edit().putString("custom_shortcut_labels", mapToJson(map)).apply()
+        }
     }
 
     // --- Custom Icons (JSON, chiave = packageName) ---
