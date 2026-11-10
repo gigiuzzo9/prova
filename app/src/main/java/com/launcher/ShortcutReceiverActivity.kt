@@ -87,11 +87,14 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         val displayName = shortcutInfo.shortLabel?.toString() ?: "Scorciatoia"
         val userIdString = shortcutInfo.userHandle.toString()
             .replace("UserHandle{", "").replace("}", "")
-        val uniqueKey = "$packageName$SEP$shortcutId"
+
+        // --- CHIAVE UNIVOCA: aggiungi un timestamp per evitare sovrascritture ---
+        val timestamp = System.currentTimeMillis()
+        val uniqueKey = "$packageName$SEP$shortcutId$SEP$timestamp"
+        
+        Log.d(TAG, "Salvataggio con chiave univoca: $uniqueKey")
 
         // --- 1. SALVATAGGIO (URL o ID) ---
-        // Se l'ID è un URL, salvalo come URL (scorciatoia).
-        // Altrimenti, salva come package|id|user (app/PWA).
         if (shortcutId.startsWith("http://") || shortcutId.startsWith("https://")) {
             PrefsSync.setShortcutIntent(this, uniqueKey, "url:$shortcutId")
             Log.d(TAG, "Salvato come URL: url:$shortcutId")
@@ -149,7 +152,8 @@ class ShortcutReceiverActivity : AppCompatActivity() {
 
         // --- 3. POSIZIONAMENTO NELLA HOME ---
         try {
-            ShortcutPlacement.placeOnFirstFreeCell(this, packageName, shortcutId, "")
+            // Passa la chiave univoca (con timestamp) a ShortcutPlacement
+            ShortcutPlacement.placeOnFirstFreeCell(this, packageName, uniqueKey, "")
             Log.d(TAG, "placeOnFirstFreeCell OK")
         } catch (e: Exception) {
             Log.e(TAG, "errore placeOnFirstFreeCell", e)
