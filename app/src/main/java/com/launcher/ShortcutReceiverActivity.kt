@@ -3,15 +3,10 @@ package com.simplylauncher
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
-import java.io.File
-import java.io.FileOutputStream
 
 class ShortcutReceiverActivity : AppCompatActivity() {
 
@@ -28,7 +23,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             Log.e(TAG, "CRASH in handlePinRequest", e)
         } finally {
-            // Chiudiamo l'activity solo alla fine, quando tutto è stato elaborato
             finish()
         }
     }
@@ -36,7 +30,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
     private fun handlePinRequest() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
-        val launcherApps = getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
         val pinRequest = intent.getParcelableExtra<LauncherApps.PinItemRequest>(
             LauncherApps.EXTRA_PIN_ITEM_REQUEST
         )
@@ -55,15 +48,14 @@ class ShortcutReceiverActivity : AppCompatActivity() {
 
         val packageName = shortcutInfo.`package`
         val realShortcutId = shortcutInfo.id
-        val displayName = shortcutInfo.shortLabel?.toString() ?: "Scorciatoia"
         val userIdString = shortcutInfo.userHandle.toString()
             .replace("UserHandle{", "").replace("}", "")
         
         val uniqueKey = "$packageName$SEP$realShortcutId"
         
-        Log.d(TAG, "Pin ricevuto: pkg=$packageName id=$realShortcutId label=$displayName")
+        Log.d(TAG, "Pin ricevuto: pkg=$packageName id=$realShortcutId")
 
-        // --- 1. SALVATAGGIO URL / INTENT ---
+        // 1. Salvataggio URL / INTENT
         val savedData = "$packageName$SEP$realShortcutId$SEP$userIdString"
         PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
         
@@ -80,58 +72,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {}
 
-        // --- 2. GESTIONE ICONA ---
-        try {
-            val density = resources.displayMetrics.densityDpi
-            val iconDrawable = launcherApps.getShortcutIconDrawable(shortcutInfo, density)
-            
-            Log.d(TAG, "iconDrawable = $iconDrawable")
-            Log.d(TAG, "intrinsicW = ${iconDrawable?.intrinsicWidth}, intrinsicH = ${iconDrawable?.intrinsicHeight}")
-
-            val filename = "shortcut_icon_${uniqueKey.hashCode()}.png"
-            val file = File(filesDir, filename)
-            var bitmap: Bitmap? = null
-
-            if (iconDrawable != null && iconDrawable.intrinsicWidth > 0 && iconDrawable.intrinsicHeight > 0) {
-                bitmap = Bitmap.createBitmap(
-                    iconDrawable.intrinsicWidth,
-                    iconDrawable.intrinsicHeight,
-                    Bitmap.Config.ARGB_8888
-                )
-                val canvas = Canvas(bitmap)
-                iconDrawable.setBounds(0, 0, canvas.width, canvas.height)
-                iconDrawable.draw(canvas)
-                Log.d(TAG, "Icona estratta correttamente da Firefox/Chrome")
-            } else {
-                val size = 192
-                bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-                
-                val colors = intArrayOf(0xFFF44336.toInt(), 0xFF2196F3.toInt(), 0xFF4CAF50.toInt(), 0xFFFF9800.toInt())
-                paint.color = colors[Math.abs(displayName.hashCode()) % colors.size]
-                canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
-                
-                paint.color = android.graphics.Color.WHITE
-                paint.textSize = size / 2f
-                paint.textAlign = Paint.Align.CENTER
-                val letter = displayName.take(1).uppercase()
-                canvas.drawText(letter, size / 2f, size / 2f + (paint.textSize / 3), paint)
-                Log.d(TAG, "Icona segnaposto generata (Drawable nullo o vuoto)")
-            }
-
-            if (bitmap != null) {
-                FileOutputStream(file).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-                }
-                PrefsSync.setCustomShortcutIcon(this, uniqueKey, file.absolutePath)
-                Log.d(TAG, "Icona salvata su file: ${file.absolutePath}")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Errore salvataggio icona", e)
-        }
-
-        // --- 3. POSIZIONAMENTO NELLA HOME ---
+        // 2. Posizionamento nella home
         try {
             ShortcutPlacement.placeOnFirstFreeCell(this, packageName, realShortcutId, "")
             Log.d(TAG, "placeOnFirstFreeCell OK")
