@@ -44,14 +44,47 @@ object ShortcutLauncher {
             "$packageName$SEP$shortcutId$SEP$instanceId"
         }
         val map = PrefsSync.shortcutIntents(context)
+        Log.d(TAG, "launch: pkg=$packageName id=$shortcutId instanceId=$instanceId key=$uniqueKey")
 
         // -----------------------------------------------------------------
-        // 1) PRIORITÀ: intent serializzato (Firefox e derivati)
-        //
-        // Se al pin abbiamo salvato l'intent originale (perché il browser
-        // mette l'URL negli extras, che LauncherApps.startShortcut() non
-        // propaga), lo rilanciamo così com'è. Intent.parseUri() preserva
-        // gli extras → il browser apre la pagina corretta.
+        // 0) RICERCA PER PREFISSO: qualsiasi chiave che inizia con packageName|
+        //    e ha valore "url:..." o "intent:..."
+        //    Bypassa il problema della chiave troncata/modificata in HomeSlot.
+        // -----------------------------------------------------------------
+        val urlEntry = map.entries.firstOrNull { (key, value) ->
+            key.startsWith("$packageName$SEP") && value.startsWith("url:")
+        }
+        if (urlEntry != null) {
+            val url = urlEntry.value.removePrefix("url:")
+            try {
+                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    .addCategory(Intent.CATEGORY_BROWSABLE)
+                if (tryStart(context, browserIntent)) {
+                    Log.d(TAG, "Avviato via URL (ricerca per prefisso): $url")
+                    return
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Apertura URL fallita: $url", e)
+            }
+        }
+
+        val intentEntry = map.entries.firstOrNull { (key, value) ->
+            key.startsWith("$packageName$SEP") && value.startsWith("intent:")
+        }
+        if (intentEntry != null) {
+            try {
+                val parsed = Intent.parseUri(intentEntry.value, 0)
+                if (tryStart(context, parsed)) {
+                    Log.d(TAG, "Avviato via intent serializzato (ricerca per prefisso)")
+                    return
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "parseUri fallito", e)
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // 1) Chiave esatta: intent serializzato (Firefox e derivati)
         // -----------------------------------------------------------------
         val serializedFallback = map["$uniqueKey$KEY_INTENT_SUFFIX"]
         if (!serializedFallback.isNullOrEmpty()) {
@@ -67,8 +100,7 @@ object ShortcutLauncher {
         }
 
         // -----------------------------------------------------------------
-        // 2) Canale legacy: URL puro o intent serializzato nella mappa principale
-        // (ShortcutLegacyReceiver salva qui il valore)
+        // 2) Chiave esatta: URL puro o intent serializzato
         // -----------------------------------------------------------------
         val savedData = map[uniqueKey] ?: ""
 
@@ -100,8 +132,6 @@ object ShortcutLauncher {
 
         // -----------------------------------------------------------------
         // 3) Canale moderno: package|id|user (Chrome e derivati)
-        // Identico a Discreet: LauncherApps.startShortcut() con controllo
-        // esplicito di hasShortcutHostPermission().
         // -----------------------------------------------------------------
         if (savedData.contains(SEP)) {
             val parts = savedData.split(SEP)
