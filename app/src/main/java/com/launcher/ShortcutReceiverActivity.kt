@@ -28,6 +28,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             Log.e(TAG, "CRASH in handlePinRequest", e)
         } finally {
+            // Chiudiamo l'activity solo alla fine, quando tutto è stato elaborato
             finish()
         }
     }
@@ -82,7 +83,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         // --- 2. GESTIONE ICONA ---
         try {
             val density = resources.displayMetrics.densityDpi
-            // Proviamo a prendere l'icona con la densità reale dello schermo
             val iconDrawable = launcherApps.getShortcutIconDrawable(shortcutInfo, density)
             
             Log.d(TAG, "iconDrawable = $iconDrawable")
@@ -93,7 +93,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             var bitmap: Bitmap? = null
 
             if (iconDrawable != null && iconDrawable.intrinsicWidth > 0 && iconDrawable.intrinsicHeight > 0) {
-                // L'icona c'è ed è valida (Firefox o Chrome l'hanno passata)
                 bitmap = Bitmap.createBitmap(
                     iconDrawable.intrinsicWidth,
                     iconDrawable.intrinsicHeight,
@@ -104,7 +103,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                 iconDrawable.draw(canvas)
                 Log.d(TAG, "Icona estratta correttamente da Firefox/Chrome")
             } else {
-                // L'icona è nulla o vuota. Generiamo il cerchio colorato.
                 val size = 192
                 bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(bitmap)
