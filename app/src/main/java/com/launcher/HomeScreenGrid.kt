@@ -336,65 +336,64 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect, offsetX: Float) {
-        val app = AppCache.get(slot.packageName) ?: return
+    val app = AppCache.get(slot.packageName) ?: return
 
-        // --- UNICA AGGIUNTA: calcolo del nome corretto ---
-        val displayLabel = if (slot.isShortcut) {
-            PrefsSync.customShortcutLabels(context)[slot.uniqueKey] ?: app.label
-        } else {
-            PrefsSync.customLabels(context)[slot.packageName] ?: app.label
-        }
-        // -------------------------------------------------
-
-        val isCustom = if (slot.isShortcut) {
-            PrefsSync.customShortcutIcons(context).containsKey(slot.uniqueKey)
-        } else {
-            PrefsSync.customIcons(context).containsKey(slot.packageName)
-        }
-        val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
-        val drawSize = iconSize - pad * 2
-
-        val bitmap: Bitmap? = getIconBitmap(slot)
-        if (bitmap == null) return
-
-        val hideLabels = PrefsSync.hideAppLabels(context)
-        // Usa displayLabel per decidere se mostrare il testo
-        val hasLabel = displayLabel.isNotEmpty() && !hideLabels
-
-        val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
-        val iconTop = if (hasLabel) {
-            cell.top.toFloat() + iconMargin.toFloat() + pad
-        } else {
-            cell.top.toFloat() + (cell.height() - iconSize) / 2f + pad
-        }
-
-        val dstRect = Rect(
-            iconLeft.toInt(),
-            iconTop.toInt(),
-            (iconLeft + drawSize).toInt(),
-            (iconTop + drawSize).toInt()
-        )
-
-        val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-        canvas.drawBitmap(bitmap, null, dstRect, iconPaint)
-
-        if (hasLabel) {
-            val textWidth = cell.width() - 2 * labelSideMargin
-            val layout = StaticLayout.Builder
-                // Usa displayLabel qui per disegnare il testo
-                .obtain(displayLabel, 0, displayLabel.length, textPaint, textWidth)
-                .setMaxLines(1)
-                .setEllipsize(TextUtils.TruncateAt.END)
-                .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                .build()
-
-            val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
-            canvas.save()
-            canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
-            layout.draw(canvas)
-            canvas.restore()
-        }
+    // --- NOME: usa la chiave "pulita" per gli shortcut, il package per le app ---
+    val displayLabel = if (slot.isShortcut) {
+        val safeKey = slot.uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
+        PrefsSync.customShortcutLabels(context)[safeKey] ?: app.label
+    } else {
+        PrefsSync.customLabels(context)[slot.packageName] ?: app.label
     }
+    // ------------------------------------------------------------------------
+
+    val isCustom = if (slot.isShortcut) {
+        PrefsSync.customShortcutIcons(context).containsKey(slot.uniqueKey)
+    } else {
+        PrefsSync.customIcons(context).containsKey(slot.packageName)
+    }
+    val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
+    val drawSize = iconSize - pad * 2
+
+    val bitmap: Bitmap? = getIconBitmap(slot)
+    if (bitmap == null) return
+
+    val hideLabels = PrefsSync.hideAppLabels(context)
+    val hasLabel = displayLabel.isNotEmpty() && !hideLabels
+
+    val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
+    val iconTop = if (hasLabel) {
+        cell.top.toFloat() + iconMargin.toFloat() + pad
+    } else {
+        cell.top.toFloat() + (cell.height() - iconSize) / 2f + pad
+    }
+
+    val dstRect = Rect(
+        iconLeft.toInt(),
+        iconTop.toInt(),
+        (iconLeft + drawSize).toInt(),
+        (iconTop + drawSize).toInt()
+    )
+
+    val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    canvas.drawBitmap(bitmap, null, dstRect, iconPaint)
+
+    if (hasLabel) {
+        val textWidth = cell.width() - 2 * labelSideMargin
+        val layout = StaticLayout.Builder
+            .obtain(displayLabel, 0, displayLabel.length, textPaint, textWidth)
+            .setMaxLines(1)
+            .setEllipsize(TextUtils.TruncateAt.END)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .build()
+
+        val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
+        canvas.save()
+        canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
+        layout.draw(canvas)
+        canvas.restore()
+    }
+}
 
     private fun loadShortcutIcon(packageName: String, shortcutId: String, sizePx: Int): Bitmap? {
         if (sizePx <= 0 || shortcutId.isEmpty()) return null
