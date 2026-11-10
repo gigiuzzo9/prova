@@ -478,56 +478,62 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun saveCustomIcon(
-        packageName: String,
-        shortcutId: String?,
-        instanceId: String,
-        uri: Uri
-    ) {
-        try {
-            val iconsDir = File(filesDir, "custom_icons")
-            if (!iconsDir.exists()) iconsDir.mkdirs()
+    packageName: String,
+    shortcutId: String?,
+    instanceId: String,
+    uri: Uri
+) {
+    try {
+        val iconsDir = File(filesDir, "custom_icons")
+        if (!iconsDir.exists()) iconsDir.mkdirs()
 
-            val isShortcut = shortcutId != null && shortcutId.isNotEmpty()
-            val realShortcutId = shortcutId ?: ""
-            val realInstanceId = instanceId
+        val isShortcut = shortcutId != null && shortcutId.isNotEmpty()
+        val realShortcutId = shortcutId ?: ""
+        val realInstanceId = instanceId
 
-            val uniqueKey = when {
-                !isShortcut -> packageName
-                realInstanceId.isEmpty() -> "${packageName}|$realShortcutId"
-                else -> "${packageName}|$realShortcutId|$realInstanceId"
-            }
-            val fileKey = if (isShortcut) {
-                if (realInstanceId.isEmpty()) "${packageName}_${realShortcutId}"
-                else "${packageName}_${realShortcutId}_${realInstanceId}"
-            } else {
-                packageName
-            }
-            val destFile = File(iconsDir, "$fileKey.png")
-
-            contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(destFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-
-            if (isShortcut) {
-                PrefsSync.setCustomShortcutIcon(this, uniqueKey, destFile.absolutePath)
-            } else {
-                PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
-            }
-
-            AppRepository.invalidateCache()
-
-            lifecycleScope.launch {
-                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-                loadHomeApps()
-                dockController.refresh()
-                loadDrawerApps()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Errore salvataggio: ${e.message}", Toast.LENGTH_SHORT).show()
+        val uniqueKey = when {
+            !isShortcut -> packageName
+            realInstanceId.isEmpty() -> "${packageName}|$realShortcutId"
+            else -> "${packageName}|$realShortcutId|$realInstanceId"
         }
+        val fileKey = if (isShortcut) {
+            if (realInstanceId.isEmpty()) "${packageName}_${realShortcutId}"
+            else "${packageName}_${realShortcutId}_${realInstanceId}"
+        } else {
+            packageName
+        }
+        
+        // QUI C'È LA CORREZIONE: puliamo i caratteri proibiti dal nome del file
+        val safeFileKey = fileKey.replace("|", "_")
+                               .replace(":", "_")
+                               .replace("/", "_")
+        
+        val destFile = File(iconsDir, "$safeFileKey.png")
+
+        contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(destFile).use { output ->
+                input.copyTo(output)
+            }
+        }
+
+        if (isShortcut) {
+            PrefsSync.setCustomShortcutIcon(this, uniqueKey, destFile.absolutePath)
+        } else {
+            PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
+        }
+
+        AppRepository.invalidateCache()
+
+        lifecycleScope.launch {
+            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+            loadHomeApps()
+            dockController.refresh()
+            loadDrawerApps()
+        }
+    } catch (e: Exception) {
+        Toast.makeText(this, "Errore salvataggio: ${e.message}", Toast.LENGTH_SHORT).show()
     }
+}
 
     private fun restoreCustomIcon(packageName: String, shortcutId: String, instanceId: String) {
         try {
