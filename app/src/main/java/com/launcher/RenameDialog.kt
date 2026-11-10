@@ -13,15 +13,23 @@ object RenameDialog {
         app: AppInfo,
         shortcutId: String = "",
         instanceId: String = "",
-        uniqueKey: String = "", // <--- AGGIUNTO
         onRenamed: () -> Unit
     ) {
+        // Calcola la chiave "pulita" (safeKey) come facciamo per le icone
+        val safeKey = if (shortcutId.isNotEmpty()) {
+            val rawKey = if (instanceId.isEmpty()) "${app.packageName}|$shortcutId" 
+                         else "${app.packageName}|$shortcutId|$instanceId"
+            rawKey.replace("|", "_").replace(":", "_").replace("/", "_")
+        } else {
+            app.packageName
+        }
+
         val input = EditText(context).apply {
             hint = context.getString(R.string.rename_hint)
             
-            // Usa la chiave esatta per leggere il nome attuale
-            val currentLabel = if (uniqueKey.isNotEmpty() && shortcutId.isNotEmpty()) {
-                PrefsSync.customShortcutLabels(context)[uniqueKey] ?: app.label
+            // Legge il nome attuale usando la chiave pulita
+            val currentLabel = if (shortcutId.isNotEmpty()) {
+                PrefsSync.customShortcutLabels(context)[safeKey] ?: app.label
             } else {
                 app.label
             }
@@ -39,11 +47,10 @@ object RenameDialog {
                 val newName = input.text.toString().trim()
                 if (newName.isNotEmpty()) {
                     (context as? androidx.appcompat.app.AppCompatActivity)?.lifecycleScope?.launch {
-                        if (uniqueKey.isNotEmpty() && shortcutId.isNotEmpty()) {
-                            // Salva usando la chiave esatta
-                            PrefsSync.setCustomShortcutLabel(context, uniqueKey, newName)
+                        if (shortcutId.isNotEmpty()) {
+                            // Salva usando la chiave pulita
+                            PrefsSync.setCustomShortcutLabel(context, safeKey, newName)
                         } else {
-                            // È un'app normale
                             PrefsSync.setCustomLabel(context, app.packageName, newName)
                         }
                         onRenamed()
