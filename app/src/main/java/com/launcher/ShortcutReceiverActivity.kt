@@ -3,105 +3,137 @@ package com.simplylauncher
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
-import android.graphics.drawable.Drawable
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import java.io.File
+import java.io.FileOutputStream
 
 class ShortcutReceiverActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "ShortcutReceiver"
         private const val SEP = "|"
+        private const val KEY_INTENT_SUFFIX = "|intent"
     }
-
-    private var pinRequest: LauncherApps.PinItemRequest? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+        try {
+            handlePinRequest()
+        } catch (e: Throwable) {
+            Log.e(TAG, "CRASH in handlePinRequest", e)
+        } finally {
             finish()
-            return
         }
-
-        val launcherApps = getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
-        pinRequest = intent.getParcelableExtra(LauncherApps.EXTRA_PIN_ITEM_REQUEST)
-
-        val request = pinRequest
-        val shortcutInfo = request?.shortcutInfo
-
-        if (request == null || shortcutInfo == null || !request.isValid) {
-            Log.e(TAG, "PinItemRequest non valido")
-            finish()
-            return
-        }
-
-        val packageName = shortcutInfo.`package`
-        val shortcutId = shortcutInfo.id
-        val label = shortcutInfo.shortLabel?.toString() ?: packageName
-        val userIdString = shortcutInfo.userHandle.toString()
-            .replace("UserHandle{", "").replace("}", "")
-
-        Log.d(TAG, "Pin ricevuto: pkg=$packageName id=$shortcutId label=$label user=$userIdString")
-
-        // Icona della scorciatoia (se disponibile)
-        val icon: Drawable? = if (launcherApps.hasShortcutHostPermission()) {
-            try { launcherApps.getShortcutIconDrawable(shortcutInfo, 0) } catch (e: Exception) { null }
-        } else null
-
-        // --- FINESTRA DI CONFERMA (il pezzo che mancava) ---
-        val builder = AlertDialog.Builder(this)
-            .setTitle("Aggiungi scorciatoia")
-            .setMessage(label)
-            .setPositiveButton("Aggiungi") { _, _ -> confirmAndSave(shortcutInfo) }
-            .setNegativeButton("Annulla") { _, _ ->
-                Log.d(TAG, "Utente ha annullato")
-                finish()
-            }
-            .setCancelable(false)
-
-        if (icon != null) builder.setIcon(icon)
-
-        builder.show()
     }
 
-    private fun confirmAndSave(shortcutInfo: android.content.pm.ShortcutInfo) {
-        val request = pinRequest ?: run { finish(); return }
+    private fun handlePinRequest() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
-        // Accetta SOLO ORA, dopo la conferma dell'utente
-        val accepted = request.accept()
-        Log.d(TAG, "accept=$accepted")
-        if (!accepted) { finish(); return }
+        val launcherApps = getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+        val pinRequest = intent.getParcelableExtra<LauncherApps.PinItemRequest>(
+            LauncherApps.EXTRA_PIN_ITEM_REQUEST
+        )
+
+        if (pinRequest == null || pinRequest.shortcutInfo == null) {
+            Log.e(TAG, "PinItemRequest o ShortcutInfo nulli")
+            return
+        }
+
+        val shortcutInfo = pinRequest.shortcutInfo!!
+        
+        if (!pinRequest.accept()) {
+            Log.e(TAG, "accept() fallito")
+            return
+        }
 
         val packageName = shortcutInfo.`package`
-        val shortcutId = shortcutInfo.id
+        val realShortcutId = shortcutInfo.id
+        val displayName = shortcutInfo.shortLabel?.toString() ?: "Scorciatoia"
         val userIdString = shortcutInfo.userHandle.toString()
             .replace("UserHandle{", "").replace("}", "")
-        val uniqueKey = "$packageName$SEP$shortcutId"
+        
+        val uniqueKey = "$packageName$SEP$realShortcutId"
+        
+        Log.d(TAG, "Pin ricevuto: pkg=$packageName id=$realShortcutId label=$displayName")
 
-        // Salva formato canonico (per Chrome e altri browser)
-        val savedData = "$packageName$SEP$shortcutId$SEP$userIdString"
+        // 1. Salvataggio URL / INTENT
+        val savedData = "$packageName$SEP$realShortcutId$SEP$userIdString"
         PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
-        Log.d(TAG, "salvato canonico: $savedData")
-
-        // Se l'ID è un URL (Iceraven/Firefox), salvalo come URL puro
-        if (shortcutId.startsWith("http://") || shortcutId.startsWith("https://")) {
-            PrefsSync.setShortcutIntent(this, uniqueKey, "url:$shortcutId")
-            Log.d(TAG, "URL salvato dall'ID: url:$shortcutId")
+        
+        if (realShortcutId.startsWith("http://") || realShortcutId.startsWith("https://")) {
+            PrefsSync.setShortcutIntent(this, uniqueKey, "url:$realShortcutId")
+            Log.d(TAG, "URL salvato dall'ID: url:$realShortcutId")
+        } else {
+            Log.d(TAG, "Salvato canonico: $savedData")
         }
 
-        // Posiziona nella home
         try {
-            ShortcutPlacement.placeOnFirstFreeCell(this, packageName, shortcutId, "")
-            Log.d(TAG, "placeOnFirstFreeCell OK")
+            val intents = shortcutInfo.intents
+            if (intents != null && intents.isNotEmpty()) {
+                val serialized = intents[0].toUri(0)
+                PrefsSync.setShortcutIntent(this, "$uniqueKey$KEY_INTENT_SUFFIX", serialized)
+            }
+        } catch (e: Exception) {}
+
+        // 2. GESTIONE ICONA (Versione Nova-Style)
+        try {
+            val iconDrawable = launcherApps.getShortcutIconDrawable(shortcutInfo, 0)
+            
+            val filename = "shortcut_icon_${uniqueKey.hashCode()}.png"
+            val file = File(filesDir, filename)
+            var bitmap: Bitmap? = null
+
+            if (iconDrawable != null) {
+                // Prendiamo l'icona che Firefox ci passa (come fa Nova)
+                bitmap = Bitmap.createBitmap(
+                    iconDrawable.intrinsicWidth.coerceAtLeast(1),
+                    iconDrawable.intrinsicHeight.coerceAtLeast(1),
+                    Bitmap.Config.ARGB_8888
+                )
+                val canvas = Canvas(bitmap)
+                iconDrawable.setBounds(0, 0, canvas.width, canvas.height)
+                iconDrawable.draw(canvas)
+                Log.d(TAG, "Icona di Firefox salvata")
+            } else {
+                // Se Firefox non passa NESSUNA icona, generiamo il cerchio
+                val size = 192
+                bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+                
+                val colors = intArrayOf(0xFFF44336.toInt(), 0xFF2196F3.toInt(), 0xFF4CAF50.toInt(), 0xFFFF9800.toInt())
+                paint.color = colors[Math.abs(displayName.hashCode()) % colors.size]
+                canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+                
+                paint.color = android.graphics.Color.WHITE
+                paint.textSize = size / 2f
+                paint.textAlign = Paint.Align.CENTER
+                val letter = displayName.take(1).uppercase()
+                canvas.drawText(letter, size / 2f, size / 2f + (paint.textSize / 3), paint)
+                Log.d(TAG, "Icona segnaposto generata (nulla da Firefox)")
+            }
+
+            if (bitmap != null) {
+                FileOutputStream(file).use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                }
+                PrefsSync.setCustomShortcutIcon(this, uniqueKey, file.absolutePath)
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "errore placeOnFirstFreeCell", e)
+            Log.e(TAG, "Errore salvataggio icona", e)
         }
+
+        // 3. POSIZIONAMENTO
+        try {
+            ShortcutPlacement.placeOnFirstFreeCell(this, packageName, realShortcutId, "")
+        } catch (e: Exception) {}
 
         sendBroadcast(Intent("com.simplylauncher.RELOAD"))
-        finish()
     }
 }
