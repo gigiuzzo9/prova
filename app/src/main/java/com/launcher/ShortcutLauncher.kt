@@ -36,43 +36,28 @@ object ShortcutLauncher {
             return
         }
 
-        // La chiave che passiamo è quella salvata da ShortcutReceiverActivity.
-        // Se contiene un timestamp o è un URL pulito, dobbiamo cercarla nella mappa.
         val map = PrefsSync.shortcutIntents(context)
         Log.d(TAG, "launch: pkg=$packageName key=$shortcutId")
 
-        // Cerchiamo la chiave esatta, oppure una chiave che inizi per "$packageName|"
-        // e che contenga la parte significativa di shortcutId.
-        val entry = map.entries.firstOrNull { (k, _) ->
-            k == shortcutId || k.startsWith("$packageName$SEP") && shortcutId.contains(k.substringAfter("$packageName$SEP"))
-        } ?: map.entries.firstOrNull { (k, v) ->
-            // Fallback: se la chiave non corrisponde, cerchiamo per package
-            k.startsWith("$packageName$SEP") && v.startsWith("url:")
+        // 1. Cerca la chiave esatta
+        var savedData = map[shortcutId]
+
+        // 2. Se non trovata, cerca qualsiasi chiave che inizi per "$packageName|"
+        if (savedData == null) {
+            val entry = map.entries.firstOrNull { it.key.startsWith("$packageName$SEP") }
+            savedData = entry?.value
+            Log.d(TAG, "Fallback per package: ${entry?.key} = $savedData")
         }
 
-        if (entry == null) {
+        if (savedData == null) {
             Log.w(TAG, "Nessuna entry trovata per $packageName/$shortcutId")
-            // Prova con startShortcut (per PWA)
-            try {
-                val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
-                if (launcherApps.hasShortcutHostPermission()) {
-                    // Estrai l'ID originale: la chiave può essere package|safeUrl o package|id|timestamp
-                    val idToUse = shortcutId.split(SEP).getOrNull(1) ?: shortcutId
-                    launcherApps.startShortcut(packageName, idToUse, null, null, UserHandle.getUserHandleForUid(0))
-                    Log.d(TAG, "startShortcut fallback OK: $packageName/$idToUse")
-                    return
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Fallback startShortcut fallito", e)
-            }
             if (showErrorToast) {
                 Toast.makeText(context, "Impossibile avviare la scorciatoia", Toast.LENGTH_SHORT).show()
             }
             return
         }
 
-        val savedData = entry.value
-        Log.d(TAG, "Trovato: $savedData")
+        Log.d(TAG, "savedData=$savedData")
 
         // --- URL puro ---
         if (savedData.startsWith("url:")) {
@@ -109,7 +94,7 @@ object ShortcutLauncher {
                     Log.d(TAG, "startShortcut OK: $pkg/$id")
                     return
                 } catch (e: Exception) {
-                    Log.e(TAG, "startShortcut fallito", e)
+                    Log.e(TAG, "startShortcut fallito: $pkg/$id", e)
                 }
             }
         }
