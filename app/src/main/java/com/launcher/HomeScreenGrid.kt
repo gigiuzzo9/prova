@@ -251,41 +251,43 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private fun getIconBitmap(slot: HomeSlot): Bitmap? {
-        if (iconSize <= 0) return null
+    if (iconSize <= 0) return null
 
-        if (slot.isShortcut) {
-            val customMap = PrefsSync.customShortcutIcons(context)
-            val path = customMap[slot.uniqueKey]
-            if (path != null) {
-                val file = java.io.File(path)
-                if (file.exists()) {
-                    val bmp = android.graphics.BitmapFactory.decodeFile(path)
-                    if (bmp != null) {
-                        return Bitmap.createScaledBitmap(bmp, iconSize, iconSize, true)
-                    }
-                }
-            }
-        } else {
-            val customMap = PrefsSync.customIcons(context)
-            val path = customMap[slot.packageName]
-            if (path != null) {
-                val file = java.io.File(path)
-                if (file.exists()) {
-                    val bmp = android.graphics.BitmapFactory.decodeFile(path)
-                    if (bmp != null) {
-                        return Bitmap.createScaledBitmap(bmp, iconSize, iconSize, true)
-                    }
+    if (slot.isShortcut) {
+        // Usa la chiave PULITA per cercare l'icona del collegamento
+        val safeKey = slot.uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
+        val customMap = PrefsSync.customShortcutIcons(context)
+        val path = customMap[safeKey]
+        if (path != null) {
+            val file = java.io.File(path)
+            if (file.exists()) {
+                val bmp = android.graphics.BitmapFactory.decodeFile(path)
+                if (bmp != null) {
+                    return Bitmap.createScaledBitmap(bmp, iconSize, iconSize, true)
                 }
             }
         }
-
-        if (slot.isShortcut) {
-            val shortcutBmp = loadShortcutIcon(slot.packageName, slot.shortcutId, iconSize)
-            if (shortcutBmp != null) return shortcutBmp
+    } else {
+        val customMap = PrefsSync.customIcons(context)
+        val path = customMap[slot.packageName]
+        if (path != null) {
+            val file = java.io.File(path)
+            if (file.exists()) {
+                val bmp = android.graphics.BitmapFactory.decodeFile(path)
+                if (bmp != null) {
+                    return Bitmap.createScaledBitmap(bmp, iconSize, iconSize, true)
+                }
+            }
         }
-
-        return AppCache.getIconBitmap(slot.packageName, iconSize)
     }
+
+    if (slot.isShortcut) {
+        val shortcutBmp = loadShortcutIcon(slot.packageName, slot.shortcutId, iconSize)
+        if (shortcutBmp != null) return shortcutBmp
+    }
+
+    return AppCache.getIconBitmap(slot.packageName, iconSize)
+}
 
     private val smoothingRunnable = object : Runnable {
         override fun run() {
