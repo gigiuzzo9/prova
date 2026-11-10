@@ -528,42 +528,40 @@ class HomeActivity : AppCompatActivity() {
 }
 
     private fun restoreCustomIcon(packageName: String, shortcutId: String, instanceId: String) {
-        try {
-            val iconsDir = File(filesDir, "custom_icons")
-            val isShortcut = shortcutId.isNotEmpty()
+    try {
+        val iconsDir = File(filesDir, "custom_icons")
+        val isShortcut = shortcutId.isNotEmpty()
 
-            val uniqueKey = when {
-                !isShortcut -> packageName
-                instanceId.isEmpty() -> "${packageName}|$shortcutId"
-                else -> "${packageName}|$shortcutId|$instanceId"
-            }
-            val fileKey = if (isShortcut) {
-                if (instanceId.isEmpty()) "${packageName}_${shortcutId}"
-                else "${packageName}_${shortcutId}_${instanceId}"
-            } else {
-                packageName
-            }
-            val destFile = File(iconsDir, "$fileKey.png")
-            if (destFile.exists()) destFile.delete()
-
-            if (isShortcut) {
-                PrefsSync.removeCustomShortcutIcon(this, uniqueKey)
-            } else {
-                PrefsSync.removeCustomIcon(this, packageName)
-            }
-
-            AppRepository.invalidateCache()
-
-            lifecycleScope.launch {
-                AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
-                loadHomeApps()
-                dockController.refresh()
-                loadDrawerApps()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Errore ripristino: ${e.message}", Toast.LENGTH_SHORT).show()
+        // Usa la chiave PULITA anche qui
+        val uniqueKey = if (isShortcut) {
+            val rawKey = if (instanceId.isEmpty()) "${packageName}|$shortcutId"
+                         else "${packageName}|$shortcutId|$instanceId"
+            rawKey.replace("|", "_").replace(":", "_").replace("/", "_")
+        } else {
+            packageName
         }
+        
+        val destFile = File(iconsDir, "$uniqueKey.png")
+        if (destFile.exists()) destFile.delete()
+
+        if (isShortcut) {
+            PrefsSync.removeCustomShortcutIcon(this, uniqueKey)
+        } else {
+            PrefsSync.removeCustomIcon(this, packageName)
+        }
+
+        AppRepository.invalidateCache()
+
+        lifecycleScope.launch {
+            AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
+            loadHomeApps()
+            dockController.refresh()
+            loadDrawerApps()
+        }
+    } catch (e: Exception) {
+        Toast.makeText(this, "Errore ripristino: ${e.message}", Toast.LENGTH_SHORT).show()
     }
+}
 
     private fun findFreeCellAndPlaceWidget() {
         if (pendingWidgetId == -1) return
