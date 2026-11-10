@@ -13,7 +13,6 @@ class ShortcutReceiverActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "ShortcutReceiver"
         private const val SEP = "|"
-        private const val KEY_INTENT_SUFFIX = "|intent"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,31 +46,24 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         val packageName = shortcutInfo.`package`
         val realShortcutId = shortcutInfo.id
         val userIdString = shortcutInfo.userHandle.toString()
-            .replace("UserHandle{", "").replace("}", "")
+            .replace("UserHandle{", "")
+            .replace("}", "")
         val uniqueKey = "$packageName$SEP$realShortcutId"
         Log.d(TAG, "pkg=$packageName id=$realShortcutId user=$userIdString key=$uniqueKey")
 
-        val savedData = "$packageName$SEP$realShortcutId$SEP$userIdString"
-        PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
-        Log.d(TAG, "salvato canonico: $savedData")
-
-        // --- Fallback per Firefox: salva l'intent serializzato se disponibile ---
-        // ATTENZIONE: shortcutInfo.intents può essere null. Gestito in modo sicuro.
-        try {
-            val intents = shortcutInfo.intents
-            Log.d(TAG, "intents size = ${intents?.size ?: -1}")
-            if (intents != null && intents.isNotEmpty()) {
-                val serialized = intents[0].toUri(0)
-                PrefsSync.setShortcutIntent(this, "$uniqueKey$KEY_INTENT_SUFFIX", serialized)
-                Log.d(TAG, "salvato intent serializzato: $serialized")
-            } else {
-                Log.w(TAG, "intents null o vuoto: Firefox non espone l'URL")
-            }
-        } catch (e: Throwable) {
-            Log.e(TAG, "errore su intents", e)
+        // --- 1. Se l'ID è un URL (Iceraven/Firefox), salvalo come URL puro ---
+        // Questo è il caso che fa funzionare Firefox/Iceraven.
+        if (realShortcutId.startsWith("http://") || realShortcutId.startsWith("https://")) {
+            PrefsSync.setShortcutIntent(this, uniqueKey, "url:$realShortcutId")
+            Log.d(TAG, "URL salvato dall'ID: url:$realShortcutId")
+        } else {
+            // --- 2. Altrimenti salva il formato canonico (Chrome e derivati) ---
+            val savedData = "$packageName$SEP$realShortcutId$SEP$userIdString"
+            PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
+            Log.d(TAG, "salvato canonico: $savedData")
         }
 
-        // --- Posizionamento nella home ---
+        // --- 3. Posizionamento nella home ---
         try {
             ShortcutPlacement.placeOnFirstFreeCell(this, packageName, realShortcutId, "")
             Log.d(TAG, "placeOnFirstFreeCell OK")
