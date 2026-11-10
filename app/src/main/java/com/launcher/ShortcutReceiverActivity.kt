@@ -82,22 +82,14 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         val userIdString = shortcutInfo.userHandle.toString()
             .replace("UserHandle{", "").replace("}", "")
 
-        // --- SALVATAGGIO ---
-        // Se l'ID è un URL (Firefox/Chrome), salvalo come URL puro.
-        // Altrimenti salva package|id|user, ma con un timestamp per evitare sovrascritture.
-        val isUrl = shortcutId.startsWith("http://") || shortcutId.startsWith("https://")
-        
-        // Chiave univoca: se è URL, uso l'URL come parte della chiave (per evitare duplicati)
-        // altrimenti uso un timestamp.
-        val uniqueKey = if (isUrl) {
-            // Puliamo l'URL per renderlo sicuro come chiave
-            val safeUrl = shortcutId.replace("|", "_").replace(":", "_").replace("/", "_")
-            "$packageName$SEP$safeUrl"
-        } else {
-            "$packageName$SEP$shortcutId$SEP${System.currentTimeMillis()}"
-        }
+        // --- CHIAVE UNIVOCA BASATA SU TIMESTAMP ---
+        // Ogni pin ha una chiave diversa, anche se Firefox passa lo stesso shortcutId.
+        val timestamp = System.currentTimeMillis()
+        val uniqueKey = "$packageName$SEP$shortcutId$SEP$timestamp"
+        Log.d(TAG, "Chiave univoca: $uniqueKey")
 
-        if (isUrl) {
+        // Salva l'URL se l'ID è un URL, altrimenti il formato canonico
+        if (shortcutId.startsWith("http://") || shortcutId.startsWith("https://")) {
             PrefsSync.setShortcutIntent(this, uniqueKey, "url:$shortcutId")
             Log.d(TAG, "Salvato URL: url:$shortcutId")
         } else {
@@ -106,7 +98,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             Log.d(TAG, "Salvato canonico: $savedData")
         }
 
-        // --- ICONA ---
+        // Gestione icona (con la chiave univoca)
         try {
             val launcherApps = getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
             val iconDrawable = launcherApps.getShortcutIconDrawable(shortcutInfo, 0)
@@ -152,7 +144,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             Log.e(TAG, "Errore salvataggio icona", e)
         }
 
-        // --- POSIZIONAMENTO ---
+        // Posiziona nella home (usando la chiave univoca come shortcutId)
         try {
             ShortcutPlacement.placeOnFirstFreeCell(this, packageName, uniqueKey, "")
             Log.d(TAG, "placeOnFirstFreeCell OK")
