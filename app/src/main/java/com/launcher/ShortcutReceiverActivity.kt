@@ -62,15 +62,13 @@ class ShortcutReceiverActivity : AppCompatActivity() {
         
         Log.d(TAG, "Pin ricevuto: pkg=$packageName id=$realShortcutId label=$displayName")
 
-        // 1. Salvataggio URL / INTENT
+        // --- 1. SALVATAGGIO URL / INTENT ---
         val savedData = "$packageName$SEP$realShortcutId$SEP$userIdString"
         PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
         
         if (realShortcutId.startsWith("http://") || realShortcutId.startsWith("https://")) {
             PrefsSync.setShortcutIntent(this, uniqueKey, "url:$realShortcutId")
             Log.d(TAG, "URL salvato dall'ID: url:$realShortcutId")
-        } else {
-            Log.d(TAG, "Salvato canonico: $savedData")
         }
 
         try {
@@ -81,27 +79,32 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {}
 
-        // 2. GESTIONE ICONA (Versione Nova-Style)
+        // --- 2. GESTIONE ICONA ---
         try {
-            val iconDrawable = launcherApps.getShortcutIconDrawable(shortcutInfo, 0)
+            val density = resources.displayMetrics.densityDpi
+            // Proviamo a prendere l'icona con la densità reale dello schermo
+            val iconDrawable = launcherApps.getShortcutIconDrawable(shortcutInfo, density)
             
+            Log.d(TAG, "iconDrawable = $iconDrawable")
+            Log.d(TAG, "intrinsicW = ${iconDrawable?.intrinsicWidth}, intrinsicH = ${iconDrawable?.intrinsicHeight}")
+
             val filename = "shortcut_icon_${uniqueKey.hashCode()}.png"
             val file = File(filesDir, filename)
             var bitmap: Bitmap? = null
 
-            if (iconDrawable != null) {
-                // Prendiamo l'icona che Firefox ci passa (come fa Nova)
+            if (iconDrawable != null && iconDrawable.intrinsicWidth > 0 && iconDrawable.intrinsicHeight > 0) {
+                // L'icona c'è ed è valida (Firefox o Chrome l'hanno passata)
                 bitmap = Bitmap.createBitmap(
-                    iconDrawable.intrinsicWidth.coerceAtLeast(1),
-                    iconDrawable.intrinsicHeight.coerceAtLeast(1),
+                    iconDrawable.intrinsicWidth,
+                    iconDrawable.intrinsicHeight,
                     Bitmap.Config.ARGB_8888
                 )
                 val canvas = Canvas(bitmap)
                 iconDrawable.setBounds(0, 0, canvas.width, canvas.height)
                 iconDrawable.draw(canvas)
-                Log.d(TAG, "Icona di Firefox salvata")
+                Log.d(TAG, "Icona estratta correttamente da Firefox/Chrome")
             } else {
-                // Se Firefox non passa NESSUNA icona, generiamo il cerchio
+                // L'icona è nulla o vuota. Generiamo il cerchio colorato.
                 val size = 192
                 bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(bitmap)
@@ -116,7 +119,7 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                 paint.textAlign = Paint.Align.CENTER
                 val letter = displayName.take(1).uppercase()
                 canvas.drawText(letter, size / 2f, size / 2f + (paint.textSize / 3), paint)
-                Log.d(TAG, "Icona segnaposto generata (nulla da Firefox)")
+                Log.d(TAG, "Icona segnaposto generata (Drawable nullo o vuoto)")
             }
 
             if (bitmap != null) {
@@ -124,15 +127,19 @@ class ShortcutReceiverActivity : AppCompatActivity() {
                     bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
                 }
                 PrefsSync.setCustomShortcutIcon(this, uniqueKey, file.absolutePath)
+                Log.d(TAG, "Icona salvata su file: ${file.absolutePath}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Errore salvataggio icona", e)
         }
 
-        // 3. POSIZIONAMENTO
+        // --- 3. POSIZIONAMENTO NELLA HOME ---
         try {
             ShortcutPlacement.placeOnFirstFreeCell(this, packageName, realShortcutId, "")
-        } catch (e: Exception) {}
+            Log.d(TAG, "placeOnFirstFreeCell OK")
+        } catch (e: Exception) {
+            Log.e(TAG, "Errore placeOnFirstFreeCell", e)
+        }
 
         sendBroadcast(Intent("com.simplylauncher.RELOAD"))
     }
