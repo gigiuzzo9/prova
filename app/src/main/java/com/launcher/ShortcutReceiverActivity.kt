@@ -89,28 +89,16 @@ class ShortcutReceiverActivity : AppCompatActivity() {
             .replace("UserHandle{", "").replace("}", "")
         val uniqueKey = "$packageName$SEP$shortcutId"
 
-        // --- 1. CONTROLLO PWA / SCORCIATOIA ---
-        // Firefox aggiunge un extra specifico quando crea un'App (PWA).
-        val isPwa = shortcutInfo.extras?.containsKey("mozilla.components.feature.pwa.WEB_APP_MANIFEST") == true
-        
-        Log.d(TAG, "isPwa=$isPwa")
-
-        if (isPwa) {
-            // È un'App (PWA). Salviamo l'ID per usare startShortcut (apre senza barra).
+        // --- 1. SALVATAGGIO (URL o ID) ---
+        // Se l'ID è un URL, salvalo come URL (scorciatoia).
+        // Altrimenti, salva come package|id|user (app/PWA).
+        if (shortcutId.startsWith("http://") || shortcutId.startsWith("https://")) {
+            PrefsSync.setShortcutIntent(this, uniqueKey, "url:$shortcutId")
+            Log.d(TAG, "Salvato come URL: url:$shortcutId")
+        } else {
             val savedData = "$packageName$SEP$shortcutId$SEP$userIdString"
             PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
-            Log.d(TAG, "Salvato come PWA: $savedData")
-        } else {
-            // È una scorciatoia normale. Salviamo come URL (apre con ACTION_VIEW).
-            if (shortcutId.startsWith("http://") || shortcutId.startsWith("https://")) {
-                PrefsSync.setShortcutIntent(this, uniqueKey, "url:$shortcutId")
-                Log.d(TAG, "Salvato come URL: url:$shortcutId")
-            } else {
-                // Fallback se l'ID non è un URL
-                val savedData = "$packageName$SEP$shortcutId$SEP$userIdString"
-                PrefsSync.setShortcutIntent(this, uniqueKey, savedData)
-                Log.d(TAG, "Salvato canonico: $savedData")
-            }
+            Log.d(TAG, "Salvato canonico: $savedData")
         }
 
         // --- 2. GESTIONE ICONA ---
