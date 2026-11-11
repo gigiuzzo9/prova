@@ -56,15 +56,14 @@ class DockController(
                     // Calcola la chiave "pulita" per trovare il file dell'icona
                     val safeKey = uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
 
+                    // Carica l'icona: se personalizzata, scala a `size` per non sgranare
                     val bitmap: android.graphics.Bitmap? = if (shortcutId.isNotEmpty()) {
-                        // Prova prima con la chiave pulita, poi con quella originale
                         var customPath = customShortcutIcons[safeKey]
                         if (customPath == null) customPath = customShortcutIcons[uniqueKey]
                         
                         val customBmp = if (customPath != null) {
                             val f = java.io.File(customPath)
                             if (f.exists()) {
-                                // Carica a size*3 e poi ridimensiona a size per non sgranare
                                 val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
                                 if (bmp != null) android.graphics.Bitmap.createScaledBitmap(bmp, size, size, true) else null
                             } else null
@@ -77,7 +76,6 @@ class DockController(
                         val customBmp = if (customPath != null) {
                             val f = java.io.File(customPath)
                             if (f.exists()) {
-                                // Carica a size*3 e poi ridimensiona a size per non sgranare
                                 val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
                                 if (bmp != null) android.graphics.Bitmap.createScaledBitmap(bmp, size, size, true) else null
                             } else null
@@ -109,7 +107,6 @@ class DockController(
                     // --- CLICK: usa ShortcutLauncher come la griglia ---
                     slot.setOnClickListener {
                         if (shortcutId.isNotEmpty()) {
-                            // Usa lo stesso metodo della griglia
                             ShortcutLauncher.launch(
                                 context = activity,
                                 packageName = app.packageName,
