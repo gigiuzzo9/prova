@@ -371,8 +371,8 @@ class HomeScreenGrid @JvmOverloads constructor(
         val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
         val drawSize = iconSize - pad * 2
 
-        val bitmap: Bitmap? = getIconBitmap(slot)
-        if (bitmap == null) return
+        // Chiedi il bitmap ad alta risoluzione per evitare sgranatura
+        val bitmap = AppCache.getIconBitmap(slot.packageName, drawSize * 3) ?: return
 
         val hideLabels = PrefsSync.hideAppLabels(context)
         val hasLabel = displayLabel.isNotEmpty() && !hideLabels
