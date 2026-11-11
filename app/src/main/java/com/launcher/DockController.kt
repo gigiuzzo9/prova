@@ -63,7 +63,11 @@ class DockController(
                         
                         val customBmp = if (customPath != null) {
                             val f = java.io.File(customPath)
-                            if (f.exists()) android.graphics.BitmapFactory.decodeFile(customPath) else null
+                            if (f.exists()) {
+                                // Carica a size*3 e poi ridimensiona a size per non sgranare
+                                val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
+                                if (bmp != null) android.graphics.Bitmap.createScaledBitmap(bmp, size, size, true) else null
+                            } else null
                         } else null
                         customBmp
                             ?: loadShortcutIconBitmap(app.packageName, shortcutId, size * 3)
@@ -72,7 +76,11 @@ class DockController(
                         val customPath = customIcons[app.packageName]
                         val customBmp = if (customPath != null) {
                             val f = java.io.File(customPath)
-                            if (f.exists()) android.graphics.BitmapFactory.decodeFile(customPath) else null
+                            if (f.exists()) {
+                                // Carica a size*3 e poi ridimensiona a size per non sgranare
+                                val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
+                                if (bmp != null) android.graphics.Bitmap.createScaledBitmap(bmp, size, size, true) else null
+                            } else null
                         } else null
                         customBmp ?: AppCache.getIconBitmap(app.packageName, size * 3)
                     }
