@@ -251,51 +251,57 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private fun getIconBitmap(slot: HomeSlot): Bitmap? {
-    if (iconSize <= 0) return null
+        if (iconSize <= 0) return null
 
-    val isCustom = if (slot.isShortcut) {
-        PrefsSync.customShortcutIcons(context).containsKey(slot.uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")) ||
-        PrefsSync.customShortcutIcons(context).containsKey(slot.uniqueKey)
-    } else {
-        PrefsSync.customIcons(context).containsKey(slot.packageName)
-    }
-    val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
-    val drawSize = iconSize - pad * 2
+        val isCustom = if (slot.isShortcut) {
+            PrefsSync.customShortcutIcons(context).containsKey(slot.uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")) ||
+            PrefsSync.customShortcutIcons(context).containsKey(slot.uniqueKey)
+        } else {
+            PrefsSync.customIcons(context).containsKey(slot.packageName)
+        }
+        val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
+        val drawSize = iconSize - pad * 2
 
-    if (slot.isShortcut) {
-        val safeKey = slot.uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
-        val customMap = PrefsSync.customShortcutIcons(context)
-        val path = customMap[safeKey]
-        if (path != null) {
-            val file = java.io.File(path)
-            if (file.exists()) {
-                val bmp = android.graphics.BitmapFactory.decodeFile(path)
-                if (bmp != null) {
-                    return Bitmap.createScaledBitmap(bmp, drawSize * 3, drawSize * 3, true)
+        if (slot.isShortcut) {
+            val safeKey = slot.uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
+            val customMap = PrefsSync.customShortcutIcons(context)
+            val path = customMap[safeKey]
+            if (path != null) {
+                val file = java.io.File(path)
+                if (file.exists()) {
+                    val opts = android.graphics.BitmapFactory.Options().apply { inScaled = false }
+                    val bmp = android.graphics.BitmapFactory.decodeFile(path, opts)
+                    if (bmp != null) {
+                        val scaled = Bitmap.createScaledBitmap(bmp, drawSize, drawSize, true)
+                        scaled.density = Bitmap.DENSITY_NONE
+                        return scaled
+                    }
+                }
+            }
+        } else {
+            val customMap = PrefsSync.customIcons(context)
+            val path = customMap[slot.packageName]
+            if (path != null) {
+                val file = java.io.File(path)
+                if (file.exists()) {
+                    val opts = android.graphics.BitmapFactory.Options().apply { inScaled = false }
+                    val bmp = android.graphics.BitmapFactory.decodeFile(path, opts)
+                    if (bmp != null) {
+                        val scaled = Bitmap.createScaledBitmap(bmp, drawSize, drawSize, true)
+                        scaled.density = Bitmap.DENSITY_NONE
+                        return scaled
+                    }
                 }
             }
         }
-    } else {
-        val customMap = PrefsSync.customIcons(context)
-        val path = customMap[slot.packageName]
-        if (path != null) {
-            val file = java.io.File(path)
-            if (file.exists()) {
-                val bmp = android.graphics.BitmapFactory.decodeFile(path)
-                if (bmp != null) {
-                    return Bitmap.createScaledBitmap(bmp, drawSize * 3, drawSize * 3, true)
-                }
-            }
+
+        if (slot.isShortcut) {
+            val shortcutBmp = loadShortcutIcon(slot.packageName, slot.shortcutId, drawSize)
+            if (shortcutBmp != null) return shortcutBmp
         }
-    }
 
-    if (slot.isShortcut) {
-        val shortcutBmp = loadShortcutIcon(slot.packageName, slot.shortcutId, drawSize * 3)
-        if (shortcutBmp != null) return shortcutBmp
+        return AppCache.getIconBitmap(slot.packageName, drawSize)
     }
-
-    return AppCache.getIconBitmap(slot.packageName, drawSize * 3)
-}
 
     private val smoothingRunnable = object : Runnable {
         override fun run() {
@@ -346,67 +352,65 @@ class HomeScreenGrid @JvmOverloads constructor(
     }
 
     private fun drawIconAt(canvas: Canvas, slot: HomeSlot, cell: Rect, offsetX: Float) {
-    val app = AppCache.get(slot.packageName) ?: return
+        val app = AppCache.get(slot.packageName) ?: return
 
-    // --- NOME: usa la chiave "pulita" per gli shortcut, il package per le app ---
-    val safeKey = slot.uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
-    val displayLabel = if (slot.isShortcut) {
-        PrefsSync.customShortcutLabels(context)[safeKey] ?: app.label
-    } else {
-        PrefsSync.customLabels(context)[slot.packageName] ?: app.label
+        val safeKey = slot.uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
+        val displayLabel = if (slot.isShortcut) {
+            PrefsSync.customShortcutLabels(context)[safeKey] ?: app.label
+        } else {
+            PrefsSync.customLabels(context)[slot.packageName] ?: app.label
+        }
+
+        val isCustom = if (slot.isShortcut) {
+            PrefsSync.customShortcutIcons(context).containsKey(safeKey) ||
+            PrefsSync.customShortcutIcons(context).containsKey(slot.uniqueKey)
+        } else {
+            PrefsSync.customIcons(context).containsKey(slot.packageName)
+        }
+
+        val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
+        val drawSize = iconSize - pad * 2
+
+        val bitmap: Bitmap? = getIconBitmap(slot)
+        if (bitmap == null) return
+
+        val hideLabels = PrefsSync.hideAppLabels(context)
+        val hasLabel = displayLabel.isNotEmpty() && !hideLabels
+
+        val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
+        val iconTop = if (hasLabel) {
+            cell.top.toFloat() + iconMargin.toFloat() + pad
+        } else {
+            cell.top.toFloat() + (cell.height() - iconSize) / 2f + pad
+        }
+
+        val dstRect = Rect(
+            iconLeft.toInt(),
+            iconTop.toInt(),
+            (iconLeft + drawSize).toInt(),
+            (iconTop + drawSize).toInt()
+        )
+
+        val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        canvas.drawBitmap(bitmap, null, dstRect, iconPaint)
+
+        if (hasLabel) {
+            val textWidth = cell.width() - 2 * labelSideMargin
+            val layout = StaticLayout.Builder
+                .obtain(displayLabel, 0, displayLabel.length, textPaint, textWidth)
+                .setMaxLines(1)
+                .setEllipsize(TextUtils.TruncateAt.END)
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                .build()
+
+            val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
+            canvas.save()
+            canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
+            layout.draw(canvas)
+            canvas.restore()
+        }
     }
-    // ------------------------------------------------------------------------
 
-    val isCustom = if (slot.isShortcut) {
-        // Cerca l'icona con entrambe le chiavi (pulita e originale)
-        PrefsSync.customShortcutIcons(context).containsKey(safeKey) ||
-        PrefsSync.customShortcutIcons(context).containsKey(slot.uniqueKey)
-    } else {
-        PrefsSync.customIcons(context).containsKey(slot.packageName)
-    }
-    
-    val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
-    val drawSize = iconSize - pad * 2
-
-    val bitmap: Bitmap? = getIconBitmap(slot)
-    if (bitmap == null) return
-
-    val hideLabels = PrefsSync.hideAppLabels(context)
-    val hasLabel = displayLabel.isNotEmpty() && !hideLabels
-
-    val iconLeft = cell.left.toFloat() + (cell.width() - iconSize) / 2f + offsetX + pad
-    val iconTop = if (hasLabel) {
-        cell.top.toFloat() + iconMargin.toFloat() + pad
-    } else {
-        cell.top.toFloat() + (cell.height() - iconSize) / 2f + pad
-    }
-
-    val dstRect = Rect(
-        iconLeft.toInt(),
-        iconTop.toInt(),
-        (iconLeft + drawSize).toInt(),
-        (iconTop + drawSize).toInt()
-    )
-
-    val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    canvas.drawBitmap(bitmap, null, dstRect, iconPaint)
-
-    if (hasLabel) {
-        val textWidth = cell.width() - 2 * labelSideMargin
-        val layout = StaticLayout.Builder
-            .obtain(displayLabel, 0, displayLabel.length, textPaint, textWidth)
-            .setMaxLines(1)
-            .setEllipsize(TextUtils.TruncateAt.END)
-            .setAlignment(Layout.Alignment.ALIGN_CENTER)
-            .build()
-
-        val labelTop = cell.top.toFloat() + iconMargin.toFloat() + iconSize + (iconMargin / 2)
-        canvas.save()
-        canvas.translate(cell.left.toFloat() + labelSideMargin + offsetX, labelTop)
-        layout.draw(canvas)
-        canvas.restore()
-    }
-}
     private fun loadShortcutIcon(packageName: String, shortcutId: String, sizePx: Int): Bitmap? {
         if (sizePx <= 0 || shortcutId.isEmpty()) return null
         return try {
