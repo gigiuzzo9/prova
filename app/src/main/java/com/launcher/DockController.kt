@@ -53,7 +53,7 @@ class DockController(
                         else -> "${app.packageName}|$shortcutId|$instanceId"
                     }
 
-                    // Calcola la chiave "pulita" per trovare il file dell'icona
+                    // Calcola la chiave pulita (usata per il salvataggio)
                     val safeKey = uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
 
                     val bitmap: android.graphics.Bitmap? = if (shortcutId.isNotEmpty()) {
@@ -82,6 +82,7 @@ class DockController(
                         imageView.setImageBitmap(bitmap)
                     }
 
+                    // Controlla se c'è un'icona personalizzata
                     val hasCustom = if (shortcutId.isNotEmpty()) {
                         customShortcutIcons.containsKey(safeKey) || customShortcutIcons.containsKey(uniqueKey)
                     } else {
