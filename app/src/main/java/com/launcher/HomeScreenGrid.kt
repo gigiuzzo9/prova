@@ -253,17 +253,36 @@ class HomeScreenGrid @JvmOverloads constructor(
     private fun getIconBitmap(slot: HomeSlot): Bitmap? {
         if (iconSize <= 0) return null
 
+        // Calcola drawSize (con padding se custom), come in drawIconAt
+        val isCustom = if (slot.isShortcut) {
+            PrefsSync.customShortcutIcons(context).containsKey(
+                slot.uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
+            ) || PrefsSync.customShortcutIcons(context).containsKey(slot.uniqueKey)
+        } else {
+            PrefsSync.customIcons(context).containsKey(slot.packageName)
+        }
+        val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
+        val drawSize = iconSize - pad * 2
+
         if (slot.isShortcut) {
             // Usa la chiave PULITA per cercare l'icona del collegamento
             val safeKey = slot.uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
             val customMap = PrefsSync.customShortcutIcons(context)
-            val path = customMap[safeKey]
+            var path = customMap[safeKey]
+            if (path == null) path = customMap[slot.uniqueKey]
             if (path != null) {
                 val file = java.io.File(path)
                 if (file.exists()) {
-                    val bmp = android.graphics.BitmapFactory.decodeFile(path)
+                    // inScaled=false per non riscalare per densità
+                    val opts = android.graphics.BitmapFactory.Options().apply {
+                        inScaled = false
+                        inPreferredConfig = Bitmap.Config.ARGB_8888
+                    }
+                    val bmp = android.graphics.BitmapFactory.decodeFile(path, opts)
                     if (bmp != null) {
-                        return Bitmap.createScaledBitmap(bmp, iconSize, iconSize, true)
+                        val scaled = Bitmap.createScaledBitmap(bmp, drawSize * 3, drawSize * 3, true)
+                        scaled.density = Bitmap.DENSITY_NONE
+                        return scaled
                     }
                 }
             }
@@ -273,20 +292,26 @@ class HomeScreenGrid @JvmOverloads constructor(
             if (path != null) {
                 val file = java.io.File(path)
                 if (file.exists()) {
-                    val bmp = android.graphics.BitmapFactory.decodeFile(path)
+                    val opts = android.graphics.BitmapFactory.Options().apply {
+                        inScaled = false
+                        inPreferredConfig = Bitmap.Config.ARGB_8888
+                    }
+                    val bmp = android.graphics.BitmapFactory.decodeFile(path, opts)
                     if (bmp != null) {
-                        return Bitmap.createScaledBitmap(bmp, iconSize, iconSize, true)
+                        val scaled = Bitmap.createScaledBitmap(bmp, drawSize * 3, drawSize * 3, true)
+                        scaled.density = Bitmap.DENSITY_NONE
+                        return scaled
                     }
                 }
             }
         }
 
         if (slot.isShortcut) {
-            val shortcutBmp = loadShortcutIcon(slot.packageName, slot.shortcutId, iconSize)
+            val shortcutBmp = loadShortcutIcon(slot.packageName, slot.shortcutId, drawSize * 3)
             if (shortcutBmp != null) return shortcutBmp
         }
 
-        return AppCache.getIconBitmap(slot.packageName, iconSize)
+        return AppCache.getIconBitmap(slot.packageName, drawSize * 3)
     }
 
     private val smoothingRunnable = object : Runnable {
@@ -357,13 +382,11 @@ class HomeScreenGrid @JvmOverloads constructor(
         val pad = if (isCustom) (iconSize * 0.05f).toInt() else 0
         val drawSize = iconSize - pad * 2
 
-        // App normali: chiedi il bitmap ad alta risoluzione per evitare sgranatura.
-        // Shortcut: usa getIconBitmap(slot) che gestisce loadShortcutIcon.
-        val bitmap: Bitmap? = if (slot.isShortcut) {
-            getIconBitmap(slot)
-        } else {
-            AppCache.getIconBitmap(slot.packageName, drawSize * 3)
-        }
+        // Shortcut e app normali: entrambi usano drawSize * 3 (alta risoluzione)
+        // per evitare sgranatura. getIconBitmap(slot) restituisce già un bitmap
+        // a drawSize * 3 per le custom, e AppCache.getIconBitmap(pkg, drawSize*3)
+        // per le app normali.
+        val bitmap: Bitmap? = getIconBitmap(slot)
         if (bitmap == null) return
 
         val hideLabels = PrefsSync.hideAppLabels(context)
