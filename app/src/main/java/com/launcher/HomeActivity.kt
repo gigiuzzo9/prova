@@ -502,6 +502,7 @@ class HomeActivity : AppCompatActivity() {
         
         val destFile = File(iconsDir, "$uniqueKey.png")
 
+        // SALVA L'IMMAGINE COSI' COM'E' (come nel vecchio codice)
         contentResolver.openInputStream(uri)?.use { input ->
             FileOutputStream(destFile).use { output ->
                 input.copyTo(output)
@@ -526,7 +527,6 @@ class HomeActivity : AppCompatActivity() {
         Toast.makeText(this, "Errore salvataggio: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }
-
     private fun restoreCustomIcon(packageName: String, shortcutId: String, instanceId: String) {
     try {
         val iconsDir = File(filesDir, "custom_icons")
