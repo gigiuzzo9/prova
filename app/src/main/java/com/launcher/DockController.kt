@@ -56,8 +56,8 @@ class DockController(
                     // Calcola la chiave "pulita" per trovare il file dell'icona
                     val safeKey = uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
 
-                    // Carica l'icona ad alta risoluzione (size * 3) e lascia che
-                    // l'ImageView faccia il downscale in hardware → nitido
+                    // Icona: per gli shortcut usa loadShortcutIconBitmap,
+                    // per le app normali AppCache ad alta risoluzione (size * 3)
                     val bitmap: android.graphics.Bitmap? = if (shortcutId.isNotEmpty()) {
                         loadShortcutIconBitmap(app.packageName, shortcutId, size * 3)
                             ?: AppCache.getIconBitmap(app.packageName, size * 3)
