@@ -56,31 +56,48 @@ class DockController(
                     // Calcola la chiave "pulita" per trovare il file dell'icona
                     val safeKey = uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
 
-                    // Carica l'icona: se personalizzata, scala a `size` per non sgranare
+                    // Carica l'icona: se personalizzata, decodifica senza riscalamento densità
+                    // e scala una sola volta a `size` per non sgranare
                     val bitmap: android.graphics.Bitmap? = if (shortcutId.isNotEmpty()) {
                         var customPath = customShortcutIcons[safeKey]
                         if (customPath == null) customPath = customShortcutIcons[uniqueKey]
-                        
+
                         val customBmp = if (customPath != null) {
                             val f = java.io.File(customPath)
                             if (f.exists()) {
-                                val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
-                                if (bmp != null) android.graphics.Bitmap.createScaledBitmap(bmp, size, size, true) else null
+                                val opts = android.graphics.BitmapFactory.Options().apply {
+                                    inScaled = false
+                                    inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+                                }
+                                val bmp = android.graphics.BitmapFactory.decodeFile(customPath, opts)
+                                if (bmp != null) {
+                                    val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, size, size, true)
+                                    scaled.density = android.graphics.Bitmap.DENSITY_NONE
+                                    scaled
+                                } else null
                             } else null
                         } else null
                         customBmp
-                            ?: loadShortcutIconBitmap(app.packageName, shortcutId, size * 3)
-                            ?: AppCache.getIconBitmap(app.packageName, size * 3)
+                            ?: loadShortcutIconBitmap(app.packageName, shortcutId, size)
+                            ?: AppCache.getIconBitmap(app.packageName, size)
                     } else {
                         val customPath = customIcons[app.packageName]
                         val customBmp = if (customPath != null) {
                             val f = java.io.File(customPath)
                             if (f.exists()) {
-                                val bmp = android.graphics.BitmapFactory.decodeFile(customPath)
-                                if (bmp != null) android.graphics.Bitmap.createScaledBitmap(bmp, size, size, true) else null
+                                val opts = android.graphics.BitmapFactory.Options().apply {
+                                    inScaled = false
+                                    inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+                                }
+                                val bmp = android.graphics.BitmapFactory.decodeFile(customPath, opts)
+                                if (bmp != null) {
+                                    val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, size, size, true)
+                                    scaled.density = android.graphics.Bitmap.DENSITY_NONE
+                                    scaled
+                                } else null
                             } else null
                         } else null
-                        customBmp ?: AppCache.getIconBitmap(app.packageName, size * 3)
+                        customBmp ?: AppCache.getIconBitmap(app.packageName, size)
                     }
 
                     val imageView = ImageView(activity)
