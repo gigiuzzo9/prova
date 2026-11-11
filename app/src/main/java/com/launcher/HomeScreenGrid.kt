@@ -254,16 +254,16 @@ class HomeScreenGrid @JvmOverloads constructor(
     if (iconSize <= 0) return null
 
     if (slot.isShortcut) {
-        // Usa la chiave PULITA per cercare l'icona del collegamento
         val safeKey = slot.uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
         val customMap = PrefsSync.customShortcutIcons(context)
         val path = customMap[safeKey]
         if (path != null) {
             val file = java.io.File(path)
             if (file.exists()) {
+                // Carica l'icona a 3x la dimensione finale per non sgranare
                 val bmp = android.graphics.BitmapFactory.decodeFile(path)
                 if (bmp != null) {
-                    return Bitmap.createScaledBitmap(bmp, iconSize, iconSize, true)
+                    return Bitmap.createScaledBitmap(bmp, iconSize * 3, iconSize * 3, true)
                 }
             }
         }
@@ -275,18 +275,18 @@ class HomeScreenGrid @JvmOverloads constructor(
             if (file.exists()) {
                 val bmp = android.graphics.BitmapFactory.decodeFile(path)
                 if (bmp != null) {
-                    return Bitmap.createScaledBitmap(bmp, iconSize, iconSize, true)
+                    return Bitmap.createScaledBitmap(bmp, iconSize * 3, iconSize * 3, true)
                 }
             }
         }
     }
 
     if (slot.isShortcut) {
-        val shortcutBmp = loadShortcutIcon(slot.packageName, slot.shortcutId, iconSize)
+        val shortcutBmp = loadShortcutIcon(slot.packageName, slot.shortcutId, iconSize * 3)
         if (shortcutBmp != null) return shortcutBmp
     }
 
-    return AppCache.getIconBitmap(slot.packageName, iconSize)
+    return AppCache.getIconBitmap(slot.packageName, iconSize * 3)
 }
 
     private val smoothingRunnable = object : Runnable {
