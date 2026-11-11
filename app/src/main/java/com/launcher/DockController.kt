@@ -53,7 +53,7 @@ class DockController(
                         else -> "${app.packageName}|$shortcutId|$instanceId"
                     }
 
-                    // Calcola la chiave pulita (usata per il salvataggio)
+                    // Calcola la chiave "pulita" per trovare il file dell'icona
                     val safeKey = uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
 
                     val bitmap: android.graphics.Bitmap? = if (shortcutId.isNotEmpty()) {
@@ -82,7 +82,6 @@ class DockController(
                         imageView.setImageBitmap(bitmap)
                     }
 
-                    // Controlla se c'è un'icona personalizzata
                     val hasCustom = if (shortcutId.isNotEmpty()) {
                         customShortcutIcons.containsKey(safeKey) || customShortcutIcons.containsKey(uniqueKey)
                     } else {
@@ -99,24 +98,16 @@ class DockController(
                     slot.addView(imageView)
                     slot.tag = uniqueKey
 
+                    // --- CLICK: usa ShortcutLauncher come la griglia ---
                     slot.setOnClickListener {
                         if (shortcutId.isNotEmpty()) {
-                            try {
-                                val launcherApps = activity.getSystemService(android.content.Context.LAUNCHER_APPS_SERVICE) as LauncherApps
-                                launcherApps.startShortcut(
-                                    app.packageName,
-                                    shortcutId,
-                                    null,
-                                    null,
-                                    android.os.Process.myUserHandle()
-                                )
-                            } catch (e: Exception) {
-                                android.widget.Toast.makeText(
-                                    activity,
-                                    "Impossibile avviare la scorciatoia",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            }
+                            // Usa lo stesso metodo della griglia
+                            ShortcutLauncher.launch(
+                                context = activity,
+                                packageName = app.packageName,
+                                shortcutId = shortcutId,
+                                instanceId = instanceId
+                            )
                         } else {
                             AppRepository.launchApp(activity, app.packageName)
                         }
