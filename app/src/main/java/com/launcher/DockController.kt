@@ -56,10 +56,20 @@ class DockController(
                     // Calcola la chiave "pulita" per trovare il file dell'icona
                     val safeKey = uniqueKey.replace("|", "_").replace(":", "_").replace("/", "_")
 
-                    // Icona: per gli shortcut usa loadShortcutIconBitmap,
-                    // per le app normali AppCache ad alta risoluzione (size * 3)
+                    // Icona: per gli shortcut prova PRIMA l'icona custom salvata,
+                    // poi fallback all'icona di sistema dello shortcut, poi all'app.
+                    // Per le app normali usa AppCache ad alta risoluzione (size * 3).
                     val bitmap: android.graphics.Bitmap? = if (shortcutId.isNotEmpty()) {
-                        loadShortcutIconBitmap(app.packageName, shortcutId, size * 3)
+                        var customPath = customShortcutIcons[safeKey]
+                        if (customPath == null) customPath = customShortcutIcons[uniqueKey]
+
+                        val customBmp = if (customPath != null) {
+                            val f = java.io.File(customPath)
+                            if (f.exists()) android.graphics.BitmapFactory.decodeFile(customPath) else null
+                        } else null
+
+                        customBmp
+                            ?: loadShortcutIconBitmap(app.packageName, shortcutId, size * 3)
                             ?: AppCache.getIconBitmap(app.packageName, size * 3)
                     } else {
                         AppCache.getIconBitmap(app.packageName, size * 3)
