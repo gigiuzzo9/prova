@@ -115,7 +115,7 @@ class HomeActivity : AppCompatActivity() {
             val pkg = intent?.data?.schemeSpecificPart
             if (pkg != null && pkg == packageName) return
 
-            AppRepository.invalidateCache()
+            AppRepository.invalidateCache(this@HomeActivity)
             lifecycleScope.launch {
                 AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
                 loadHomeApps()
@@ -208,7 +208,7 @@ class HomeActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 FirstRunSetup.populateHome(this@HomeActivity)
                 FirstRunSetup.markDone(this@HomeActivity)
-                AppRepository.invalidateCache()
+                AppRepository.invalidateCache(this@HomeActivity)
                 AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
                 loadHomeApps()
                 dockController.refresh()
@@ -353,7 +353,7 @@ class HomeActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         when (requestCode) {
             UNINSTALL_APP_REQUEST_CODE -> {
-                AppRepository.invalidateCache()
+                AppRepository.invalidateCache(this)
                 lifecycleScope.launch {
                     AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
                     loadHomeApps()
@@ -515,7 +515,7 @@ class HomeActivity : AppCompatActivity() {
             PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
         }
 
-        AppRepository.invalidateCache()
+        AppRepository.invalidateCache(this)
 
         lifecycleScope.launch {
             AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
@@ -550,7 +550,7 @@ class HomeActivity : AppCompatActivity() {
             PrefsSync.removeCustomIcon(this, packageName)
         }
 
-        AppRepository.invalidateCache()
+        AppRepository.invalidateCache(this)
 
         lifecycleScope.launch {
             AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
@@ -1456,7 +1456,7 @@ private fun findWidgetHostView(appWidgetId: Int): LauncherAppWidgetHostView? {
     contextMenuView.onRename = { shortcutId, instanceId ->
         currentApp?.let { app ->
             RenameDialog.show(this, app, shortcutId, instanceId) {
-                AppRepository.invalidateCache()
+                AppRepository.invalidateCache(this@HomeActivity)
                 loadHomeApps()
                 dockController.refresh()
                 loadDrawerApps()
