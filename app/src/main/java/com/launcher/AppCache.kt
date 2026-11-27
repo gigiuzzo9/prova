@@ -57,33 +57,18 @@ object AppCache {
         return try {
             val cloned = app.icon.constantState?.newDrawable()?.mutate() ?: app.icon
 
-            // Gestione speciale per le icone adattive (evita il bordo nero su Huawei)
-            if (cloned is AdaptiveIconDrawable) {
-                val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bmp)
-                val inset = (sizePx * 0.1f).toInt()
-                val left = inset
-                val top = inset
-                val right = sizePx - inset
-                val bottom = sizePx - inset
-
-                // FIX: clona background/foreground prima di mutarne i bounds.
-                // Sono drawable condivisi a livello di Resources: mutarli
-                // in-place faceva "scambiare" le icone tra app.
-                val bg = cloned.background?.constantState?.newDrawable()?.mutate()
-                val fg = cloned.foreground?.constantState?.newDrawable()?.mutate()
-
-                bg?.let {
-                    it.setBounds(left, top, right, bottom)
-                    it.draw(canvas)
-                }
-                fg?.let {
-                    it.setBounds(left, top, right, bottom)
-                    it.draw(canvas)
-                }
-                iconBitmapCache[key] = bmp
-                return bmp
-            }
+           if (cloned is AdaptiveIconDrawable) {
+    val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+    val inset = (sizePx * 0.1f).toInt()
+    // Disegna l'adaptive intero con bounds inset.
+    // AdaptiveIconDrawable.draw() applica mask e layer internamente
+    // SENZA mutare background/foreground condivisi.
+    cloned.setBounds(inset, inset, sizePx - inset, sizePx - inset)
+    cloned.draw(canvas)
+    iconBitmapCache[key] = bmp
+    return bmp
+}
 
             // Per le icone normali
             val originalWidth = cloned.intrinsicWidth.coerceAtLeast(1)
