@@ -13,7 +13,7 @@ class PackageChangeReceiver : BroadcastReceiver() {
             Intent.ACTION_PACKAGE_CHANGED,
             Intent.ACTION_PACKAGE_REPLACED -> {
                 // Invalida la cache PRIMA di qualsiasi query
-                AppRepository.invalidateCache()
+                AppRepository.invalidateCache(context)
                 AppCache.clear()
 
                 // Pulizia sincrona (SharedPreferences, non DataStore)
