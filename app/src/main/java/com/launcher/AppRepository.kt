@@ -4,10 +4,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Process
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -21,9 +23,10 @@ object AppRepository {
     private const val DISK_CACHE_FILE = "apps_cache.json"
     private const val ICON_SIZE_PX = 96 * 3  // 96dp approx a xxhdpi
 
-    fun invalidateCache() {
+    fun invalidateCache(context: Context) {
         AppCache.clear()
         cacheTimestamp = 0L
+        try { File(context.filesDir, DISK_CACHE_FILE).delete() } catch (_: Exception) {}
     }
 
     fun loadInstalledAppsWithCustomLabels(context: Context): List<AppInfo> {
@@ -71,7 +74,27 @@ object AppRepository {
                     } catch (_: Exception) {
                         null
                     }
-                    icon = launcherIcon ?: pm.getApplicationIcon(appInfo)
+                    val raw = launcherIcon ?: pm.getApplicationIcon(appInfo)
+
+                    // Rasterizza SUBITO in una bitmap propria: ogni AppInfo ha la sua
+                    // icona isolata, niente condivisione di Drawable/constantState
+                    // tra app diverse o con la cache del PackageManager.
+                    val bmp = try {
+                        val b = Bitmap.createBitmap(ICON_SIZE_PX, ICON_SIZE_PX, Bitmap.Config.ARGB_8888)
+                        val c = Canvas(b)
+                        if (raw is AdaptiveIconDrawable) {
+                            val inset = (ICON_SIZE_PX * 0.1f).toInt()
+                            raw.setBounds(inset, inset, ICON_SIZE_PX - inset, ICON_SIZE_PX - inset)
+                        } else {
+                            raw.setBounds(0, 0, ICON_SIZE_PX, ICON_SIZE_PX)
+                        }
+                        raw.draw(c)
+                        b
+                    } catch (_: Exception) {
+                        null
+                    }
+
+                    icon = if (bmp != null) BitmapDrawable(context.resources, bmp) else raw
                 }
 
                 AppInfo(label = label, packageName = pkg, icon = icon!!)
