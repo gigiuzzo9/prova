@@ -115,7 +115,11 @@ class HomeActivity : AppCompatActivity() {
             val pkg = intent?.data?.schemeSpecificPart
             if (pkg != null && pkg == packageName) return
 
-            AppRepository.invalidateCache(this@HomeActivity)
+            if (pkg != null) {
+                AppRepository.invalidatePackage(this@HomeActivity, pkg)
+            } else {
+                AppRepository.invalidateCache(this@HomeActivity)
+            }
             lifecycleScope.launch {
                 AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
                 loadHomeApps()
@@ -515,7 +519,7 @@ class HomeActivity : AppCompatActivity() {
             PrefsSync.setCustomIcon(this, packageName, destFile.absolutePath)
         }
 
-        AppRepository.invalidateCache(this)
+        AppRepository.invalidatePackage(this, packageName)
 
         lifecycleScope.launch {
             AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
@@ -550,7 +554,7 @@ class HomeActivity : AppCompatActivity() {
             PrefsSync.removeCustomIcon(this, packageName)
         }
 
-        AppRepository.invalidateCache(this)
+        AppRepository.invalidatePackage(this, packageName)
 
         lifecycleScope.launch {
             AppRepository.loadInstalledAppsWithCustomLabels(this@HomeActivity)
@@ -1456,7 +1460,7 @@ private fun findWidgetHostView(appWidgetId: Int): LauncherAppWidgetHostView? {
     contextMenuView.onRename = { shortcutId, instanceId ->
         currentApp?.let { app ->
             RenameDialog.show(this, app, shortcutId, instanceId) {
-                AppRepository.invalidateCache(this@HomeActivity)
+                AppRepository.invalidatePackage(this@HomeActivity, app.packageName)
                 loadHomeApps()
                 dockController.refresh()
                 loadDrawerApps()
@@ -1803,8 +1807,6 @@ private fun findWidgetHostView(appWidgetId: Int): LauncherAppWidgetHostView? {
             pageIndicator.setPageCount(currentPageCount)
             homeScreenGrid.setPageCount(currentPageCount)
         }
-
-        
 
         homeScreenGrid.setGridSize(currentCols, currentRows)
         homeScreenGrid.setPageCount(currentPageCount)
