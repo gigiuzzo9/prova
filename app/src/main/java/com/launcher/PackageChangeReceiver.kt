@@ -12,9 +12,13 @@ class PackageChangeReceiver : BroadcastReceiver() {
             Intent.ACTION_PACKAGE_REMOVED,
             Intent.ACTION_PACKAGE_CHANGED,
             Intent.ACTION_PACKAGE_REPLACED -> {
-                // Invalida la cache PRIMA di qualsiasi query
-                AppRepository.invalidateCache(context)
-                AppCache.clear()
+                // Invalida SOLO il pkg cambiato (refresh incrementale)
+                val changedPkg = intent.data?.schemeSpecificPart
+                if (changedPkg != null) {
+                    AppRepository.invalidatePackage(context, changedPkg)
+                } else {
+                    AppRepository.invalidateCache(context)
+                }
 
                 // Pulizia sincrona (SharedPreferences, non DataStore)
                 val slots = PrefsSync.homeSlots(context)
