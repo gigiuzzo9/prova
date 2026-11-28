@@ -1804,9 +1804,7 @@ private fun findWidgetHostView(appWidgetId: Int): LauncherAppWidgetHostView? {
             homeScreenGrid.setPageCount(currentPageCount)
         }
 
-        if (AppCache.size() == 0) {
-            AppRepository.loadInstalledAppsWithCustomLabels(this)
-        }
+        
 
         homeScreenGrid.setGridSize(currentCols, currentRows)
         homeScreenGrid.setPageCount(currentPageCount)
