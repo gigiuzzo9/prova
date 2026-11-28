@@ -10,6 +10,8 @@ import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Process
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -29,91 +31,92 @@ object AppRepository {
         try { File(context.filesDir, DISK_CACHE_FILE).delete() } catch (_: Exception) {}
     }
 
-    fun loadInstalledAppsWithCustomLabels(context: Context): List<AppInfo> {
-        // Cache in memoria valida → zero query PMS
-        if (AppCache.size() > 0 && System.currentTimeMillis() - cacheTimestamp < CACHE_TTL_MS) {
-            return AppCache.snapshot()
-        }
-
-        // 1) Prova a scaldare AppCache da disco (cold start veloce)
-        val diskCache = readDiskCache(context)
-        if (diskCache.isNotEmpty()) {
-            AppCache.warmFromDisk(context, diskCache)
-        }
-
-        // 2) Scansione reale del PackageManager
-        val pm = context.packageManager
-        val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as? LauncherApps
-        val userHandle = Process.myUserHandle()
-
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val resolved = pm.queryIntentActivities(intent, 0)
-        val customLabels = PrefsSync.customLabels(context)
-        val customIcons = PrefsSync.customIcons(context)
-
-        val result = resolved
-            .map { it.activityInfo.applicationInfo }
-            .distinctBy { it.packageName }
-            .map { appInfo ->
-                val pkg = appInfo.packageName
-                val label = customLabels[pkg] ?: pm.getApplicationLabel(appInfo).toString()
-
-                // Icona custom ha priorità
-                var icon: Drawable? = null
-                val customIconPath: String? = customIcons[pkg]
-                if (customIconPath != null && customIconPath.isNotEmpty()) {
-                    val file = File(customIconPath)
-                    if (file.exists()) {
-                        icon = Drawable.createFromPath(customIconPath)
-                    }
-                }
-
-                if (icon == null) {
-                    val launcherIcon = try {
-                        launcherApps?.getActivityList(pkg, userHandle)?.firstOrNull()?.getBadgedIcon(0)
-                    } catch (_: Exception) {
-                        null
-                    }
-                    val raw = launcherIcon ?: pm.getApplicationIcon(appInfo)
-
-                    // Rasterizza SUBITO in una bitmap propria: ogni AppInfo ha la sua
-                    // icona isolata, niente condivisione di Drawable/constantState
-                    // tra app diverse o con la cache del PackageManager.
-                    val bmp = try {
-                        val b = Bitmap.createBitmap(ICON_SIZE_PX, ICON_SIZE_PX, Bitmap.Config.ARGB_8888)
-                        val c = Canvas(b)
-                        if (raw is AdaptiveIconDrawable) {
-                            val inset = (ICON_SIZE_PX * 0.1f).toInt()
-                            raw.setBounds(inset, inset, ICON_SIZE_PX - inset, ICON_SIZE_PX - inset)
-                        } else {
-                            raw.setBounds(0, 0, ICON_SIZE_PX, ICON_SIZE_PX)
-                        }
-                        raw.draw(c)
-                        b
-                    } catch (_: Exception) {
-                        null
-                    }
-
-                    icon = if (bmp != null) BitmapDrawable(context.resources, bmp) else raw
-                }
-
-                AppInfo(label = label, packageName = pkg, icon = icon!!)
+    suspend fun loadInstalledAppsWithCustomLabels(context: Context): List<AppInfo> =
+        withContext(Dispatchers.IO) {
+            // Cache in memoria valida → zero query PMS
+            if (AppCache.size() > 0 && System.currentTimeMillis() - cacheTimestamp < CACHE_TTL_MS) {
+                return@withContext AppCache.snapshot()
             }
-            .sortedBy { it.label.lowercase() }
 
-        AppCache.putAll(result)
-        cacheTimestamp = System.currentTimeMillis()
+            // 1) Prova a scaldare AppCache da disco (cold start veloce)
+            val diskCache = readDiskCache(context)
+            if (diskCache.isNotEmpty()) {
+                AppCache.warmFromDisk(context, diskCache)
+            }
 
-        // 3) Salva su disco in background (non blocca il chiamante)
-        Thread {
-            try {
-                AppCache.persistIconsToDisk(context, ICON_SIZE_PX)
-                writeDiskCache(context, result)
-            } catch (_: Exception) {}
-        }.start()
+            // 2) Scansione reale del PackageManager
+            val pm = context.packageManager
+            val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as? LauncherApps
+            val userHandle = Process.myUserHandle()
 
-        return result
-    }
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val resolved = pm.queryIntentActivities(intent, 0)
+            val customLabels = PrefsSync.customLabels(context)
+            val customIcons = PrefsSync.customIcons(context)
+
+            val result = resolved
+                .map { it.activityInfo.applicationInfo }
+                .distinctBy { it.packageName }
+                .map { appInfo ->
+                    val pkg = appInfo.packageName
+                    val label = customLabels[pkg] ?: pm.getApplicationLabel(appInfo).toString()
+
+                    // Icona custom ha priorità
+                    var icon: Drawable? = null
+                    val customIconPath: String? = customIcons[pkg]
+                    if (customIconPath != null && customIconPath.isNotEmpty()) {
+                        val file = File(customIconPath)
+                        if (file.exists()) {
+                            icon = Drawable.createFromPath(customIconPath)
+                        }
+                    }
+
+                    if (icon == null) {
+                        val launcherIcon = try {
+                            launcherApps?.getActivityList(pkg, userHandle)?.firstOrNull()?.getBadgedIcon(0)
+                        } catch (_: Exception) {
+                            null
+                        }
+                        val raw = launcherIcon ?: pm.getApplicationIcon(appInfo)
+
+                        // Rasterizza SUBITO in una bitmap propria: ogni AppInfo ha la sua
+                        // icona isolata, niente condivisione di Drawable/constantState
+                        // tra app diverse o con la cache del PackageManager.
+                        val bmp = try {
+                            val b = Bitmap.createBitmap(ICON_SIZE_PX, ICON_SIZE_PX, Bitmap.Config.ARGB_8888)
+                            val c = Canvas(b)
+                            if (raw is AdaptiveIconDrawable) {
+                                val inset = (ICON_SIZE_PX * 0.1f).toInt()
+                                raw.setBounds(inset, inset, ICON_SIZE_PX - inset, ICON_SIZE_PX - inset)
+                            } else {
+                                raw.setBounds(0, 0, ICON_SIZE_PX, ICON_SIZE_PX)
+                            }
+                            raw.draw(c)
+                            b
+                        } catch (_: Exception) {
+                            null
+                        }
+
+                        icon = if (bmp != null) BitmapDrawable(context.resources, bmp) else raw
+                    }
+
+                    AppInfo(label = label, packageName = pkg, icon = icon!!)
+                }
+                .sortedBy { it.label.lowercase() }
+
+            AppCache.putAll(result)
+            cacheTimestamp = System.currentTimeMillis()
+
+            // 3) Salva su disco in background (non blocca il chiamante)
+            Thread {
+                try {
+                    AppCache.persistIconsToDisk(context, ICON_SIZE_PX)
+                    writeDiskCache(context, result)
+                } catch (_: Exception) {}
+            }.start()
+
+            result
+        }
 
     fun launchApp(context: Context, packageName: String) {
         if (packageName == context.packageName) {
