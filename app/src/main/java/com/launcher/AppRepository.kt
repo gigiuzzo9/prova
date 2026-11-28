@@ -31,16 +31,6 @@ object AppRepository {
         try { File(context.filesDir, DISK_CACHE_FILE).delete() } catch (_: Exception) {}
     }
 
-    /**
-     * Invalida SOLO un package: rimuove il suo AppInfo dalla cache in memoria.
-     * La prossima loadInstalledAppsWithCustomLabels rasterizzerà solo quel pkg,
-     * riusando gli AppInfo già validi per gli altri.
-     */
-    fun invalidatePackage(context: Context, pkg: String) {
-        AppCache.remove(pkg)
-        cacheTimestamp = 0L
-    }
-
     suspend fun loadInstalledAppsWithCustomLabels(context: Context): List<AppInfo> =
         withContext(Dispatchers.IO) {
             // Cache in memoria valida → zero query PMS
@@ -49,11 +39,9 @@ object AppRepository {
             }
 
             // 1) Prova a scaldare AppCache da disco (cold start veloce)
-            if (AppCache.size() == 0) {
-                val diskCache = readDiskCache(context)
-                if (diskCache.isNotEmpty()) {
-                    AppCache.warmFromDisk(context, diskCache)
-                }
+            val diskCache = readDiskCache(context)
+            if (diskCache.isNotEmpty()) {
+                AppCache.warmFromDisk(context, diskCache)
             }
 
             // 2) Scansione reale del PackageManager
@@ -73,19 +61,9 @@ object AppRepository {
                     val pkg = appInfo.packageName
                     val label = customLabels[pkg] ?: pm.getApplicationLabel(appInfo).toString()
 
-                    // Riusa l'AppInfo esistente se label invariata e nessuna custom icon
-                    // (né prima né ora). In tutti gli altri casi rasterizziamo.
-                    val cached = AppCache.get(pkg)
-                    val customIconPath: String? = customIcons[pkg]
-                    if (cached != null &&
-                        cached.label == label &&
-                        customIconPath == null
-                    ) {
-                        return@map cached
-                    }
-
                     // Icona custom ha priorità
                     var icon: Drawable? = null
+                    val customIconPath: String? = customIcons[pkg]
                     if (customIconPath != null && customIconPath.isNotEmpty()) {
                         val file = File(customIconPath)
                         if (file.exists()) {
@@ -101,6 +79,9 @@ object AppRepository {
                         }
                         val raw = launcherIcon ?: pm.getApplicationIcon(appInfo)
 
+                        // Rasterizza SUBITO in una bitmap propria: ogni AppInfo ha la sua
+                        // icona isolata, niente condivisione di Drawable/constantState
+                        // tra app diverse o con la cache del PackageManager.
                         val bmp = try {
                             val b = Bitmap.createBitmap(ICON_SIZE_PX, ICON_SIZE_PX, Bitmap.Config.ARGB_8888)
                             val c = Canvas(b)
